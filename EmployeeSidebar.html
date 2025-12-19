@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top" />
+    <style>
+  :root {
+    --color-page-bg: #0b1224;
+    --color-surface: #0f172a;
+    --color-surface-2: #111827;
+    --color-text-primary: #f8fafc;
+    --color-text-muted: #cbd5e1;
+    --color-accent: #fcd34d;
+    --color-accent-strong: #f59e0b;
+    --color-border: #1f2937;
+    --shadow-strong: 0 20px 50px rgba(0, 0, 0, 0.35);
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    direction: rtl;
+    margin: 8px;
+    background: var(--color-page-bg);
+    color: var(--color-text-primary);
+  }
+
+  .section {
+    margin-bottom: 12px;
+  }
+
+  .label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-bottom: 4px;
+    display: block;
+  }
+
+  #employee-section {
+    background: var(--color-surface-2);
+    border-radius: 10px;
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-strong);
+  }
+
+  #global-message {
+    margin-bottom: 8px;
+    min-height: 16px;
+    font-size: 12px;
+  }
+  #global-message.error {
+    color: #fca5a5; /* אדום רך יחסית */
+  }
+  #global-message.info {
+    color: var(--color-accent);
+  }
+
+  #search-results {
+    border: 1px solid var(--color-border);
+    max-height: 160px;
+    overflow-y: auto;
+    margin-top: 4px;
+    background: var(--color-surface);
+    border-radius: 6px;
+  }
+  #search-results.hidden {
+    display: none;
+  }
+
+  .search-item {
+    padding: 4px 6px;
+    cursor: pointer;
+    color: var(--color-text-primary);
+  }
+  .search-item.small {
+    font-size: 11px;
+    color: var(--color-text-muted);
+  }
+  .search-item:hover {
+    background: #1f2937;
+  }
+
+  .field-row {
+    margin-bottom: 6px;
+  }
+
+  .field-row input[type='text'],
+  .field-row input[type='number'],
+  .field-row input[type='date'],
+  .field-row input[type='email'],
+  .field-row select {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    border-radius: 6px;
+    padding: 4px 6px;
+  }
+
+  .field-row input::placeholder {
+    color: var(--color-text-muted);
+  }
+
+  .jobs-container {
+    border-top: 1px solid var(--color-border);
+    padding-top: 6px;
+    margin-top: 6px;
+  }
+
+  .job-row {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 6px;
+    margin-bottom: 6px;
+    background: var(--color-surface);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  .job-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .job-row-header-title {
+    font-weight: bold;
+    color: var(--color-text-primary);
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 10px;
+    margin-top: 4px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, box-shadow 0.15s ease,
+      transform 0.08s ease;
+  }
+
+  .btn-primary {
+    background: var(--color-accent-strong);
+    color: #111827;
+    border: none;
+    box-shadow: var(--shadow-strong);
+  }
+  .btn-primary:hover {
+    background: var(--color-accent);
+    transform: translateY(-1px);
+  }
+
+  .btn-secondary {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+  }
+  .btn-secondary:hover {
+    background: #1f2937;
+  }
+
+  .edit-mode-live {
+    background: var(--color-accent-strong);
+    color: #111827;
+    border: none;
+    box-shadow: var(--shadow-strong);
+  }
+
+  .muted {
+    color: var(--color-text-muted);
+    font-size: 11px;
+  }
+
+  .field-department[disabled] {
+    background: #020617;
+    color: var(--color-text-muted);
+  }
+
+  /* תיבת אזהרה על פילטר */
+  #emp-filter-warning {
+    background: #78350f;
+    color: #ffedd5;
+    border: 1px solid #fbbf24;
+  }
+
+  /* כותרת פרטי העובד + סטטוס */
+  .employee-header {
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .status-pill {
+    display: inline-block;
+    min-width: 64px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    text-align: center;
+    border: 1px solid var(--color-border);
+  }
+
+  .status-pill.status-active {
+    background: rgba(22, 163, 74, 0.16);
+    color: #bbf7d0;
+    border-color: #16a34a;
+  }
+
+  .status-pill.status-inactive {
+    background: rgba(148, 163, 184, 0.16);
+    color: #e2e8f0;
+    border-color: #475569;
+  }
+</style>
+
+  </head>
+  <body>
+    <div id="global-message"></div>
+
+    <div class="section">
+      <label class="label" for="search-input">חיפוש עובד לפי שם</label>
+      <input
+        id="search-input"
+        type="text"
+        placeholder="התחל להקליד שם..."
+        autocomplete="off"
+      />
+      <div id="search-results" class="hidden"></div>
+      <div class="muted">
+        בחירת עובד מהרשימה תטען אותו לעריכה. אם אין התאמה, אפשר ליצור עובד חדש.
+      </div>
+    </div>
+
+    <div id="employee-section" style="display: none">
+      <!-- מצב עריכה -->
+      <div class="section" id="edit-mode-section">
+        <span class="label">מצב עריכה</span>
+        <button id="edit-mode-toggle" type="button" class="btn-secondary">
+          מצב: שמירה ידנית
+        </button>
+        <div class="muted">
+          במצב "עריכה בזמן אמת" כל שינוי בשדות נשמר אוטומטית לגיליון
+          (עם השהייה קצרה כדי שלא יהיו יותר מדי שמירות).
+        </div>
+      </div>
+
+      <!-- כותרת פרטי עובד: סטטוס + שם -->
+      <div class="section employee-header">
+        <div class="status-row">
+          <span class="label">סטטוס עובד</span>
+          <span
+            id="emp-status-pill"
+            class="status-pill status-inactive"
+          >
+            לא פעיל
+          </span>
+        </div>
+        <div class="field-row">
+          <span class="label">שם מלא</span>
+          <input id="emp-name" type="text" />
+        </div>
+      </div>
+
+      <!-- אזהרת פילטר לשורה מוסתרת -->
+      <div
+        id="emp-filter-warning"
+        style="
+          display: none;
+          margin-bottom: 8px;
+          padding: 6px;
+          border-radius: 4px;
+          background: #fff3cd;
+          font-size: 12px;
+        "
+      >
+        <div style="margin-bottom: 4px">
+          השורה שאתה רוצה לערוך מוסתרת במסנן. זה לא מפריע לעריכה.
+          תרצה לבטל את הסינון כדי לראות את השורה?
+        </div>
+        <button type="button" id="emp-filter-warning-btn">
+          בטל תצוגת מסנן
+        </button>
+      </div>
+
+      <!-- פרטי עובד נוספים -->
+      <div class="section employee-fields">
+        <div class="field-row">
+          <span class="label">מין</span>
+          <input id="emp-gender" type="text" />
+        </div>
+        <div class="field-row">
+          <span class="label">ת"ז</span>
+          <input id="emp-idnum" type="text" />
+        </div>
+        <div class="field-row">
+          <span class="label">טלפון</span>
+          <input id="emp-phone" type="text" />
+        </div>
+        <div class="field-row">
+          <span class="label">תאריך לידה</span>
+          <input id="emp-birthdate" type="date" />
+        </div>
+        <div class="field-row">
+          <span class="label">מייל</span>
+          <input id="emp-email" type="email" />
+        </div>
+        <div class="field-row">
+          <span class="label">מידת חולצה</span>
+          <input id="emp-shirt-size" type="text" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="muted">
+          כדי לטעון עובד, אפשר ללחוץ על תא כלשהו באחת השורות שלו בטבלה.
+        </div>
+      </div>
+
+      <div class="section jobs-container">
+        <span class="label">סוגי עבודה לעובד</span>
+        <div id="jobs-list"></div>
+        <button class="btn-secondary" type="button" onclick="addJobRow(null)">
+          הוסף סוג עבודה
+        </button>
+        <div class="muted">
+          לכל שורה ניתן לבחור אם היא פעילה. לפחות שורה פעילה אחת = עובד פעיל.
+        </div>
+      </div>
+
+      <div class="section">
+        <button class="btn-primary" type="button" onclick="onSaveClick()">
+          שמור שינויים
+        </button>
+        <button
+          class="btn-secondary"
+          type="button"
+          onclick="onRevealFilterClick()"
+        >
+          בטל סינון בגליון
+        </button>
+      </div>
+    </div>
+
+    <script>
+      // מוזרק מהשרת
+      var INITIAL_EMPLOYEE_ID = '<?= initialEmployeeId ?>' || '';
+
+      var bootstrap = null;
+      var employees = [];
+      var selectedEmployeeId = null;
+
+      // רשימות סוגי עבודה ואופני תשלום מהשרת
+      var jobs = [];
+      var payments = [];
+      var jobByName = {};
+      var paymentByName = {};
+      var selectionPollTimer = null;
+
+      // מצב עריכה: 'manual' (שמירה ידנית) או 'live' (שמירה בזמן אמת)
+      var editMode = 'manual';
+      var liveSaveTimer = null;
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      function setGlobalMessage(text, isError) {
+        var el = $('global-message');
+        el.textContent = text || '';
+        el.className = '';
+        if (!text) return;
+        el.className = isError ? 'error' : 'info';
+      }
+
+      function setFilterWarningVisible(visible) {
+        var box = $('emp-filter-warning');
+        if (!box) return;
+        box.style.display = visible ? 'block' : 'none';
+      }
+
+      function rebuildLookups() {
+        jobByName = {};
+        paymentByName = {};
+
+        for (var i = 0; i < jobs.length; i++) {
+          var j = jobs[i];
+          if (j && j.name) {
+            jobByName[j.name] = j;
+          }
+        }
+
+        for (var k = 0; k < payments.length; k++) {
+          var p = payments[k];
+          if (p && p.name) {
+            paymentByName[p.name] = p;
+          }
+        }
+      }
+
+      // בדיקה מול השרת אם לעובד הנוכחי יש שורות מוסתרות במסנן
+      function checkFilterStateForSelectedEmployee() {
+        if (!selectedEmployeeId) {
+          setFilterWarningVisible(false);
+          return;
+        }
+
+        if (!google || !google.script || !google.script.run) {
+          setFilterWarningVisible(false);
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function (isHidden) {
+            setFilterWarningVisible(isHidden === true);
+          })
+          .withFailureHandler(function () {
+            setFilterWarningVisible(false);
+          })
+          .EMP_hasHiddenRowsForEmployee(selectedEmployeeId);
+      }
+
+      function setEditMode(mode) {
+        editMode = mode === 'live' ? 'live' : 'manual';
+        var btn = $('edit-mode-toggle');
+        if (!btn) return;
+
+        if (editMode === 'live') {
+          btn.textContent = 'מצב: עריכה בזמן אמת';
+          btn.classList.remove('btn-secondary');
+          btn.classList.add('btn-primary', 'edit-mode-live');
+        } else {
+          btn.textContent = 'מצב: שמירה ידנית';
+          btn.classList.remove('btn-primary', 'edit-mode-live');
+          btn.classList.add('btn-secondary');
+        }
+      }
+
+      function toggleEditMode() {
+        setEditMode(editMode === 'live' ? 'manual' : 'live');
+      }
+
+      function scheduleLiveSave() {
+        if (editMode !== 'live') return;
+        if (liveSaveTimer) {
+          clearTimeout(liveSaveTimer);
+        }
+        liveSaveTimer = setTimeout(function () {
+          liveSaveTimer = null;
+          liveSave();
+        }, 500); // debounce קצר
+      }
+
+      function attachLiveEditHandlers(rowEl) {
+        var selectors =
+          '.field-job-type, .field-amount, .field-payment, .field-notes, .field-row-active';
+        var fields = rowEl.querySelectorAll(selectors);
+        for (var i = 0; i < fields.length; i++) {
+          fields[i].addEventListener('change', function () {
+            scheduleLiveSave();
+          });
+        }
+      }
+
+      // live handlers גם לשדות פרטי העובד (שם, טלפון, מייל וכו')
+      function attachTopLevelLiveHandlers() {
+        var ids = [
+          'emp-name',
+          'emp-gender',
+          'emp-idnum',
+          'emp-phone',
+          'emp-birthdate',
+          'emp-email',
+          'emp-shirt-size'
+        ];
+        ids.forEach(function (id) {
+          var el = $(id);
+          if (el) {
+            el.addEventListener('change', scheduleLiveSave);
+          }
+        });
+      }
+
+      // איסוף הפיילוד מהטופס – משותף לשמירה ידנית ולשמירה חיה
+      function collectPayloadOrNull() {
+        if (!selectedEmployeeId) {
+          setGlobalMessage('לא נבחר עובד לעריכה', true);
+          return null;
+        }
+        var name = ($('emp-name').value || '').trim();
+        if (!name) {
+          setGlobalMessage('שם העובד לא יכול להיות ריק', true);
+          return null;
+        }
+
+        var gender = ($('emp-gender').value || '').trim();
+        var idNumber = ($('emp-idnum').value || '').trim();
+        var phone = ($('emp-phone').value || '').trim();
+        var birthdate = ($('emp-birthdate').value || '').trim();
+        var email = ($('emp-email').value || '').trim();
+        var shirtSize = ($('emp-shirt-size').value || '').trim();
+
+        var jobEls = document.querySelectorAll('.job-row');
+        var rowsPayload = [];
+        for (var i = 0; i < jobEls.length; i++) {
+          var el = jobEls[i];
+          var jobType =
+            (el.querySelector('.field-job-type').value || '').trim();
+          var dept =
+            (el.querySelector('.field-department').value || '').trim();
+          var amount =
+            (el.querySelector('.field-amount').value || '').trim();
+          var payment =
+            (el.querySelector('.field-payment').value || '').trim();
+          var notes =
+            (el.querySelector('.field-notes').value || '').trim();
+          var rowActive = el.querySelector('.field-row-active').checked;
+
+          // דילוג על שורה ריקה לגמרי
+          if (!jobType && !dept && !amount && !payment && !notes) {
+            continue;
+          }
+
+          rowsPayload.push({
+            rowIndex: el.getAttribute('data-row-index') || null,
+            rowActive: rowActive,
+            jobType: jobType,
+            department: dept,
+            amount: amount,
+            paymentMode: payment,
+            notes: notes
+          });
+        }
+
+        if (rowsPayload.length === 0) {
+          setGlobalMessage('לפחות סוג עבודה אחד חייב להיות מוגדר', true);
+          return null;
+        }
+
+        return {
+          id: selectedEmployeeId,
+          name: name,
+          gender: gender,
+          idNumber: idNumber,
+          phone: phone,
+          birthdate: birthdate,
+          email: email,
+          shirtSize: shirtSize,
+          rows: rowsPayload
+        };
+      }
+
+      function liveSave() {
+        var payload = collectPayloadOrNull();
+        if (!payload) return;
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setGlobalMessage(
+                (res && res.error) ||
+                  'שגיאה בשמירה (מצב עריכה בזמן אמת)',
+                true
+              );
+              return;
+            }
+            // בכוונה לא מציג "השינויים נשמרו" בכל שינוי קטן
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage(
+              'שגיאה בשמירה (מצב עריכה בזמן אמת): ' + err,
+              true
+            );
+          })
+          .EMP_saveEmployeePayload(payload);
+      }
+
+      function init() {
+        setGlobalMessage('טוען נתוני עובדים...', false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setGlobalMessage(
+                (res && res.error) || 'שגיאה בטעינת נתונים',
+                true
+              );
+              return;
+            }
+            bootstrap = res;
+            employees = res.employees || [];
+            jobs = res.jobs || [];
+            payments = res.payments || [];
+            rebuildLookups();
+            setGlobalMessage('', false);
+
+            // התחלת פולינג לבחירת עובד לפי השורה הפעילה בגליון
+            startSelectionPolling();
+
+            if (INITIAL_EMPLOYEE_ID) {
+              loadEmployee(INITIAL_EMPLOYEE_ID);
+            }
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בטעינת הנתונים: ' + err, true);
+          })
+          .EMP_getSidebarBootstrap();
+
+        $('search-input').addEventListener('input', onSearchInputChange);
+        $('search-results').addEventListener('click', onSearchResultsClick);
+
+        var warnBtn = $('emp-filter-warning-btn');
+        if (warnBtn) {
+          warnBtn.addEventListener('click', onRevealFilterClick);
+        }
+
+        var modeBtn = $('edit-mode-toggle');
+        if (modeBtn) {
+          modeBtn.addEventListener('click', toggleEditMode);
+        }
+        // ברירת מחדל – שמירה ידנית
+        setEditMode('manual');
+
+        attachTopLevelLiveHandlers();
+      }
+
+      function startSelectionPolling() {
+        if (!google || !google.script || !google.script.run) return;
+        if (selectionPollTimer) return;
+
+        function poll() {
+          google.script.run
+            .withSuccessHandler(function (res) {
+              if (!res || !res.ok) return;
+
+              var newId = res.employeeId || null;
+              if (!newId) return;
+
+              // אין שינוי – לא טוענים מחדש
+              if (newId === selectedEmployeeId) return;
+
+              // שינוי בחירה בשורה בגליון -> טוענים את העובד החדש
+              loadEmployee(newId);
+            })
+            .withFailureHandler(function (_err) {
+              // מתעלמים משגיאה כדי לא להציף הודעות
+            })
+            .EMP_getSelectedEmployeeId();
+        }
+
+        // הרצה ראשונית, ואז כל 2 שניות
+        poll();
+        selectionPollTimer = setInterval(poll, 2000);
+      }
+
+      function onSearchInputChange(e) {
+        var term = (e.target.value || '').trim();
+        var resultsEl = $('search-results');
+        if (!term) {
+          resultsEl.classList.add('hidden');
+          resultsEl.innerHTML = '';
+          return;
+        }
+
+        var lower = term.toLowerCase();
+        var matches = [];
+        for (var i = 0; i < employees.length; i++) {
+          var n = employees[i].name || '';
+          if (n.toLowerCase().indexOf(lower) !== -1) {
+            matches.push(employees[i]);
+          }
+          if (matches.length >= 10) break;
+        }
+
+        var html = '';
+        if (matches.length > 0) {
+          for (var j = 0; j < matches.length; j++) {
+            var emp = matches[j];
+            html +=
+              '<div class="search-item" data-type="emp" data-id="' +
+              emp.id +
+              '">';
+            html += emp.name;
+            if (!emp.anyActive) {
+              html += ' <span class="muted">(לא פעיל)</span>';
+            }
+            html += '</div>';
+          }
+        } else {
+          html +=
+            '<div class="search-item small" data-type="new">' +
+            'אין התאמה. לחץ כדי ליצור עובד חדש בשם: "' +
+            term.replace(/"/g, '&quot;') +
+            '"' +
+            '</div>';
+        }
+
+        resultsEl.innerHTML = html;
+        resultsEl.classList.remove('hidden');
+      }
+
+      function onSearchResultsClick(e) {
+        var el = e.target;
+        while (el && !el.classList.contains('search-item')) {
+          el = el.parentElement;
+        }
+        if (!el) return;
+
+        var type = el.getAttribute('data-type');
+        if (type === 'emp') {
+          var id = el.getAttribute('data-id');
+          $('search-results').classList.add('hidden');
+          onSearchEmployeeClick(id);
+        } else if (type === 'new') {
+          $('search-results').classList.add('hidden');
+          onCreateEmployeeFromSearch();
+        }
+      }
+
+      function onSearchEmployeeClick(id) {
+        selectedEmployeeId = id;
+        loadEmployee(id);
+      }
+
+      function onCreateEmployeeFromSearch() {
+        var term = ($('search-input').value || '').trim();
+        if (!term) return;
+        setGlobalMessage('יוצר עובד חדש...', false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setGlobalMessage(
+                (res && res.error) || 'שגיאה ביצירת עובד חדש',
+                true
+              );
+              return;
+            }
+            var emp = res.employee;
+            selectedEmployeeId = emp.id;
+            addOrUpdateEmployeeInList(emp);
+            renderEmployee(emp);
+            setGlobalMessage('נוצר עובד חדש', false);
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה ביצירת עובד חדש: ' + err, true);
+          })
+          .EMP_createEmployeeByName(term);
+      }
+
+      function addOrUpdateEmployeeInList(emp) {
+        var found = false;
+        for (var i = 0; i < employees.length; i++) {
+          if (employees[i].id === emp.id) {
+            employees[i] = emp;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          employees.push(emp);
+        }
+      }
+
+      function loadEmployee(id) {
+        setGlobalMessage('טוען עובד...', false);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setGlobalMessage(
+                (res && res.error) || 'שגיאה בטעינת עובד',
+                true
+              );
+              return;
+            }
+            var emp = res.employee;
+            selectedEmployeeId = emp.id;
+            renderEmployee(emp);
+            setGlobalMessage('', false);
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בטעינת עובד: ' + err, true);
+          })
+          .EMP_getEmployeeById(id);
+      }
+
+      function renderEmployee(emp) {
+        $('employee-section').style.display = 'block';
+        $('emp-name').value = emp.name || '';
+
+        // סטטוס עובד בראש הסקשן
+        var statusPill = $('emp-status-pill');
+        if (statusPill) {
+          var isActive = !!emp.anyActive;
+          statusPill.textContent = isActive ? 'פעיל' : 'לא פעיל';
+          statusPill.classList.toggle('status-active', isActive);
+          statusPill.classList.toggle('status-inactive', !isActive);
+        }
+
+        // פרטי עובד (אם השרת יספק אותם)
+        var gender =
+          emp.gender || emp.sex || '';
+        var idNumber =
+          emp.idNumber || emp.teudatZehut || '';
+        var phone =
+          emp.phone || '';
+        var birthdate =
+          emp.birthdate || '';
+        var email =
+          emp.email || '';
+        var shirtSize =
+          emp.shirtSize || '';
+
+        if ($('emp-gender')) $('emp-gender').value = gender;
+        if ($('emp-idnum')) $('emp-idnum').value = idNumber;
+        if ($('emp-phone')) $('emp-phone').value = phone;
+        if ($('emp-birthdate')) $('emp-birthdate').value = birthdate;
+        if ($('emp-email')) $('emp-email').value = email;
+        if ($('emp-shirt-size')) $('emp-shirt-size').value = shirtSize;
+
+        var jobsList = $('jobs-list');
+        jobsList.innerHTML = '';
+
+        var rows = emp.rows || [];
+        if (rows.length === 0) {
+          addJobRow(null);
+        } else {
+          for (var i = 0; i < rows.length; i++) {
+            addJobRow(rows[i]);
+          }
+        }
+
+        checkFilterStateForSelectedEmployee();
+      }
+
+      function jobRowTemplate(data) {
+        var rid = data && data.rowIndex ? String(data.rowIndex) : '';
+        var active = data && data.rowActive ? 'checked' : '';
+        var title = (data && data.jobType) || 'סוג עבודה חדש';
+        var amount = (data && data.amount) || '';
+        var notes = (data && data.notes) || '';
+        // department & payment ימולאו בפועל בפונקציה initJobRow
+        var html = '';
+        html += '<div class="job-row" data-row-index="' + rid + '">';
+        html += '  <div class="job-row-header">';
+        html +=
+          '    <span class="job-row-header-title">' + title + '</span>';
+        html +=
+          '    <label><input type="checkbox" class="field-row-active" ' +
+          active +
+          '> פעיל</label>';
+        html += '  </div>';
+
+        html +=
+          '  <div class="field-row"><span class="label">סוג העבודה</span>';
+        html += '    <select class="field-job-type"></select>';
+        html += '  </div>';
+
+        html +=
+          '  <div class="field-row"><span class="label">מחלקה</span>';
+        html +=
+          '    <input type="text" class="field-department" disabled />';
+        html += '  </div>';
+
+        html +=
+          '  <div class="field-row"><span class="label">סכום (ש&quot;ח)</span>';
+        html +=
+          '    <input type="number" class="field-amount" value="' +
+          amount +
+          '">';
+        html += '  </div>';
+
+        html +=
+          '  <div class="field-row"><span class="label">אופן תשלום</span>';
+        html += '    <select class="field-payment"></select>';
+        html += '  </div>';
+
+        html +=
+          '  <div class="field-row"><span class="label">הערות</span>';
+        html +=
+          '    <input type="text" class="field-notes" value="' +
+          notes +
+          '">';
+        html += '  </div>';
+        html += '</div>';
+        return html;
+      }
+
+      function initJobRow(rowEl, data) {
+        data = data || {};
+        var jobSelect = rowEl.querySelector('.field-job-type');
+        var paySelect = rowEl.querySelector('.field-payment');
+        var deptInput = rowEl.querySelector('.field-department');
+        var headerTitle = rowEl.querySelector('.job-row-header-title');
+
+        var currentJobName = (data.jobType || '').trim();
+        var currentDept = (data.department || '').trim();
+        var currentPayName = (data.paymentMode || '').trim();
+
+        // ---- מילוי select של סוג עבודה ----
+        jobSelect.innerHTML = '';
+        var optEmptyJob = document.createElement('option');
+        optEmptyJob.value = '';
+        optEmptyJob.textContent = '-- בחר סוג עבודה --';
+        jobSelect.appendChild(optEmptyJob);
+
+        var jobFound = false;
+        for (var i = 0; i < jobs.length; i++) {
+          var j = jobs[i];
+          if (!j || !j.name) continue;
+          var opt = document.createElement('option');
+          opt.value = j.name;
+          opt.textContent = j.name;
+          if (currentJobName && j.name === currentJobName) {
+            opt.selected = true;
+            jobFound = true;
+          }
+          jobSelect.appendChild(opt);
+        }
+
+        // אם יש ערך קיים שלא קיים ברשימה – נוסיף אותו כאופציה נפרדת
+        if (currentJobName && !jobFound) {
+          var optCustom = document.createElement('option');
+          optCustom.value = currentJobName;
+          optCustom.textContent =
+            currentJobName + ' (לא בטבלת אופציות)';
+          optCustom.selected = true;
+          jobSelect.insertBefore(optCustom, jobSelect.children[1] || null);
+        }
+
+        // ---- מילוי select של אופן תשלום ----
+        paySelect.innerHTML = '';
+        var optEmptyPay = document.createElement('option');
+        optEmptyPay.value = '';
+        optEmptyPay.textContent = '-- בחר אופן תשלום --';
+        paySelect.appendChild(optEmptyPay);
+
+        var payFound = false;
+        for (var k = 0; k < payments.length; k++) {
+          var p = payments[k];
+          if (!p || !p.name) continue;
+          var optP = document.createElement('option');
+          optP.value = p.name;
+          optP.textContent = p.name;
+          if (currentPayName && p.name === currentPayName) {
+            optP.selected = true;
+            payFound = true;
+          }
+          paySelect.appendChild(optP);
+        }
+
+        if (currentPayName && !payFound) {
+          var optCustomPay = document.createElement('option');
+          optCustomPay.value = currentPayName;
+          optCustomPay.textContent =
+            currentPayName + ' (לא בטבלת אופציות)';
+          optCustomPay.selected = true;
+          paySelect.insertBefore(optCustomPay, paySelect.children[1] || null);
+        }
+
+        // ---- מחלקה – נגזרת מסוג העבודה ----
+        function updateDeptAndTitle() {
+          var jName = (jobSelect.value || '').trim();
+          if (jName && jobByName[jName]) {
+            deptInput.value = jobByName[jName].department || '';
+          } else {
+            // אם יש מחלקה קיימת בשורה מהטבלה – נשאיר אותה כFallback
+            deptInput.value = currentDept || '';
+          }
+          headerTitle.textContent = jName || 'סוג עבודה חדש';
+        }
+
+        jobSelect.addEventListener('change', function () {
+          updateDeptAndTitle();
+          scheduleLiveSave();
+        });
+
+        // הפעלה ראשונית
+        updateDeptAndTitle();
+      }
+
+      function addJobRow(data) {
+        var jobsList = $('jobs-list');
+        jobsList.insertAdjacentHTML('beforeend', jobRowTemplate(data));
+        var rowEl = jobsList.lastElementChild;
+        initJobRow(rowEl, data || {});
+        attachLiveEditHandlers(rowEl);
+      }
+
+      function onSaveClick() {
+        var payload = collectPayloadOrNull();
+        if (!payload) return;
+
+        setGlobalMessage('שומר שינויים...', false);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setGlobalMessage(
+                (res && res.error) || 'שגיאה בשמירה',
+                true
+              );
+              return;
+            }
+            setGlobalMessage('השינויים נשמרו', false);
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בשמירה: ' + err, true);
+          })
+          .EMP_saveEmployeePayload(payload);
+      }
+
+      function onRevealFilterClick() {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.changed) {
+              setGlobalMessage(
+                'הוסר סינון בגליון "פרטי עובדים".',
+                false
+              );
+              setFilterWarningVisible(false);
+            } else {
+              setGlobalMessage('לא היה סינון פעיל.', false);
+            }
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בטיפול בסינון: ' + err, true);
+          })
+          .EMP_revealAllRowsIfFiltered();
+      }
+
+      window.addEventListener('load', init);
+    </script>
+  </body>
+</html>
