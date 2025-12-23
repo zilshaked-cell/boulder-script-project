@@ -35,6 +35,13 @@
     display: block;
   }
 
+  .section-title {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--color-text-primary);
+  }
+
   #employee-section {
     background: var(--color-surface-2);
     border-radius: 10px;
@@ -172,6 +179,29 @@
     font-size: 11px;
   }
 
+  .row-active-btn {
+    border: 1px solid var(--color-border);
+    background: #1f2937;
+    color: #e2e8f0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-weight: bold;
+    min-width: 90px;
+  }
+
+  .row-active-btn.active {
+    background: rgba(22, 163, 74, 0.18);
+    border-color: #16a34a;
+    color: #bbf7d0;
+    box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
+  }
+
+  .row-active-btn.inactive {
+    background: rgba(148, 163, 184, 0.15);
+    border-color: #475569;
+    color: #e2e8f0;
+  }
+
   .field-department[disabled] {
     background: #020617;
     color: var(--color-text-muted);
@@ -219,54 +249,229 @@
     color: #e2e8f0;
     border-color: #475569;
   }
+
+  .sidebar-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: sticky;
+    top: 8px;
+    align-self: flex-start;
+    min-width: 58px;
+  }
+
+  .tab-button {
+    width: 48px;
+    height: 48px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    border-radius: 12px;
+    font-weight: bold;
+    font-size: 11px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .tab-button::after {
+    content: attr(data-short);
+    display: block;
+    text-align: center;
+    line-height: 1.1;
+  }
+
+  .tab-label {
+    position: absolute;
+    left: -9999px;
+  }
+
+  .tab-button.active {
+    background: var(--color-accent-strong);
+    color: #111827;
+    box-shadow: var(--shadow-strong);
+    border-color: var(--color-accent-strong);
+    transform: translateY(-1px);
+  }
+
+  .tab-hidden {
+    display: none;
+  }
+
+  .content-area {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .pill-toggle {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .tab-warning {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #fca5a5;
+    line-height: 1.4;
+  }
+
+  /* חיווי פערי נתונים בפרטי עובד */
+  .mismatch-banner {
+    background: #312e81;
+    border: 1px solid #4338ca;
+    color: #e0e7ff;
+    padding: 8px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+
+  .mismatch-banner-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mismatch-banner-text {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .mismatch-banner-note {
+    margin-top: 4px;
+    font-size: 11px;
+    color: #c4d0ff;
+  }
+
+  .btn-quiet {
+    background: transparent;
+    color: #e0e7ff;
+    border: 1px solid #4338ca;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+
+  .btn-quiet:hover {
+    background: #4338ca;
+  }
+
+  .field-mismatch input,
+  .field-mismatch select {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
+  }
+
+  .mismatch-options {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .mismatch-option-btn {
+    border: 1px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    color: #fcd34d;
+    padding: 4px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+
+  .mismatch-option-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+  }
 </style>
 
   </head>
   <body>
     <div id="global-message"></div>
 
-    <div class="section">
-      <label class="label" for="search-input">חיפוש עובד לפי שם</label>
-      <input
-        id="search-input"
-        type="text"
-        placeholder="התחל להקליד שם..."
-        autocomplete="off"
-      />
-      <div id="search-results" class="hidden"></div>
-      <div class="muted">
-        בחירת עובד מהרשימה תטען אותו לעריכה. אם אין התאמה, אפשר ליצור עובד חדש.
-      </div>
-    </div>
-
-    <div id="employee-section" style="display: none">
-      <!-- מצב עריכה -->
-      <div class="section" id="edit-mode-section">
-        <span class="label">מצב עריכה</span>
-        <button id="edit-mode-toggle" type="button" class="btn-secondary">
-          מצב: שמירה ידנית
+    <div class="sidebar-layout">
+      <div id="sidebar-tabs" class="tabs">
+        <button type="button" class="tab-button active" data-tab="employees" data-short="עובד" title="כרטיסי עובדים">
+          <span class="tab-label">כרטיסי עובדים</span>
         </button>
-        <div class="muted">
-          במצב "עריכה בזמן אמת" כל שינוי בשדות נשמר אוטומטית לגיליון
-          (עם השהייה קצרה כדי שלא יהיו יותר מדי שמירות).
-        </div>
+        <button type="button" class="tab-button" data-tab="requests" data-short="בקשות" title="בקשות עובדים">
+          <span class="tab-label">בקשות עובדים</span>
+        </button>
+        <button type="button" class="tab-button" data-tab="settings" data-short="הגדרות" title="הגדרות סייד בר">
+          <span class="tab-label">הגדרות סייד בר</span>
+        </button>
       </div>
 
-      <!-- כותרת פרטי עובד: סטטוס + שם -->
-      <div class="section employee-header">
-        <div class="status-row">
-          <span class="label">סטטוס עובד</span>
-          <span
-            id="emp-status-pill"
-            class="status-pill status-inactive"
+      <div class="content-area">
+        <div class="section" data-tab-section="employees">
+          <label class="label" for="search-input">חיפוש עובד לפי שם</label>
+          <input
+            id="search-input"
+            type="text"
+            placeholder="התחל להקליד שם..."
+            autocomplete="off"
+          />
+          <div id="search-results" class="hidden"></div>
+          <div class="muted">
+            בחירת עובד מהרשימה תטען אותו לעריכה. אם אין התאמה, אפשר ליצור עובד חדש.
+          </div>
+        </div>
+
+        <div class="section" id="manual-load-section" data-tab-section="employees" style="display: none">
+          <button
+            id="manual-load-btn"
+            class="btn-primary"
+            type="button"
           >
-            לא פעיל
-          </span>
+            טען את העובד מהשורה המסומנת בגליון
+          </button>
+          <div class="muted">
+            עמוד על שורה של עובד בגליון ואז לחץ כאן כדי לפתוח את הכרטיס שלו בסייד בר.
+          </div>
         </div>
-        <div class="field-row">
-          <span class="label">שם מלא</span>
-          <input id="emp-name" type="text" />
+
+        <div id="employee-section" style="display: none" data-tab-section="employees">
+          <h2 class="section-title">כרטיס עובד</h2>
+          <!-- כותרת פרטי עובד: סטטוס + שם -->
+          <div class="section employee-header">
+            <div class="status-row">
+              <span class="label">סטטוס עובד</span>
+              <span
+                id="emp-status-pill"
+                class="status-pill status-inactive"
+              >
+                לא פעיל
+              </span>
+            </div>
+
+            <div class="field-row">
+              <span class="label">שם מלא</span>
+              <input id="emp-name" type="text" />
+              <div class="mismatch-options" data-field="name"></div>
+            </div>
+          </div>
+
+      <!-- אזהרה על פערים בפרטי העובד -->
+      <div id="personal-mismatch-banner" class="mismatch-banner hidden">
+        <div class="mismatch-banner-top">
+          <div class="mismatch-banner-text">
+            קיים חוסר התאמה בפרטי העובד בשורות השונות - בחר בנכון מבינהם כדי לסדר את זה
+          </div>
+          <button type="button" id="mismatch-dismiss-btn" class="btn-quiet">לא עכשיו</button>
         </div>
+        <div id="mismatch-limit-note" class="mismatch-banner-note hidden"></div>
       </div>
 
       <!-- אזהרת פילטר לשורה מוסתרת -->
@@ -292,35 +497,47 @@
 
       <!-- פרטי עובד נוספים -->
       <div class="section employee-fields">
-        <div class="field-row">
-          <span class="label">מין</span>
-          <input id="emp-gender" type="text" />
+        <div class="field-group">
+          <div class="field-row">
+            <span class="label">טלפון</span>
+            <input id="emp-phone" type="text" placeholder="000-000-0000" />
+            <div class="mismatch-options" data-field="phone"></div>
+          </div>
+          <div class="field-row">
+            <span class="label">מייל</span>
+            <input id="emp-email" type="email" />
+            <div class="mismatch-options" data-field="email"></div>
+          </div>
+          <div class="field-row">
+            <span class="label">עלות החזרי נסיעות יומי</span>
+            <input id="emp-travel" type="number" step="0.01" />
+            <div class="mismatch-options" data-field="travelCost"></div>
+          </div>
         </div>
-        <div class="field-row">
-          <span class="label">ת"ז</span>
-          <input id="emp-idnum" type="text" />
-        </div>
-        <div class="field-row">
-          <span class="label">טלפון</span>
-          <input id="emp-phone" type="text" />
-        </div>
-        <div class="field-row">
-          <span class="label">תאריך לידה</span>
-          <input id="emp-birthdate" type="date" />
-        </div>
-        <div class="field-row">
-          <span class="label">מייל</span>
-          <input id="emp-email" type="email" />
-        </div>
-        <div class="field-row">
-          <span class="label">מידת חולצה</span>
-          <input id="emp-shirt-size" type="text" />
-        </div>
-      </div>
 
-      <div class="section">
-        <div class="muted">
-          כדי לטעון עובד, אפשר ללחוץ על תא כלשהו באחת השורות שלו בטבלה.
+        <hr class="field-separator" />
+
+        <div class="field-group">
+          <div class="field-row">
+            <span class="label">תז</span>
+            <input id="emp-idnum" type="text" />
+            <div class="mismatch-options" data-field="idNumber"></div>
+          </div>
+          <div class="field-row">
+            <span class="label">מין</span>
+            <input id="emp-gender" type="text" />
+            <div class="mismatch-options" data-field="gender"></div>
+          </div>
+          <div class="field-row">
+            <span class="label">ת. לידה</span>
+            <input id="emp-birthdate" type="date" />
+            <div class="mismatch-options" data-field="birthdate"></div>
+          </div>
+          <div class="field-row">
+            <span class="label">מידת חולצה</span>
+            <input id="emp-shirt-size" type="text" />
+            <div class="mismatch-options" data-field="shirtSize"></div>
+          </div>
         </div>
       </div>
 
@@ -349,13 +566,62 @@
       </div>
     </div>
 
+    <div class="section tab-hidden" data-tab-section="requests">
+      <div class="muted">
+        כרטיסיית בקשות עובדים תהיה בשימוש בהמשך. בינתיים אין כאן פעולה לביצוע.
+      </div>
+    </div>
+
+    <div class="section tab-hidden" data-tab-section="settings">
+      <div class="section" id="edit-mode-section">
+        <span class="label">מצב עריכה</span>
+        <button id="edit-mode-toggle" type="button" class="btn-secondary">
+          מצב: שמירה ידנית
+        </button>
+        <div class="muted" id="edit-mode-explainer">
+          במצב "עריכה בזמן אמת" כל שינוי בשדות נשמר אוטומטית לגיליון
+          (עם השהייה קצרה כדי שלא יהיו יותר מדי שמירות).
+        </div>
+      </div>
+
+      <div class="section" id="auto-load-section">
+        <span class="label">מצב טעינת עובד</span>
+        <div class="pill-toggle">
+          <button id="auto-load-auto-btn" type="button" class="btn-primary">
+            טעינת עובד אוטומטית
+          </button>
+          <button id="auto-load-manual-btn" type="button" class="btn-secondary">
+            טעינת עובד ידנית (כפתור)
+          </button>
+        </div>
+        <div id="auto-load-warning" class="tab-warning">
+          אזהרה: טעינת עובד אוטומטית מפעילה בדיקות רקע תכופות בגליון
+          ויכולה להאט את העבודה בסייד־בר. השתמש במצב הזה רק כשחשוב לך
+          שהכרטיס של העובד יתחלף לבד כשאתה מחליף שורה.
+        </div>
+      </div>
+    </div>
+
+      </div> <!-- content-area -->
+    </div> <!-- sidebar-layout -->
+
     <script>
       // מוזרק מהשרת
-      var INITIAL_EMPLOYEE_ID = '<?= initialEmployeeId ?>' || '';
+      var _INITIAL_EMPLOYEE_ID_RAW = '<?= initialEmployeeId ?>';
+      var INITIAL_EMPLOYEE_ID =
+        _INITIAL_EMPLOYEE_ID_RAW &&
+        _INITIAL_EMPLOYEE_ID_RAW !== 'undefined' &&
+        _INITIAL_EMPLOYEE_ID_RAW !== 'null'
+          ? _INITIAL_EMPLOYEE_ID_RAW
+          : '';
 
       var bootstrap = null;
       var employees = [];
       var selectedEmployeeId = null;
+      var activeTab = 'employees';
+      var currentEmployee = null;
+      var mismatchDismissed = false;
+      var MAX_MISMATCH_ROWS = 6;
 
       // רשימות סוגי עבודה ואופני תשלום מהשרת
       var jobs = [];
@@ -363,6 +629,8 @@
       var jobByName = {};
       var paymentByName = {};
       var selectionPollTimer = null;
+      var selectionPollBusy = false;
+      var autoLoadMode = 'auto';
 
       // מצב עריכה: 'manual' (שמירה ידנית) או 'live' (שמירה בזמן אמת)
       var editMode = 'manual';
@@ -378,6 +646,217 @@
         el.className = '';
         if (!text) return;
         el.className = isError ? 'error' : 'info';
+      }
+
+      function formatPhoneForDisplay(val) {
+        var digits = (val || '').replace(/\D+/g, '');
+        if (digits.length === 10) {
+          return digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+        }
+        return val || '';
+      }
+
+      function formatPhoneForSave(val) {
+        var digits = (val || '').replace(/\D+/g, '');
+        if (digits.length === 10) {
+          return digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+        }
+        return (val || '').trim();
+      }
+
+      function toDateInputValue(val) {
+        if (!val) return '';
+        if (Object.prototype.toString.call(val) === '[object Date]' && !isNaN(val.getTime())) {
+          return val.toISOString().slice(0, 10);
+        }
+        var str = String(val).trim();
+        var m1 = str.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})$/);
+        if (m1) {
+          return m1[3] + '-' + m1[2] + '-' + m1[1];
+        }
+        var m2 = str.match(/^(\d{4})[\/.\-](\d{2})[\/.\-](\d{2})$/);
+        if (m2) {
+          return m2[1] + '-' + m2[2] + '-' + m2[3];
+        }
+        return str;
+      }
+
+      var PERSONAL_FIELDS = [
+        { key: 'name', label: 'שם מלא', inputId: 'emp-name', rowKey: 'fullName', empKey: 'name' },
+        { key: 'phone', label: 'טלפון', inputId: 'emp-phone', rowKey: 'phone', empKey: 'phone' },
+        { key: 'email', label: 'מייל', inputId: 'emp-email', rowKey: 'email', empKey: 'email' },
+        { key: 'travelCost', label: 'עלות החזרי נסיעות יומי', inputId: 'emp-travel', rowKey: 'travelCost', empKey: 'travelCost' },
+        { key: 'idNumber', label: 'תז', inputId: 'emp-idnum', rowKey: 'idNumber', empKey: 'idNumber' },
+        { key: 'gender', label: 'מין', inputId: 'emp-gender', rowKey: 'gender', empKey: 'gender' },
+        { key: 'birthdate', label: 'ת. לידה', inputId: 'emp-birthdate', rowKey: 'birthdate', empKey: 'birthdate' },
+        { key: 'shirtSize', label: 'מידת חולצה', inputId: 'emp-shirt-size', rowKey: 'shirtSize', empKey: 'shirtSize' }
+      ];
+
+      function cloneEmployee(emp) {
+        try {
+          return JSON.parse(JSON.stringify(emp || {}));
+        } catch (_e) {
+          return null;
+        }
+      }
+
+      function formatMismatchDisplay(fieldKey, val) {
+        if (val === null || val === undefined || val === '') return 'ריק';
+        if (fieldKey === 'phone') return formatPhoneForDisplay(String(val));
+        if (fieldKey === 'birthdate') return toDateInputValue(val);
+        return String(val);
+      }
+
+      function clearMismatchUI() {
+        var containers = document.querySelectorAll('.mismatch-options');
+        for (var i = 0; i < containers.length; i++) {
+          containers[i].innerHTML = '';
+          var rowEl = containers[i].closest('.field-row');
+          if (rowEl) rowEl.classList.remove('field-mismatch');
+        }
+        var banner = $('personal-mismatch-banner');
+        if (banner) banner.classList.add('hidden');
+        var note = $('mismatch-limit-note');
+        if (note) note.classList.add('hidden');
+      }
+
+      function computeMismatchData(emp) {
+        var res = { fields: {}, limitHit: false };
+        if (!emp || !emp.rows) return res;
+        var rows = emp.rows.slice(0, MAX_MISMATCH_ROWS);
+        res.limitHit = emp.rows.length > MAX_MISMATCH_ROWS;
+
+        PERSONAL_FIELDS.forEach(function (cfg) {
+          var seen = {};
+          var list = [];
+          function addVal(v) {
+            var key = v === null || v === undefined ? '' : String(v);
+            if (seen.hasOwnProperty(key)) return;
+            seen[key] = true;
+            list.push({ raw: v === undefined ? '' : v, display: formatMismatchDisplay(cfg.key, v) });
+          }
+
+          for (var i = 0; i < rows.length; i++) {
+            var r = rows[i];
+            var p = r && r.personal ? r.personal : {};
+            var v = p[cfg.rowKey];
+            if (v === undefined && cfg.key === 'name') {
+              v = p.fullName || emp.name;
+            }
+            addVal(v);
+          }
+
+          var agg = emp[cfg.empKey || cfg.key];
+          addVal(agg);
+
+          res.fields[cfg.key] = list;
+        });
+
+        return res;
+      }
+
+      function renderMismatchUI(emp) {
+        clearMismatchUI();
+        if (mismatchDismissed) return;
+        var banner = $('personal-mismatch-banner');
+        var limitNote = $('mismatch-limit-note');
+        var data = computeMismatchData(emp || {});
+        var hasMismatch = false;
+
+        PERSONAL_FIELDS.forEach(function (cfg) {
+          var values = data.fields[cfg.key] || [];
+          var container = document.querySelector(
+            '.mismatch-options[data-field="' + cfg.key + '"]'
+          );
+          if (!container) return;
+          var rowEl = container.closest('.field-row');
+          if (values.length <= 1) {
+            container.innerHTML = '';
+            if (rowEl) rowEl.classList.remove('field-mismatch');
+            return;
+          }
+
+          hasMismatch = true;
+          if (rowEl) rowEl.classList.add('field-mismatch');
+          container.innerHTML = '';
+          for (var i = 0; i < values.length; i++) {
+            (function (valObj) {
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'mismatch-option-btn';
+              btn.textContent = valObj.display || 'ריק';
+              btn.addEventListener('click', function () {
+                onMismatchOptionSelect(cfg, valObj.raw);
+              });
+              container.appendChild(btn);
+            })(values[i]);
+          }
+        });
+
+        if (banner) {
+          banner.classList.toggle('hidden', !hasMismatch);
+        }
+        if (limitNote) {
+          limitNote.textContent = data.limitHit
+            ? 'מציג עד ' + MAX_MISMATCH_ROWS + ' שורות להשוואה'
+            : '';
+          limitNote.classList.toggle('hidden', !hasMismatch || !data.limitHit);
+        }
+      }
+
+      function applyValueToInput(cfg, value) {
+        if (!cfg || !cfg.inputId) return;
+        var el = $(cfg.inputId);
+        if (!el) return;
+        var valForInput = value;
+        if (cfg.key === 'phone') {
+          valForInput = formatPhoneForDisplay(String(value || ''));
+        } else if (cfg.key === 'birthdate') {
+          valForInput = toDateInputValue(value || '');
+        }
+        el.value = valForInput === undefined ? '' : valForInput;
+      }
+
+      function updateEmployeeAfterChoice(cfg, value) {
+        if (!cfg || !currentEmployee) return;
+        var storeVal = value === undefined ? '' : value;
+        currentEmployee[cfg.empKey || cfg.key] = storeVal;
+        if (currentEmployee.rows) {
+          for (var i = 0; i < currentEmployee.rows.length; i++) {
+            if (!currentEmployee.rows[i].personal) currentEmployee.rows[i].personal = {};
+            currentEmployee.rows[i].personal[cfg.rowKey] = storeVal;
+            if (cfg.key === 'name') {
+              currentEmployee.rows[i].personal.fullName = storeVal;
+            }
+          }
+        }
+        addOrUpdateEmployeeInList(currentEmployee);
+      }
+
+      function onMismatchOptionSelect(cfg, value) {
+        if (!cfg || !selectedEmployeeId) return;
+        applyValueToInput(cfg, value);
+        setGlobalMessage('מעדכן ' + cfg.label + ' בכל השורות...', false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setGlobalMessage((res && res.error) || 'שגיאה בעדכון השדה', true);
+              return;
+            }
+            updateEmployeeAfterChoice(cfg, value);
+            renderMismatchUI(currentEmployee);
+            setGlobalMessage('הערך עודכן בכל השורות של העובד', false);
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בעדכון השדה: ' + err, true);
+          })
+          .EMP_applyPersonalFieldChoice(selectedEmployeeId, cfg.key, value);
+      }
+
+      function dismissMismatchBanner() {
+        mismatchDismissed = true;
+        clearMismatchUI();
       }
 
       function setFilterWarningVisible(visible) {
@@ -463,7 +942,8 @@
           '.field-job-type, .field-amount, .field-payment, .field-notes, .field-row-active';
         var fields = rowEl.querySelectorAll(selectors);
         for (var i = 0; i < fields.length; i++) {
-          fields[i].addEventListener('change', function () {
+          var evt = fields[i].classList.contains('field-row-active') ? 'click' : 'change';
+          fields[i].addEventListener(evt, function () {
             scheduleLiveSave();
           });
         }
@@ -478,7 +958,8 @@
           'emp-phone',
           'emp-birthdate',
           'emp-email',
-          'emp-shirt-size'
+          'emp-shirt-size',
+          'emp-travel'
         ];
         ids.forEach(function (id) {
           var el = $(id);
@@ -502,10 +983,11 @@
 
         var gender = ($('emp-gender').value || '').trim();
         var idNumber = ($('emp-idnum').value || '').trim();
-        var phone = ($('emp-phone').value || '').trim();
-        var birthdate = ($('emp-birthdate').value || '').trim();
+        var phone = formatPhoneForSave(($('emp-phone').value || '').trim());
+        var birthdate = toDateInputValue(($('emp-birthdate').value || '').trim());
         var email = ($('emp-email').value || '').trim();
         var shirtSize = ($('emp-shirt-size').value || '').trim();
+        var travelCost = ($('emp-travel').value || '').trim();
 
         var jobEls = document.querySelectorAll('.job-row');
         var rowsPayload = [];
@@ -521,7 +1003,10 @@
             (el.querySelector('.field-payment').value || '').trim();
           var notes =
             (el.querySelector('.field-notes').value || '').trim();
-          var rowActive = el.querySelector('.field-row-active').checked;
+          var rowActiveBtn = el.querySelector('.field-row-active');
+          var rowActive = rowActiveBtn
+            ? rowActiveBtn.getAttribute('data-active') === 'true'
+            : false;
 
           // דילוג על שורה ריקה לגמרי
           if (!jobType && !dept && !amount && !payment && !notes) {
@@ -553,6 +1038,7 @@
           birthdate: birthdate,
           email: email,
           shirtSize: shirtSize,
+          travelCost: travelCost,
           rows: rowsPayload
         };
       }
@@ -587,11 +1073,12 @@
 
         google.script.run
           .withSuccessHandler(function (res) {
-            if (!res || !res.ok) {
-              setGlobalMessage(
-                (res && res.error) || 'שגיאה בטעינת נתונים',
-                true
-              );
+            if (!res) {
+              setGlobalMessage('שגיאה בטעינת נתונים: תגובה ריקה מהשרת (bootstrap)', true);
+              return;
+            }
+            if (!res.ok) {
+              setGlobalMessage(res.error || 'שגיאה בטעינת נתונים', true);
               return;
             }
             bootstrap = res;
@@ -600,9 +1087,6 @@
             payments = res.payments || [];
             rebuildLookups();
             setGlobalMessage('', false);
-
-            // התחלת פולינג לבחירת עובד לפי השורה הפעילה בגליון
-            startSelectionPolling();
 
             if (INITIAL_EMPLOYEE_ID) {
               loadEmployee(INITIAL_EMPLOYEE_ID);
@@ -614,19 +1098,51 @@
           .EMP_getSidebarBootstrap();
 
         $('search-input').addEventListener('input', onSearchInputChange);
+        $('search-input').addEventListener('keydown', onSearchKeyDown);
         $('search-results').addEventListener('click', onSearchResultsClick);
+
+        var tabButtons = document.querySelectorAll('.tab-button');
+        for (var t = 0; t < tabButtons.length; t++) {
+          tabButtons[t].addEventListener('click', function (e) {
+            var tab = e.currentTarget.getAttribute('data-tab');
+            setActiveTab(tab);
+          });
+        }
 
         var warnBtn = $('emp-filter-warning-btn');
         if (warnBtn) {
           warnBtn.addEventListener('click', onRevealFilterClick);
         }
 
+        var mismatchDismissBtn = $('mismatch-dismiss-btn');
+        if (mismatchDismissBtn) {
+          mismatchDismissBtn.addEventListener('click', dismissMismatchBanner);
+        }
+
         var modeBtn = $('edit-mode-toggle');
         if (modeBtn) {
           modeBtn.addEventListener('click', toggleEditMode);
         }
+        var manualLoadBtn = $('manual-load-btn');
+        if (manualLoadBtn) {
+          manualLoadBtn.addEventListener('click', onManualLoadClick);
+        }
+        var autoModeBtn = $('auto-load-auto-btn');
+        if (autoModeBtn) {
+          autoModeBtn.addEventListener('click', function () {
+            setAutoLoadMode('auto');
+          });
+        }
+        var manualModeBtn = $('auto-load-manual-btn');
+        if (manualModeBtn) {
+          manualModeBtn.addEventListener('click', function () {
+            setAutoLoadMode('manual');
+          });
+        }
         // ברירת מחדל – שמירה ידנית
         setEditMode('manual');
+        setActiveTab('employees');
+        setAutoLoadMode('manual');
 
         attachTopLevelLiveHandlers();
       }
@@ -634,10 +1150,15 @@
       function startSelectionPolling() {
         if (!google || !google.script || !google.script.run) return;
         if (selectionPollTimer) return;
+        if (autoLoadMode !== 'auto') return;
 
         function poll() {
+          if (autoLoadMode !== 'auto') return;
+          if (selectionPollBusy) return;
+          selectionPollBusy = true;
           google.script.run
             .withSuccessHandler(function (res) {
+              selectionPollBusy = false;
               if (!res || !res.ok) return;
 
               var newId = res.employeeId || null;
@@ -651,13 +1172,105 @@
             })
             .withFailureHandler(function (_err) {
               // מתעלמים משגיאה כדי לא להציף הודעות
+              selectionPollBusy = false;
             })
             .EMP_getSelectedEmployeeId();
         }
 
-        // הרצה ראשונית, ואז כל 2 שניות
+        // הרצה ראשונית, ואז כל 3 שניות
         poll();
-        selectionPollTimer = setInterval(poll, 2000);
+        selectionPollTimer = setInterval(poll, 3000);
+      }
+
+      function stopSelectionPolling() {
+        if (selectionPollTimer) {
+          clearInterval(selectionPollTimer);
+          selectionPollTimer = null;
+        }
+      }
+
+      function setActiveTab(tabName) {
+        activeTab = tabName || 'employees';
+        var buttons = document.querySelectorAll('.tab-button');
+        for (var i = 0; i < buttons.length; i++) {
+          var btnTab = buttons[i].getAttribute('data-tab');
+          if (btnTab === activeTab) {
+            buttons[i].classList.add('active');
+          } else {
+            buttons[i].classList.remove('active');
+          }
+        }
+
+        var sections = document.querySelectorAll('[data-tab-section]');
+        for (var s = 0; s < sections.length; s++) {
+          var sectionTab = sections[s].getAttribute('data-tab-section');
+          if (sectionTab === activeTab) {
+            sections[s].classList.remove('tab-hidden');
+          } else {
+            sections[s].classList.add('tab-hidden');
+          }
+        }
+      }
+
+      function setAutoLoadMode(mode) {
+        autoLoadMode = mode === 'manual' ? 'manual' : 'auto';
+
+        var autoBtn = $('auto-load-auto-btn');
+        var manualBtn = $('auto-load-manual-btn');
+        var warning = $('auto-load-warning');
+        var manualSection = $('manual-load-section');
+
+        if (autoBtn && manualBtn) {
+          if (autoLoadMode === 'auto') {
+            autoBtn.classList.add('btn-primary');
+            autoBtn.classList.remove('btn-secondary');
+            manualBtn.classList.add('btn-secondary');
+            manualBtn.classList.remove('btn-primary');
+          } else {
+            autoBtn.classList.add('btn-secondary');
+            autoBtn.classList.remove('btn-primary');
+            manualBtn.classList.add('btn-primary');
+            manualBtn.classList.remove('btn-secondary');
+          }
+        }
+
+        if (warning) {
+          warning.style.display = autoLoadMode === 'auto' ? 'block' : 'none';
+        }
+
+        if (manualSection) {
+          manualSection.style.display = autoLoadMode === 'manual' ? 'block' : 'none';
+        }
+
+        if (autoLoadMode === 'auto') {
+          startSelectionPolling();
+        } else {
+          stopSelectionPolling();
+        }
+      }
+
+      function loadFromSheetSelection() {
+        if (!google || !google.script || !google.script.run) {
+          setGlobalMessage('לא ניתן לטעון את העובד מהבחירה בגיליון.', true);
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.ok && res.employeeId) {
+              loadEmployee(res.employeeId);
+            } else {
+              setGlobalMessage('לא נמצאה בחירה פעילה בגיליון.', true);
+            }
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בטעינת עובד מהבחירה: ' + err, true);
+          })
+          .EMP_getSelectedEmployeeId();
+      }
+
+      function onManualLoadClick() {
+        loadFromSheetSelection();
       }
 
       function onSearchInputChange(e) {
@@ -704,6 +1317,28 @@
 
         resultsEl.innerHTML = html;
         resultsEl.classList.remove('hidden');
+      }
+
+      function onSearchKeyDown(e) {
+        if (e.key === 'Enter') {
+          var resEl = $('search-results');
+          if (resEl && !resEl.classList.contains('hidden')) {
+            var first = resEl.querySelector('.search-item');
+            if (first) {
+              first.click();
+            }
+          }
+          e.preventDefault();
+          return;
+        }
+
+        if (e.key === 'Escape') {
+          var box = $('search-results');
+          if (box) {
+            box.classList.add('hidden');
+            box.innerHTML = '';
+          }
+        }
       }
 
       function onSearchResultsClick(e) {
@@ -773,11 +1408,12 @@
         setGlobalMessage('טוען עובד...', false);
         google.script.run
           .withSuccessHandler(function (res) {
-            if (!res || !res.ok) {
-              setGlobalMessage(
-                (res && res.error) || 'שגיאה בטעינת עובד',
-                true
-              );
+            if (!res) {
+              setGlobalMessage('שגיאה בטעינת עובד: תגובה ריקה מהשרת', true);
+              return;
+            }
+            if (!res.ok) {
+              setGlobalMessage(res.error || 'שגיאה בטעינת עובד', true);
               return;
             }
             var emp = res.employee;
@@ -792,6 +1428,8 @@
       }
 
       function renderEmployee(emp) {
+        mismatchDismissed = false;
+        currentEmployee = emp;
         $('employee-section').style.display = 'block';
         $('emp-name').value = emp.name || '';
 
@@ -817,13 +1455,16 @@
           emp.email || '';
         var shirtSize =
           emp.shirtSize || '';
+        var travelCost =
+          emp.travelCost || '';
 
         if ($('emp-gender')) $('emp-gender').value = gender;
         if ($('emp-idnum')) $('emp-idnum').value = idNumber;
-        if ($('emp-phone')) $('emp-phone').value = phone;
-        if ($('emp-birthdate')) $('emp-birthdate').value = birthdate;
+        if ($('emp-phone')) $('emp-phone').value = formatPhoneForDisplay(phone);
+        if ($('emp-birthdate')) $('emp-birthdate').value = toDateInputValue(birthdate);
         if ($('emp-email')) $('emp-email').value = email;
         if ($('emp-shirt-size')) $('emp-shirt-size').value = shirtSize;
+        if ($('emp-travel')) $('emp-travel').value = travelCost;
 
         var jobsList = $('jobs-list');
         jobsList.innerHTML = '';
@@ -837,12 +1478,13 @@
           }
         }
 
+        renderMismatchUI(currentEmployee);
         checkFilterStateForSelectedEmployee();
       }
 
       function jobRowTemplate(data) {
         var rid = data && data.rowIndex ? String(data.rowIndex) : '';
-        var active = data && data.rowActive ? 'checked' : '';
+        var active = data && data.rowActive ? true : false;
         var title = (data && data.jobType) || 'סוג עבודה חדש';
         var amount = (data && data.amount) || '';
         var notes = (data && data.notes) || '';
@@ -853,9 +1495,9 @@
         html +=
           '    <span class="job-row-header-title">' + title + '</span>';
         html +=
-          '    <label><input type="checkbox" class="field-row-active" ' +
-          active +
-          '> פעיל</label>';
+          '    <button type="button" class="row-active-btn field-row-active ' +
+          (active ? 'active' : 'inactive') +
+          '" data-active="' + (active ? 'true' : 'false') + '"></button>';
         html += '  </div>';
 
         html +=
@@ -981,6 +1623,31 @@
           updateDeptAndTitle();
           scheduleLiveSave();
         });
+
+        // toggle active button text/state
+        var activeBtn = rowEl.querySelector('.field-row-active');
+        function syncActiveButton() {
+          var isActive = activeBtn.getAttribute('data-active') === 'true';
+          activeBtn.classList.toggle('active', isActive);
+          activeBtn.classList.toggle('inactive', !isActive);
+          activeBtn.textContent = isActive ? 'פעיל' : 'לא פעיל';
+        }
+        if (activeBtn) {
+          var initialActive = false;
+          if (data && data.rowActive === true) {
+            initialActive = true;
+          } else {
+            initialActive = activeBtn.getAttribute('data-active') === 'true';
+          }
+          activeBtn.setAttribute('data-active', initialActive ? 'true' : 'false');
+          syncActiveButton();
+          activeBtn.addEventListener('click', function () {
+            var now = activeBtn.getAttribute('data-active') === 'true';
+            activeBtn.setAttribute('data-active', now ? 'false' : 'true');
+            syncActiveButton();
+            scheduleLiveSave();
+          });
+        }
 
         // הפעלה ראשונית
         updateDeptAndTitle();

@@ -1,29 +1,42 @@
 var EMP = EMP || {};
 
 (function () {
-
   var CONFIG = {
-    SHEET_NAME_EMPLOYEES: 'פרטי עובדים',
-    SHEET_NAME_LOG: 'LOG_EMPLOYEES',
+    SHEET_NAME_EMPLOYEES: "פרטי עובדים",
+    SHEET_NAME_LOG: "LOG_EMPLOYEES",
     HEADER_ROW: 1,
     COL: {
-      ACTIVE: 1,       // A – סטטוס
-      ID: 2,           // B – ID עובד
-      FULL_NAME: 3,    // C – שם מלא
-      JOB_TYPE: 11,    // K – סוג העבודה
-      DEPARTMENT: 12,  // L – מחלקה
-      AMOUNT: 13,      // M – סכום
-      PAYMENT_MODE: 16,// P – אופן תשלום
-      NOTES: 17        // Q – הערות
+      ACTIVE: 1, // A – סטטוס
+      ID: 2, // B – ID עובד
+      FULL_NAME: 3, // C – שם מלא
+      JOB_TYPE: 11, // K – סוג העבודה
+      DEPARTMENT: 12, // L – מחלקה
+      AMOUNT: 13, // M – סכום
+      PAYMENT_MODE: 16, // P – אופן תשלום
+      NOTES: 17, // Q – הערות
     },
     PROPS: {
-      SCHEMA: 'EMP_SCHEMA_SNAPSHOT'
+      SCHEMA: "EMP_SCHEMA_SNAPSHOT",
     },
     MAIL: {
-      TO: 'ZIL.SHAKED@GMAIL.COM',
-      SUBJECT_PREFIX: 'שכר בולדר חיפה – שינוי מבנה עובדים'
-    }
+      TO: "ZIL.SHAKED@GMAIL.COM",
+      SUBJECT_PREFIX: "שכר בולדר חיפה – שינוי מבנה עובדים",
+    },
   };
+
+  function debugLog_(msg) {
+    try {
+      Logger.log("[EMP_DEBUG] " + msg);
+    } catch (_e) {
+      // no-op in environments without Logger
+    }
+  }
+
+  function colIndexByHeader_(headers, name) {
+    if (!headers || !headers.length) return null;
+    var idx = headers.indexOf(name);
+    return idx >= 0 ? idx + 1 : null;
+  }
 
   function getSpreadsheet_() {
     return SpreadsheetApp.getActive();
@@ -40,15 +53,15 @@ var EMP = EMP || {};
     if (!sh) {
       sh = ss.insertSheet(CONFIG.SHEET_NAME_LOG);
       sh.appendRow([
-        'timestamp',
-        'tx_id',
-        'employee_id',
-        'sheet',
-        'row',
-        'col',
-        'old_value',
-        'new_value',
-        'user'
+        "timestamp",
+        "tx_id",
+        "employee_id",
+        "sheet",
+        "row",
+        "col",
+        "old_value",
+        "new_value",
+        "user",
       ]);
     }
     return sh;
@@ -70,11 +83,11 @@ var EMP = EMP || {};
     if (val === true) return true;
     if (val === false) return false;
 
-    var s = String(val || '').trim();
+    var s = String(val || "").trim();
     if (!s) return false;
-    if (s.toUpperCase() === 'TRUE') return true;
-    if (s === 'פעיל') return true;
-    if (s === 'לא פעיל') return false;
+    if (s.toUpperCase() === "TRUE") return true;
+    if (s === "פעיל") return true;
+    if (s === "לא פעיל") return false;
 
     // ברירת מחדל: אם יש ערך כלשהו בסטטוס והוא לא "לא פעיל" – נחשב פעיל
     return true;
@@ -93,7 +106,7 @@ var EMP = EMP || {};
     var lastRow = sheet.getLastRow();
     if (lastRow <= CONFIG.HEADER_ROW) return;
 
-    var idCol = CONFIG.COL.ID;          // B
+    var idCol = CONFIG.COL.ID; // B
     var nameCol = CONFIG.COL.FULL_NAME; // C
 
     var range = sheet.getRange(
@@ -106,11 +119,11 @@ var EMP = EMP || {};
     var txId = Utilities.getUuid();
 
     function normalizeName_(val) {
-      if (val === null || val === undefined) return '';
-      return String(val).replace(/\s+/g, ' ').trim().toLowerCase();
+      if (val === null || val === undefined) return "";
+      return String(val).replace(/\s+/g, " ").trim().toLowerCase();
     }
     function normalizeId_(val) {
-      if (val === null || val === undefined) return '';
+      if (val === null || val === undefined) return "";
       return String(val).trim();
     }
 
@@ -123,13 +136,16 @@ var EMP = EMP || {};
     var props = PropertiesService.getDocumentProperties();
     var prevConflictArr;
     try {
-      prevConflictArr = JSON.parse(props.getProperty('EMP_CONFLICT_NAMES') || '[]');
+      prevConflictArr = JSON.parse(
+        props.getProperty("EMP_CONFLICT_NAMES") || "[]"
+      );
       if (!Array.isArray(prevConflictArr)) prevConflictArr = [];
     } catch (e) {
       prevConflictArr = [];
     }
     var prevConflictSet = {};
-    for (var pc = 0; pc < prevConflictArr.length; pc++) prevConflictSet[prevConflictArr[pc]] = true;
+    for (var pc = 0; pc < prevConflictArr.length; pc++)
+      prevConflictSet[prevConflictArr[pc]] = true;
 
     // PASS 1: בונים מפה name->id מתוך IDs קיימים ומזהים קונפליקטים
     for (var i = 0; i < values.length; i++) {
@@ -163,7 +179,10 @@ var EMP = EMP || {};
       }
     }
 
-    props.setProperty('EMP_CONFLICT_NAMES', JSON.stringify(Object.keys(conflictNames)));
+    props.setProperty(
+      "EMP_CONFLICT_NAMES",
+      JSON.stringify(Object.keys(conflictNames))
+    );
 
     // PASS 2: ממלאים IDs חסרים לפי המפה (או מייצרים פעם אחת)
     for (var j = 0; j < values.length; j++) {
@@ -212,9 +231,9 @@ var EMP = EMP || {};
 
     var result = [];
     for (var i = 0; i < headers.length; i++) {
-      result.push((headers[i] || '') + '#' + (i + 1));
+      result.push((headers[i] || "") + "#" + (i + 1));
     }
-    return result.join('||');
+    return result.join("||");
   }
 
   /** השוואת סכימה ושליחת מייל אם יש שינוי */
@@ -223,7 +242,7 @@ var EMP = EMP || {};
     if (!sheet) return;
 
     var props = getScriptProps_();
-    var prev = props.getProperty(CONFIG.PROPS.SCHEMA) || '';
+    var prev = props.getProperty(CONFIG.PROPS.SCHEMA) || "";
     var current = snapshotSchema_(sheet);
     if (!current) return;
 
@@ -241,38 +260,48 @@ var EMP = EMP || {};
   }
 
   function sendSchemaChangeEmail_(prev, current, reason) {
-    var user = Session.getActiveUser().getEmail() || 'unknown';
+    var user = Session.getActiveUser().getEmail() || "unknown";
     var ss = getSpreadsheet_();
 
-    var body = '';
-    body += 'זוהה שינוי במבנה כרטיסיית "פרטי עובדים" בקובץ: ' + ss.getName() + '\n\n';
-    body += 'סיבה (טריגר): ' + (reason || 'לא ידוע') + '\n';
-    body += 'משתמש מבצע: ' + user + '\n\n';
+    var body = "";
+    body +=
+      'זוהה שינוי במבנה כרטיסיית "פרטי עובדים" בקובץ: ' + ss.getName() + "\n\n";
+    body += "סיבה (טריגר): " + (reason || "לא ידוע") + "\n";
+    body += "משתמש מבצע: " + user + "\n\n";
     body += 'תכנון המערכת בשיחה: "תכנון מערכת ID\'S"\n';
-    body += 'שים לב לעדכן את הקוד בהתאם לשינוי בעמודות (שמות/מיקומים).\n\n';
-    body += 'Snapshot קודם:\n' + prev + '\n\n';
-    body += 'Snapshot נוכחי:\n' + current + '\n';
+    body += "שים לב לעדכן את הקוד בהתאם לשינוי בעמודות (שמות/מיקומים).\n\n";
+    body += "Snapshot קודם:\n" + prev + "\n\n";
+    body += "Snapshot נוכחי:\n" + current + "\n";
 
     MailApp.sendEmail({
       to: CONFIG.MAIL.TO,
-      subject: CONFIG.MAIL.SUBJECT_PREFIX + ' (' + (reason || 'שינוי סכימה') + ')',
-      body: body
+      subject:
+        CONFIG.MAIL.SUBJECT_PREFIX + " (" + (reason || "שינוי סכימה") + ")",
+      body: body,
     });
   }
 
   /** Skeleton לוג */
-  function logEmployeeChange_(employeeId, sheetName, row, col, oldVal, newVal, txId) {
+  function logEmployeeChange_(
+    employeeId,
+    sheetName,
+    row,
+    col,
+    oldVal,
+    newVal,
+    txId
+  ) {
     var sh = getLogSheet_();
     sh.appendRow([
       new Date(),
       txId || Utilities.getUuid(),
-      employeeId || '',
-      sheetName || '',
-      row || '',
-      col || '',
-      oldVal === undefined ? '' : oldVal,
-      newVal === undefined ? '' : newVal,
-      Session.getActiveUser().getEmail() || ''
+      employeeId || "",
+      sheetName || "",
+      row || "",
+      col || "",
+      oldVal === undefined ? "" : oldVal,
+      newVal === undefined ? "" : newVal,
+      Session.getActiveUser().getEmail() || "",
     ]);
   }
 
@@ -292,12 +321,25 @@ var EMP = EMP || {};
     }
 
     var lastCol = sheet.getLastColumn();
-    var data = sheet.getRange(
-      CONFIG.HEADER_ROW + 1,
-      1,
-      lastRow - CONFIG.HEADER_ROW,
-      lastCol
-    ).getValues();
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+    var colGender = colIndexByHeader_(headers, "מין");
+    var colIdNum = colIndexByHeader_(headers, "תז");
+    var colPhone = colIndexByHeader_(headers, "טלפון");
+    var colBirthdate = colIndexByHeader_(headers, "ת. לידה");
+    var colEmail = colIndexByHeader_(headers, "מייל");
+    var colShirt = colIndexByHeader_(headers, "מידת חולצה");
+    var colTravel = colIndexByHeader_(headers, "עלות החזרי נסיעות יומי");
+
+    function normalizeStr(val) {
+      if (val === null || val === undefined) return "";
+      return String(val).trim();
+    }
+
+    var data = sheet
+      .getRange(CONFIG.HEADER_ROW + 1, 1, lastRow - CONFIG.HEADER_ROW, lastCol)
+      .getValues();
 
     var employeesById = {};
 
@@ -305,18 +347,34 @@ var EMP = EMP || {};
       var rowIndex = CONFIG.HEADER_ROW + 1 + r;
       var row = data[r];
 
-      var name = String(row[CONFIG.COL.FULL_NAME - 1] || '').trim();
-      var id = String(row[CONFIG.COL.ID - 1] || '').trim();
+      var name = String(row[CONFIG.COL.FULL_NAME - 1] || "").trim();
+      var id = String(row[CONFIG.COL.ID - 1] || "").trim();
       if (!name || !id) continue; // לא שורת עובד
 
       var statusVal = row[CONFIG.COL.ACTIVE - 1];
       var rowActive = isRowActiveFlag_(statusVal);
 
-      var jobType = row[CONFIG.COL.JOB_TYPE - 1] || '';
-      var dept = row[CONFIG.COL.DEPARTMENT - 1] || '';
-      var amount = row[CONFIG.COL.AMOUNT - 1] || '';
-      var payment = row[CONFIG.COL.PAYMENT_MODE - 1] || '';
-      var notes = row[CONFIG.COL.NOTES - 1] || '';
+      var jobType = row[CONFIG.COL.JOB_TYPE - 1] || "";
+      var dept = row[CONFIG.COL.DEPARTMENT - 1] || "";
+      var amount = row[CONFIG.COL.AMOUNT - 1] || "";
+      var payment = row[CONFIG.COL.PAYMENT_MODE - 1] || "";
+      var notes = row[CONFIG.COL.NOTES - 1] || "";
+
+      var rawGender = colGender ? row[colGender - 1] : "";
+      var rawIdNum = colIdNum ? row[colIdNum - 1] : "";
+      var rawPhone = colPhone ? row[colPhone - 1] : "";
+      var rawBirthdate = colBirthdate ? row[colBirthdate - 1] : "";
+      var rawEmail = colEmail ? row[colEmail - 1] : "";
+      var rawShirt = colShirt ? row[colShirt - 1] : "";
+      var rawTravel = colTravel ? row[colTravel - 1] : "";
+
+      var gender = normalizeStr(rawGender);
+      var idNum = normalizeStr(rawIdNum);
+      var phone = normalizeStr(rawPhone);
+      var birthdate = normalizeStr(rawBirthdate);
+      var email = normalizeStr(rawEmail);
+      var shirtSize = normalizeStr(rawShirt);
+      var travelCost = normalizeStr(rawTravel);
 
       var emp = employeesById[id];
       if (!emp) {
@@ -324,9 +382,24 @@ var EMP = EMP || {};
           id: id,
           name: name,
           rows: [],
-          anyActive: false
+          anyActive: false,
+          gender: gender,
+          idNumber: idNum,
+          phone: phone,
+          birthdate: birthdate,
+          email: email,
+          shirtSize: shirtSize,
+          travelCost: travelCost,
         };
         employeesById[id] = emp;
+      } else {
+        if (!emp.gender && gender) emp.gender = gender;
+        if (!emp.idNumber && idNum) emp.idNumber = idNum;
+        if (!emp.phone && phone) emp.phone = phone;
+        if (!emp.birthdate && birthdate) emp.birthdate = birthdate;
+        if (!emp.email && email) emp.email = email;
+        if (!emp.shirtSize && shirtSize) emp.shirtSize = shirtSize;
+        if (!emp.travelCost && travelCost) emp.travelCost = travelCost;
       }
 
       emp.rows.push({
@@ -336,7 +409,17 @@ var EMP = EMP || {};
         department: dept,
         amount: amount,
         paymentMode: payment,
-        notes: notes
+        notes: notes,
+        personal: {
+          fullName: name,
+          gender: rawGender,
+          idNumber: rawIdNum,
+          phone: rawPhone,
+          birthdate: rawBirthdate,
+          email: rawEmail,
+          shirtSize: rawShirt,
+          travelCost: rawTravel,
+        },
       });
 
       if (rowActive) emp.anyActive = true;
@@ -354,55 +437,82 @@ var EMP = EMP || {};
     return {
       ok: true,
       employees: list,
-      cols: CONFIG.COL
+      cols: CONFIG.COL,
     };
   }
 
   function getSidebarBootstrap_() {
-    var base = collectEmployees_();
-    if (!base.ok) return base;
+    try {
+      var base = collectEmployees_();
+      if (!base) {
+        debugLog_(
+          "bootstrap failed: collectEmployees_ returned null/undefined"
+        );
+        return { ok: false, error: "collectEmployees returned undefined/null" };
+      }
+      if (!base.ok) return base;
 
-    var jobs = [];
-    var payments = [];
+      var jobs = [];
+      var payments = [];
 
-    if (typeof OPT !== 'undefined') {
-      try {
-        if (OPT.getAllJobs) {
-          jobs = OPT.getAllJobs(true) || [];   // רק פעילים
+      if (typeof OPT !== "undefined") {
+        try {
+          if (OPT.getAllJobs) {
+            jobs = OPT.getAllJobs(true) || []; // רק פעילים
+          }
+        } catch (e) {
+          jobs = [];
         }
-      } catch (e) {
-        jobs = [];
+
+        try {
+          if (OPT.getAllPayments) {
+            payments = OPT.getAllPayments(true) || []; // רק פעילים
+          }
+        } catch (e2) {
+          payments = [];
+        }
       }
 
-      try {
-        if (OPT.getAllPayments) {
-          payments = OPT.getAllPayments(true) || [];  // רק פעילים
-        }
-      } catch (e2) {
-        payments = [];
-      }
+      debugLog_(
+        "bootstrap ok: employees=" +
+          (base.employees ? base.employees.length : 0) +
+          " jobs=" +
+          jobs.length +
+          " payments=" +
+          payments.length
+      );
+      base.jobs = jobs;
+      base.payments = payments;
+      return base;
+    } catch (e) {
+      var msg = e && e.message ? e.message : e;
+      var stk = e && e.stack ? "\n" + e.stack : "";
+      debugLog_("bootstrap exception: " + msg);
+      return { ok: false, error: "EMP_getSidebarBootstrap: " + msg + stk };
     }
-
-    base.jobs = jobs;
-    base.payments = payments;
-    return base;
   }
 
   function getEmployeeById_(employeeId) {
-    var bootstrap = collectEmployees_();
-    if (!bootstrap.ok) return bootstrap;
+    try {
+      var bootstrap = collectEmployees_();
+      if (!bootstrap.ok) return bootstrap;
 
-    var emp = null;
-    for (var i = 0; i < bootstrap.employees.length; i++) {
-      if (bootstrap.employees[i].id === employeeId) {
-        emp = bootstrap.employees[i];
-        break;
+      var emp = null;
+      for (var i = 0; i < bootstrap.employees.length; i++) {
+        if (bootstrap.employees[i].id === employeeId) {
+          emp = bootstrap.employees[i];
+          break;
+        }
       }
+      if (!emp) {
+        return { ok: false, error: "לא נמצא עובד עם ID הזה" };
+      }
+      return { ok: true, employee: emp, cols: CONFIG.COL };
+    } catch (e) {
+      var msg2 = e && e.message ? e.message : e;
+      var stk2 = e && e.stack ? "\n" + e.stack : "";
+      return { ok: false, error: "EMP_getEmployeeById: " + msg2 + stk2 };
     }
-    if (!emp) {
-      return { ok: false, error: 'לא נמצא עובד עם ID הזה' };
-    }
-    return { ok: true, employee: emp, cols: CONFIG.COL };
   }
 
   /**
@@ -417,13 +527,13 @@ var EMP = EMP || {};
 
     ensureEmployeeIds_(sheet);
 
-    var employeeId = (payload.id || '').trim();
-    var baseName = (payload.name || '').trim();
+    var employeeId = (payload.id || "").trim();
+    var baseName = (payload.name || "").trim();
     if (!employeeId) {
-      return { ok: false, error: 'חסר ID עובד (ID עובד בעמודה B)' };
+      return { ok: false, error: "חסר ID עובד (ID עובד בעמודה B)" };
     }
     if (!baseName) {
-      return { ok: false, error: 'שם העובד לא יכול להיות ריק' };
+      return { ok: false, error: "שם העובד לא יכול להיות ריק" };
     }
 
     var lastRow = sheet.getLastRow();
@@ -432,12 +542,9 @@ var EMP = EMP || {};
       lastRow = CONFIG.HEADER_ROW;
     }
 
-    var data = sheet.getRange(
-      CONFIG.HEADER_ROW + 1,
-      1,
-      lastRow - CONFIG.HEADER_ROW,
-      lastCol
-    ).getValues();
+    var data = sheet
+      .getRange(CONFIG.HEADER_ROW + 1, 1, lastRow - CONFIG.HEADER_ROW, lastCol)
+      .getValues();
 
     var idRel = CONFIG.COL.ID - 1;
     var foundRows = [];
@@ -445,7 +552,7 @@ var EMP = EMP || {};
     for (var r = 0; r < data.length; r++) {
       var rowIdx = CONFIG.HEADER_ROW + 1 + r;
       var row = data[r];
-      if (String(row[idRel] || '').trim() === employeeId) {
+      if (String(row[idRel] || "").trim() === employeeId) {
         foundRows.push({ rel: r, abs: rowIdx, row: row });
       }
     }
@@ -455,8 +562,8 @@ var EMP = EMP || {};
 
     foundRows.forEach(function (fr) {
       var oldVal = fr.row[CONFIG.COL.ACTIVE - 1];
-      var newVal = 'לא פעיל';
-      if (String(oldVal || '') !== String(newVal)) {
+      var newVal = "לא פעיל";
+      if (String(oldVal || "") !== String(newVal)) {
         logEmployeeChange_(
           employeeId,
           sheet.getName(),
@@ -482,26 +589,35 @@ var EMP = EMP || {};
 
       colsToUpdate.push({
         col: CONFIG.COL.ACTIVE,
-        newVal: pr.rowActive ? 'פעיל' : 'לא פעיל'
+        newVal: pr.rowActive ? "פעיל" : "לא פעיל",
       });
 
       colsToUpdate.push({ col: CONFIG.COL.ID, newVal: employeeId });
       colsToUpdate.push({ col: CONFIG.COL.FULL_NAME, newVal: baseName });
 
       if (CONFIG.COL.JOB_TYPE) {
-        colsToUpdate.push({ col: CONFIG.COL.JOB_TYPE, newVal: pr.jobType || '' });
+        colsToUpdate.push({
+          col: CONFIG.COL.JOB_TYPE,
+          newVal: pr.jobType || "",
+        });
       }
       if (CONFIG.COL.DEPARTMENT) {
-        colsToUpdate.push({ col: CONFIG.COL.DEPARTMENT, newVal: pr.department || '' });
+        colsToUpdate.push({
+          col: CONFIG.COL.DEPARTMENT,
+          newVal: pr.department || "",
+        });
       }
       if (CONFIG.COL.AMOUNT) {
-        colsToUpdate.push({ col: CONFIG.COL.AMOUNT, newVal: pr.amount || '' });
+        colsToUpdate.push({ col: CONFIG.COL.AMOUNT, newVal: pr.amount || "" });
       }
       if (CONFIG.COL.PAYMENT_MODE) {
-        colsToUpdate.push({ col: CONFIG.COL.PAYMENT_MODE, newVal: pr.paymentMode || '' });
+        colsToUpdate.push({
+          col: CONFIG.COL.PAYMENT_MODE,
+          newVal: pr.paymentMode || "",
+        });
       }
       if (CONFIG.COL.NOTES) {
-        colsToUpdate.push({ col: CONFIG.COL.NOTES, newVal: pr.notes || '' });
+        colsToUpdate.push({ col: CONFIG.COL.NOTES, newVal: pr.notes || "" });
       }
 
       for (var j = 0; j < colsToUpdate.length; j++) {
@@ -511,7 +627,7 @@ var EMP = EMP || {};
         var oldCell = sheet.getRange(targetRow, info.col).getValue();
         var newCell = info.newVal;
 
-        if (String(oldCell || '') !== String(newCell || '')) {
+        if (String(oldCell || "") !== String(newCell || "")) {
           logEmployeeChange_(
             employeeId,
             sheet.getName(),
@@ -529,11 +645,105 @@ var EMP = EMP || {};
     return { ok: true, id: employeeId };
   }
 
+  /** יישום בחירת ערך אחיד לשדה אישי בכל השורות של עובד */
+  function applyPersonalFieldChoice_(employeeId, fieldKey, value) {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
+    }
+
+    var eid = (employeeId || "").trim();
+    if (!eid) {
+      return { ok: false, error: "חסר ID עובד" };
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) {
+      return { ok: false, error: "אין שורות נתונים בגליון" };
+    }
+
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+
+    var fieldHeaderMap = {
+      name: "שם מלא",
+      gender: "מין",
+      idNumber: "תז",
+      phone: "טלפון",
+      birthdate: "ת. לידה",
+      email: "מייל",
+      shirtSize: "מידת חולצה",
+      travelCost: "עלות החזרי נסיעות יומי",
+    };
+
+    var targetHeader = fieldHeaderMap[fieldKey];
+    if (!targetHeader) {
+      return { ok: false, error: "שדה לא נתמך לעדכון: " + fieldKey };
+    }
+
+    var colEmpId = colIndexByHeader_(headers, "ID עובד") || CONFIG.COL.ID;
+    var targetCol = colIndexByHeader_(headers, targetHeader);
+
+    if (!colEmpId) {
+      return { ok: false, error: 'לא נמצאה עמודת "ID עובד" לזיהוי שורות' };
+    }
+    if (!targetCol) {
+      return { ok: false, error: 'לא נמצאה עמודה לשדה "' + targetHeader + '"' };
+    }
+
+    var dataRange = sheet.getRange(
+      CONFIG.HEADER_ROW + 1,
+      1,
+      lastRow - CONFIG.HEADER_ROW,
+      lastCol
+    );
+    var data = dataRange.getValues();
+    var txId = Utilities.getUuid();
+    var updated = 0;
+
+    for (var i = 0; i < data.length; i++) {
+      var rowNum = CONFIG.HEADER_ROW + 1 + i;
+      var rowEmpId = String(data[i][colEmpId - 1] || "").trim();
+      if (rowEmpId !== eid) continue;
+
+      var oldVal = data[i][targetCol - 1];
+      var newVal = value === undefined ? "" : value;
+      if (String(oldVal || "") === String(newVal || "")) continue;
+
+      logEmployeeChange_(
+        eid,
+        sheet.getName(),
+        rowNum,
+        targetCol,
+        oldVal,
+        newVal,
+        txId
+      );
+      sheet.getRange(rowNum, targetCol).setValue(newVal);
+      updated++;
+    }
+
+    if (updated && (fieldKey === "idNumber" || fieldKey === "phone")) {
+      sheet
+        .getRange(
+          CONFIG.HEADER_ROW + 1,
+          targetCol,
+          sheet.getLastRow() - CONFIG.HEADER_ROW,
+          1
+        )
+        .setNumberFormat("@");
+    }
+
+    return { ok: true, updated: updated };
+  }
+
   /** יצירת עובד חדש מתוך שם בלבד */
   function createEmployeeByName_(name) {
-    var nm = (name || '').trim();
+    var nm = (name || "").trim();
     if (!nm) {
-      return { ok: false, error: 'שם עובד ריק' };
+      return { ok: false, error: "שם עובד ריק" };
     }
     var sheet = getEmployeesSheet_();
     if (!sheet) {
@@ -546,7 +756,7 @@ var EMP = EMP || {};
     var lastRow = sheet.getLastRow();
     var newRow = lastRow + 1;
 
-    sheet.getRange(newRow, CONFIG.COL.ACTIVE).setValue('פעיל');
+    sheet.getRange(newRow, CONFIG.COL.ACTIVE).setValue("פעיל");
     sheet.getRange(newRow, CONFIG.COL.ID).setValue(newId);
     sheet.getRange(newRow, CONFIG.COL.FULL_NAME).setValue(nm);
 
@@ -591,7 +801,7 @@ var EMP = EMP || {};
 
     for (var i = 0; i < values.length; i++) {
       var rowIndex = CONFIG.HEADER_ROW + 1 + i;
-      var val = String(values[i][0] || '').trim();
+      var val = String(values[i][0] || "").trim();
       if (val === String(employeeId)) {
         if (sheet.isRowHiddenByFilter && sheet.isRowHiddenByFilter(rowIndex)) {
           return true;
@@ -603,9 +813,12 @@ var EMP = EMP || {};
 
   /** פתיחת הסטריפ בפועל */
   function showSidebar_(optEmployeeId) {
-    var tmpl = HtmlService.createTemplateFromFile('EmployeeSidebar');
-    tmpl.initialEmployeeId = optEmployeeId || '';
-    var html = tmpl.evaluate().setTitle('ניהול עובדים – בולדר חיפה').setWidth(400);
+    var tmpl = HtmlService.createTemplateFromFile("EmployeeSidebar");
+    tmpl.initialEmployeeId = optEmployeeId || "";
+    var html = tmpl
+      .evaluate()
+      .setTitle("ניהול עובדים – בולדר חיפה")
+      .setWidth(380);
     SpreadsheetApp.getUi().showSidebar(html);
   }
 
@@ -615,16 +828,16 @@ var EMP = EMP || {};
     if (!sheet) return;
 
     ensureEmployeeIds_(sheet);
-    checkSchemaAndMaybeEmail_(sheet, 'onOpen');
+    checkSchemaAndMaybeEmail_(sheet, "onOpen");
 
-    showSidebar_('');
+    showSidebar_("");
   }
 
   /** ריצה ב־onChange (אם נגדיר טריגר גלובלי) */
   function handleChange_(e) {
     var sheet = getEmployeesSheet_();
     if (!sheet) return;
-    checkSchemaAndMaybeEmail_(sheet, 'onChange');
+    checkSchemaAndMaybeEmail_(sheet, "onChange");
   }
 
   /** ריצה ב־onSelectionChange – בחירת שורה בגליון */
@@ -658,7 +871,7 @@ var EMP = EMP || {};
     // רק אם העריכה נוגעת ב-B או C
     var startCol = range.getColumn();
     var endCol = startCol + range.getNumColumns() - 1;
-    var idCol = CONFIG.COL.ID;          // 2
+    var idCol = CONFIG.COL.ID; // 2
     var nameCol = CONFIG.COL.FULL_NAME; // 3
     if (endCol < idCol || startCol > nameCol) return;
 
@@ -671,13 +884,13 @@ var EMP = EMP || {};
   EMP.saveEmployeePayload = saveEmployeePayload_;
   EMP.createEmployeeByName = createEmployeeByName_;
   EMP.revealAllRowsIfFiltered = revealAllRowsIfFiltered_;
+  EMP.applyPersonalFieldChoice = applyPersonalFieldChoice_;
   EMP.handleOpen = handleOpen_;
   EMP.handleChange = handleChange_;
   EMP.handleSelectionChange = handleSelectionChange_;
   EMP.handleEdit = handleEdit_;
   EMP.hasHiddenRowsForEmployee = hasHiddenRowsForEmployee_;
   EMP.ensureEmployeeIds = ensureEmployeeIds_;
-
 })();
 
 /** === עטיפות גלובליות לטריגרים ול-HTML === */
@@ -685,10 +898,10 @@ var EMP = EMP || {};
 function EMP_onOpen(e) {
   // אם הפונקציה הזו מוגדרת בקובץ אחר - מצוין. אם לא, אפשר להסיר.
   OPT_onOpen(e);
-  if (typeof EMP_checkEmployeesHeader_ === 'function') {
+  if (typeof EMP_checkEmployeesHeader_ === "function") {
     EMP_checkEmployeesHeader_();
   }
-  if (typeof EMP !== 'undefined' && EMP.handleOpen) {
+  if (typeof EMP !== "undefined" && EMP.handleOpen) {
     EMP.handleOpen(e || {});
   }
 }
@@ -696,32 +909,31 @@ function EMP_onOpen(e) {
 function onEdit(e) {
   // עובדים
   try {
-    if (typeof EMP !== 'undefined' && EMP.handleEdit) {
+    if (typeof EMP !== "undefined" && EMP.handleEdit) {
       EMP.handleEdit(e || {});
     }
   } catch (err) {
-    Logger.log('EMP.handleEdit error: ' + err);
+    Logger.log("EMP.handleEdit error: " + err);
   }
 
   // קטלוגים
   try {
     OPT_onEdit(e || {});
   } catch (err2) {
-    Logger.log('OPT_onEdit error: ' + err2);
+    Logger.log("OPT_onEdit error: " + err2);
   }
-   // בקשות עובדים
+  // בקשות עובדים
   try {
-    if (typeof REQ_onEdit === 'function') {
+    if (typeof REQ_onEdit === "function") {
       REQ_onEdit(e || {});
     }
   } catch (err3) {
-    Logger.log('REQ_onEdit error: ' + err3);
+    Logger.log("REQ_onEdit error: " + err3);
   }
 }
 
-
 function EMP_onChange(e) {
-  if (typeof EMP !== 'undefined' && EMP.handleChange) {
+  if (typeof EMP !== "undefined" && EMP.handleChange) {
     EMP.handleChange(e || {});
   }
 }
@@ -729,34 +941,47 @@ function EMP_onChange(e) {
 function onChange(e) {
   // אם כבר יש אצלך EMP_onChange — תשאיר את זה
   try {
-    if (typeof EMP_onChange === 'function') EMP_onChange(e || {});
+    if (typeof EMP_onChange === "function") EMP_onChange(e || {});
   } catch (err1) {
-    Logger.log('EMP_onChange error: ' + err1);
+    Logger.log("EMP_onChange error: " + err1);
   }
 
   // Schema monitor
   try {
     SCH_onChange(e || {});
   } catch (err2) {
-    Logger.log('SCH_onChange error: ' + err2);
+    Logger.log("SCH_onChange error: " + err2);
   }
 }
 
-
 function onSelectionChange(e) {
-  if (typeof EMP !== 'undefined' && EMP.handleSelectionChange) {
+  if (typeof EMP !== "undefined" && EMP.handleSelectionChange) {
     EMP.handleSelectionChange(e || {});
   }
 }
 
 function EMP_getSidebarBootstrap() {
-  return EMP.getSidebarBootstrap();
+  try {
+    if (!EMP || typeof EMP.getSidebarBootstrap !== "function") {
+      debugLog_("EMP_getSidebarBootstrap: missing function");
+      return { ok: false, error: "EMP.getSidebarBootstrap not available" };
+    }
+    var res = EMP.getSidebarBootstrap();
+    if (!res) {
+      debugLog_("EMP_getSidebarBootstrap: returned empty");
+      return { ok: false, error: "EMP_getSidebarBootstrap returned empty" };
+    }
+    return res;
+  } catch (e) {
+    var msg = e && e.message ? e.message : e;
+    debugLog_("EMP_getSidebarBootstrap: exception " + msg);
+    return { ok: false, error: "EMP_getSidebarBootstrap failed: " + msg };
+  }
 }
 
 function EMP_getEmployeeById(id) {
   return EMP.getEmployeeById(id);
 }
-
 
 /**
  * שמירת עובד מה-Sidebar:
@@ -767,16 +992,16 @@ function EMP_getEmployeeById(id) {
 function EMP_saveEmployeePayload(payload) {
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(5000)) {
-    return { ok: false, error: 'לא ניתן לקבל נעילה למסמך לשמירה (נסה שוב).' };
+    return { ok: false, error: "לא ניתן לקבל נעילה למסמך לשמירה (נסה שוב)." };
   }
 
   try {
     if (!payload || !payload.name || !payload.rows || !payload.rows.length) {
-      return { ok: false, error: 'payload לא תקין מה-Sidebar' };
+      return { ok: false, error: "payload לא תקין מה-Sidebar" };
     }
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName('פרטי עובדים');
+    var sheet = ss.getSheetByName("פרטי עובדים");
     if (!sheet) {
       return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
     }
@@ -790,31 +1015,45 @@ function EMP_saveEmployeePayload(payload) {
 
     var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
 
-    function colIndexByHeader(name) {
+    function colIndexByHeaderLocal(name) {
       var idx = headers.indexOf(name);
-      return idx >= 0 ? (idx + 1) : null;
+      return idx >= 0 ? idx + 1 : null;
     }
 
-    var colStatus = colIndexByHeader('סטטוס');
-    var colName = colIndexByHeader('שם מלא');
-    var colEmpId = colIndexByHeader('ID עובד');
-    var colJobId = colIndexByHeader('ID סוגי עבודה');
-    var colJobName = colIndexByHeader('סוג העבודה');
-    var colDept = colIndexByHeader('מחלקה');
-    var colAmount = colIndexByHeader('סכום');
-    var colPayId = colIndexByHeader('ID אופן תשלום');
-    var colPayName = colIndexByHeader('אופן תשלום');
-    var colNotes = colIndexByHeader('הערות');
+    var colStatus = colIndexByHeaderLocal("סטטוס");
+    var colName = colIndexByHeaderLocal("שם מלא");
+    var colEmpId = colIndexByHeaderLocal("ID עובד");
+    var colJobId = colIndexByHeaderLocal("ID סוגי עבודה");
+    var colJobName = colIndexByHeaderLocal("סוג העבודה");
+    var colDept = colIndexByHeaderLocal("מחלקה");
+    var colAmount = colIndexByHeaderLocal("סכום");
+    var colPayId = colIndexByHeaderLocal("ID אופן תשלום");
+    var colPayName = colIndexByHeaderLocal("אופן תשלום");
+    var colNotes = colIndexByHeaderLocal("הערות");
+    var colGender = colIndexByHeaderLocal("מין");
+    var colIdNum = colIndexByHeaderLocal("תז");
+    var colPhone = colIndexByHeaderLocal("טלפון");
+    var colBirthdate = colIndexByHeaderLocal("ת. לידה");
+    var colEmail = colIndexByHeaderLocal("מייל");
+    var colShirt = colIndexByHeaderLocal("מידת חולצה");
+    var colTravel = colIndexByHeaderLocal("עלות החזרי נסיעות יומי");
 
     if (!colName || !colJobName || !colStatus) {
       return {
         ok: false,
-        error: 'חסרות עמודות חובה (לפחות "שם מלא", "סוג העבודה", "סטטוס") – בדוק כותרות.'
+        error:
+          'חסרות עמודות חובה (לפחות "שם מלא", "סוג העבודה", "סטטוס") – בדוק כותרות.',
       };
     }
 
-    var dataRange = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
+    var dataRange = sheet.getRange(
+      headerRow + 1,
+      1,
+      lastRow - headerRow,
+      lastCol
+    );
     var data = dataRange.getValues();
+    var rowsToFormat = [];
 
     var rowNumToIndex = {};
     for (var i = 0; i < data.length; i++) {
@@ -823,24 +1062,24 @@ function EMP_saveEmployeePayload(payload) {
     }
 
     var name = String(payload.name).trim();
-    var employeeId = payload.id ? String(payload.id).trim() : '';
+    var employeeId = payload.id ? String(payload.id).trim() : "";
 
     function normalizeStr(val) {
-      if (val === null || val === undefined) return '';
-      return String(val).replace(/\s+/g, ' ').trim();
+      if (val === null || val === undefined) return "";
+      return String(val).replace(/\s+/g, " ").trim();
     }
 
     function resolveJob(jobTypeText) {
       var key = normalizeStr(jobTypeText);
       if (!key) return null;
-      if (typeof OPT === 'undefined' || !OPT.getJobByName) return null;
+      if (typeof OPT === "undefined" || !OPT.getJobByName) return null;
       return OPT.getJobByName(key);
     }
 
     function resolvePayment(paymentText) {
       var key = normalizeStr(paymentText);
       if (!key) return null;
-      if (typeof OPT === 'undefined' || !OPT.getPaymentByName) return null;
+      if (typeof OPT === "undefined" || !OPT.getPaymentByName) return null;
       return OPT.getPaymentByName(key);
     }
 
@@ -864,6 +1103,7 @@ function EMP_saveEmployeePayload(payload) {
       if (rowIndex && rowNumToIndex.hasOwnProperty(rowIndex)) {
         var di = rowNumToIndex[rowIndex];
         var rowArr = data[di];
+        rowsToFormat.push(rowIndex);
 
         // שם ו-ID עובד
         if (name) {
@@ -875,13 +1115,35 @@ function EMP_saveEmployeePayload(payload) {
 
         // סטטוס
         if (colStatus) {
-          rowArr[colStatus - 1] = rp.rowActive ? 'פעיל' : 'לא פעיל';
+          rowArr[colStatus - 1] = rp.rowActive ? "פעיל" : "לא פעיל";
+        }
+
+        if (colGender) {
+          rowArr[colGender - 1] = normalizeStr(payload.gender);
+        }
+        if (colIdNum) {
+          rowArr[colIdNum - 1] = normalizeStr(payload.idNumber);
+        }
+        if (colPhone) {
+          rowArr[colPhone - 1] = normalizeStr(payload.phone);
+        }
+        if (colBirthdate) {
+          rowArr[colBirthdate - 1] = normalizeStr(payload.birthdate);
+        }
+        if (colEmail) {
+          rowArr[colEmail - 1] = normalizeStr(payload.email);
+        }
+        if (colShirt) {
+          rowArr[colShirt - 1] = normalizeStr(payload.shirtSize);
+        }
+        if (colTravel) {
+          rowArr[colTravel - 1] = normalizeStr(payload.travelCost);
         }
 
         // סכום
         if (colAmount) {
           var amountVal = normalizeStr(rp.amount);
-          rowArr[colAmount - 1] = amountVal ? Number(amountVal) : '';
+          rowArr[colAmount - 1] = amountVal ? Number(amountVal) : "";
         }
 
         // הערות
@@ -892,11 +1154,11 @@ function EMP_saveEmployeePayload(payload) {
         // סוג עבודה
         var jobRec = resolveJob(rp.jobType);
         if (jobRec) {
-          if (colJobId) rowArr[colJobId - 1] = jobRec.id || '';
-          if (colJobName) rowArr[colJobName - 1] = jobRec.name || '';
-          if (colDept) rowArr[colDept - 1] = jobRec.department || '';
+          if (colJobId) rowArr[colJobId - 1] = jobRec.id || "";
+          if (colJobName) rowArr[colJobName - 1] = jobRec.name || "";
+          if (colDept) rowArr[colDept - 1] = jobRec.department || "";
         } else {
-          if (colJobId) rowArr[colJobId - 1] = '';
+          if (colJobId) rowArr[colJobId - 1] = "";
           if (colJobName) rowArr[colJobName - 1] = normalizeStr(rp.jobType);
           if (colDept) rowArr[colDept - 1] = normalizeStr(rp.department);
         }
@@ -905,14 +1167,14 @@ function EMP_saveEmployeePayload(payload) {
         if (colPayName || colPayId) {
           var payRec = resolvePayment(rp.paymentMode);
           if (payRec) {
-            if (colPayId) rowArr[colPayId - 1] = payRec.id || '';
-            if (colPayName) rowArr[colPayName - 1] = payRec.name || '';
+            if (colPayId) rowArr[colPayId - 1] = payRec.id || "";
+            if (colPayName) rowArr[colPayName - 1] = payRec.name || "";
           } else {
-            if (colPayId) rowArr[colPayId - 1] = '';
-            if (colPayName) rowArr[colPayName - 1] = normalizeStr(rp.paymentMode);
+            if (colPayId) rowArr[colPayId - 1] = "";
+            if (colPayName)
+              rowArr[colPayName - 1] = normalizeStr(rp.paymentMode);
           }
         }
-
       } else {
         // שורה חדשה – נטפל בה אחרי setValues
         newRowsPayload.push(rp);
@@ -961,7 +1223,7 @@ function EMP_saveEmployeePayload(payload) {
       // אם גם זה אין (קיצון) – מייצרים מערך ריק
       if (!baseRowTemplate) {
         baseRowTemplate = new Array(lastCol);
-        for (var c = 0; c < lastCol; c++) baseRowTemplate[c] = '';
+        for (var c = 0; c < lastCol; c++) baseRowTemplate[c] = "";
       }
 
       for (var nr = 0; nr < newRowsPayload.length; nr++) {
@@ -978,13 +1240,35 @@ function EMP_saveEmployeePayload(payload) {
 
         // סטטוס
         if (colStatus) {
-          newRow[colStatus - 1] = rpNew.rowActive ? 'פעיל' : 'לא פעיל';
+          newRow[colStatus - 1] = rpNew.rowActive ? "פעיל" : "לא פעיל";
+        }
+
+        if (colGender) {
+          newRow[colGender - 1] = normalizeStr(payload.gender);
+        }
+        if (colIdNum) {
+          newRow[colIdNum - 1] = normalizeStr(payload.idNumber);
+        }
+        if (colPhone) {
+          newRow[colPhone - 1] = normalizeStr(payload.phone);
+        }
+        if (colBirthdate) {
+          newRow[colBirthdate - 1] = normalizeStr(payload.birthdate);
+        }
+        if (colEmail) {
+          newRow[colEmail - 1] = normalizeStr(payload.email);
+        }
+        if (colShirt) {
+          newRow[colShirt - 1] = normalizeStr(payload.shirtSize);
+        }
+        if (colTravel) {
+          newRow[colTravel - 1] = normalizeStr(payload.travelCost);
         }
 
         // סכום
         if (colAmount) {
           var amountNew = normalizeStr(rpNew.amount);
-          newRow[colAmount - 1] = amountNew ? Number(amountNew) : '';
+          newRow[colAmount - 1] = amountNew ? Number(amountNew) : "";
         }
 
         // הערות
@@ -995,11 +1279,11 @@ function EMP_saveEmployeePayload(payload) {
         // סוג עבודה
         var jobRecNew = resolveJob(rpNew.jobType);
         if (jobRecNew) {
-          if (colJobId) newRow[colJobId - 1] = jobRecNew.id || '';
-          if (colJobName) newRow[colJobName - 1] = jobRecNew.name || '';
-          if (colDept) newRow[colDept - 1] = jobRecNew.department || '';
+          if (colJobId) newRow[colJobId - 1] = jobRecNew.id || "";
+          if (colJobName) newRow[colJobName - 1] = jobRecNew.name || "";
+          if (colDept) newRow[colDept - 1] = jobRecNew.department || "";
         } else {
-          if (colJobId) newRow[colJobId - 1] = '';
+          if (colJobId) newRow[colJobId - 1] = "";
           if (colJobName) newRow[colJobName - 1] = normalizeStr(rpNew.jobType);
           if (colDept) newRow[colDept - 1] = normalizeStr(rpNew.department);
         }
@@ -1008,11 +1292,12 @@ function EMP_saveEmployeePayload(payload) {
         if (colPayName || colPayId) {
           var payRecNew = resolvePayment(rpNew.paymentMode);
           if (payRecNew) {
-            if (colPayId) newRow[colPayId - 1] = payRecNew.id || '';
-            if (colPayName) newRow[colPayName - 1] = payRecNew.name || '';
+            if (colPayId) newRow[colPayId - 1] = payRecNew.id || "";
+            if (colPayName) newRow[colPayName - 1] = payRecNew.name || "";
           } else {
-            if (colPayId) newRow[colPayId - 1] = '';
-            if (colPayName) newRow[colPayName - 1] = normalizeStr(rpNew.paymentMode);
+            if (colPayId) newRow[colPayId - 1] = "";
+            if (colPayName)
+              newRow[colPayName - 1] = normalizeStr(rpNew.paymentMode);
           }
         }
 
@@ -1021,14 +1306,23 @@ function EMP_saveEmployeePayload(payload) {
 
       if (appendRows.length > 0) {
         var startRow = lastRow + 1;
-        sheet.getRange(startRow, 1, appendRows.length, lastCol).setValues(appendRows);
+        sheet
+          .getRange(startRow, 1, appendRows.length, lastCol)
+          .setValues(appendRows);
 
         // העתקת פורמט ואימות נתונים מהתבנית (אם יש)
         if (baseRowTemplateRowNum) {
-          var templateRange = sheet.getRange(baseRowTemplateRowNum, 1, 1, lastCol);
+          var templateRange = sheet.getRange(
+            baseRowTemplateRowNum,
+            1,
+            1,
+            lastCol
+          );
           for (var k = 0; k < appendRows.length; k++) {
             var destRow = startRow + k;
-            templateRange.copyTo(sheet.getRange(destRow, 1, 1, lastCol), { formatOnly: true });
+            templateRange.copyTo(sheet.getRange(destRow, 1, 1, lastCol), {
+              formatOnly: true,
+            });
             appendedRowIndices.push(destRow);
           }
         } else {
@@ -1039,9 +1333,38 @@ function EMP_saveEmployeePayload(payload) {
       }
     }
 
+    // ריענון פורמט עבור עמודות ID (סוג עבודה / אופן תשלום) בשורות שעודכנו
+    var formatCols = [];
+    if (colJobId) formatCols.push(colJobId);
+    if (colPayId) formatCols.push(colPayId);
+
+    var templateRowForFormat = baseRowTemplateRowNum || headerRow + 1;
+    if (formatCols.length && templateRowForFormat) {
+      var allRowsNeedingFormat = rowsToFormat.concat(appendedRowIndices);
+      if (allRowsNeedingFormat.length) {
+        for (var fc = 0; fc < formatCols.length; fc++) {
+          var colFmt = formatCols[fc];
+          // העתקת פורמט מהשורה התבניתית
+          sheet
+            .getRange(templateRowForFormat, colFmt, 1, 1)
+            .copyFormatToRange(
+              sheet,
+              colFmt,
+              colFmt,
+              Math.min.apply(null, allRowsNeedingFormat),
+              Math.max.apply(null, allRowsNeedingFormat)
+            );
+          // שמירת ה-ID כטקסט כדי למנוע פורמט מספרי
+          sheet
+            .getRange(headerRow + 1, colFmt, sheet.getLastRow() - headerRow, 1)
+            .setNumberFormat("@");
+        }
+      }
+    }
+
     // טעינת העובד המעודכן לתשובה – זה מה שהסיידבר ישתמש בו כדי לעדכן rowIndex
     var employee = null;
-    if (employeeId && typeof getEmployeeById_ === 'function') {
+    if (employeeId && typeof getEmployeeById_ === "function") {
       employee = getEmployeeById_(employeeId);
     }
 
@@ -1049,18 +1372,41 @@ function EMP_saveEmployeePayload(payload) {
       ok: true,
       employee: employee,
       employeeId: employeeId,
-      appendedRowIndices: appendedRowIndices
+      appendedRowIndices: appendedRowIndices,
     };
   } catch (err) {
     return {
       ok: false,
-      error: 'שגיאה ב-EMP_saveEmployeePayload: ' + (err && err.message ? err.message : err)
+      error:
+        "שגיאה ב-EMP_saveEmployeePayload: " +
+        (err && err.message ? err.message : err),
     };
   } finally {
     lock.releaseLock();
   }
 }
 
+function EMP_applyPersonalFieldChoice(employeeId, fieldKey, value) {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) {
+    return { ok: false, error: "לא ניתן לקבל נעילה למסמך לעדכון (נסה שוב)." };
+  }
+  try {
+    if (typeof EMP === "undefined" || !EMP.applyPersonalFieldChoice) {
+      return { ok: false, error: "פונקציית עדכון שדה אישי אינה זמינה" };
+    }
+    return EMP.applyPersonalFieldChoice(employeeId, fieldKey, value);
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        "שגיאה ב-EMP_applyPersonalFieldChoice: " +
+        (err && err.message ? err.message : err),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
 
 function EMP_createEmployeeByName(name) {
   return EMP.createEmployeeByName(name);
@@ -1075,29 +1421,35 @@ function EMP_createEmployeeByName(name) {
  */
 function EMP_backfillJobAndPaymentIdsForAllEmployees() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName('פרטי עובדים');
+  var sheet = ss.getSheetByName("פרטי עובדים");
   if (!sheet) {
     throw new Error('לא נמצאה כרטיסייה "פרטי עובדים"');
   }
 
   var HEADER_ROW = 1;
 
-  var COL_ID_EMP = 2;      // B
-  var COL_FULL_NAME = 3;   // C
+  var COL_ID_EMP = 2; // B
+  var COL_FULL_NAME = 3; // C
   var COL_JOB_TYPE_ID = 10; // J
-  var COL_JOB_TYPE = 11;   // K
+  var COL_JOB_TYPE = 11; // K
   var COL_DEPARTMENT = 12; // L
-  var COL_PAY_ID = 15;     // O
-  var COL_PAY_NAME = 16;   // P
+  var COL_PAY_ID = 15; // O
+  var COL_PAY_NAME = 16; // P
 
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
   if (lastRow <= HEADER_ROW) {
-    SpreadsheetApp.getActive().toast('אין נתוני עובדים לסנכרון', 'EMP_backfillJobAndPaymentIds', 5);
+    SpreadsheetApp.getActive().toast(
+      "אין נתוני עובדים לסנכרון",
+      "EMP_backfillJobAndPaymentIds",
+      5
+    );
     return { ok: true, updated: 0, missingJobs: [], missingPayments: [] };
   }
 
-  var data = sheet.getRange(HEADER_ROW + 1, 1, lastRow - HEADER_ROW, lastCol).getValues();
+  var data = sheet
+    .getRange(HEADER_ROW + 1, 1, lastRow - HEADER_ROW, lastCol)
+    .getValues();
 
   var updated = 0;
   var missingJobs = [];
@@ -1124,8 +1476,8 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
     if (jobName) {
       var job = OPT.getJobByName(jobName);
       if (job) {
-        var newJobId = job.id || '';
-        var newDept = job.department || '';
+        var newJobId = job.id || "";
+        var newDept = job.department || "";
 
         if (currentJobId !== newJobId) {
           sheet.getRange(sheetRow, COL_JOB_TYPE_ID).setValue(newJobId);
@@ -1137,37 +1489,52 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
         }
       } else {
         missingJobs.push({ row: sheetRow, jobName: jobName });
-        Logger.log('EMP_backfillJobAndPaymentIds: אין התאמה לסוג עבודה "%s" בשורה %s', jobName, sheetRow);
+        Logger.log(
+          'EMP_backfillJobAndPaymentIds: אין התאמה לסוג עבודה "%s" בשורה %s',
+          jobName,
+          sheetRow
+        );
       }
     }
 
     if (payName) {
       var pay = OPT.getPaymentByName(payName);
       if (pay) {
-        var newPayId = pay.id || '';
+        var newPayId = pay.id || "";
         if (currentPayId !== newPayId) {
           sheet.getRange(sheetRow, COL_PAY_ID).setValue(newPayId);
           needUpdateRow = true;
         }
       } else {
         missingPayments.push({ row: sheetRow, payName: payName });
-        Logger.log('EMP_backfillJobAndPaymentIds: אין התאמה לאופן תשלום "%s" בשורה %s', payName, sheetRow);
+        Logger.log(
+          'EMP_backfillJobAndPaymentIds: אין התאמה לאופן תשלום "%s" בשורה %s',
+          payName,
+          sheetRow
+        );
       }
     }
 
     if (needUpdateRow) updated++;
   }
 
-  var msg = 'עודכנו ' + updated + ' עובדים (ID סוג עבודה / מחלקה / ID אופן תשלום).';
-  if (missingJobs.length) msg += ' אין התאמה ל-' + missingJobs.length + ' סוגי עבודה (פירוט ב-Logger).';
-  if (missingPayments.length) msg += ' אין התאמה ל-' + missingPayments.length + ' אופני תשלום (פירוט ב-Logger).';
+  var msg =
+    "עודכנו " + updated + " עובדים (ID סוג עבודה / מחלקה / ID אופן תשלום).";
+  if (missingJobs.length)
+    msg +=
+      " אין התאמה ל-" + missingJobs.length + " סוגי עבודה (פירוט ב-Logger).";
+  if (missingPayments.length)
+    msg +=
+      " אין התאמה ל-" +
+      missingPayments.length +
+      " אופני תשלום (פירוט ב-Logger).";
 
-  SpreadsheetApp.getActive().toast(msg, 'EMP_backfillJobAndPaymentIds', 7);
+  SpreadsheetApp.getActive().toast(msg, "EMP_backfillJobAndPaymentIds", 7);
 
   return {
     ok: true,
     updated: updated,
     missingJobs: missingJobs,
-    missingPayments: missingPayments
+    missingPayments: missingPayments,
   };
 }
