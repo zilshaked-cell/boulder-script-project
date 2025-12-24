@@ -1,6 +1,6 @@
-// Deterministic demo data seeding (manual-only). Uses existing handlers and schemas.
+// Deterministic demo data seeding (manual-only). Uses batch writes (setValues) to avoid execution timeouts.
 // Scenarios distribution (pattern = (dayIndex*7 + empIndex) % 10):
-// 0-4: Simple shift (≈50%) – no request, no fix (G/H cleared)
+// 0-4: Simple shift (≈50%) – no request, no fix (G/H empty)
 // 5: Pending request – request points to shift, shift row untouched
 // 6: Approved, not applied – request approved, shift row untouched
 // 7: Approved + applied – request approved and G/H on shift row updated
@@ -8,6 +8,25 @@
 // 9: Manual fix – no request, G/H filled directly (manager-style)
 // All seeded rows are tagged with SEED_TAG in notes/shiftNote; no randomness used.
 // Manual undo: SEED_clearAllDemoData clears only demo-tagged rows via clearContent() (no deletes, no formatting changes).
+
+// Shifts sheet columns (A–L) as written by handleShiftPost:
+// A: הערות למשמרת (notes)
+// B: ID משמרת (shiftId)
+// C: חותמת זמן (timestamp)
+// D: ID עובד (employeeId)
+// E: שם מלא (employeeName)
+// F: כניסה / יציאה (direction)
+// G: תיקון תאריך (fixDate)
+// H: תיקון שעה (fixTime)
+// I: ID סוג עבודה (jobId)
+// J: סוג עבודה (jobName)
+// K: מחלקה (department)
+// L: כמות היחידות (units)
+
+// Requests sheet columns (resolved from headers in the sheet, mirroring handleRequestPost):
+// Status, ID בקשה, הערות למשמרת, ID משמרת, חותמת זמן, ID עובד, שם מלא,
+// כניסה / יציאה, תיקון תאריך, תיקון שעה, ID סוג עבודה/ID סוגי עבודה,
+// סוג עבודה/סוגי עבודה/סוג העבודה, מחלקה, כמות היחידות (only columns present are filled).
 
 var SEED_TAG = '[SEED_DEMO_M2]';
 var REQUEST_DATA_HEADER_CANDIDATES = [
@@ -47,6 +66,7 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
 
   var shiftSheet = getShiftSheet_();
   var requestsSheet = getRequestsSheet_();
+  var requestLayout = getRequestLayout_(requestsSheet);
 
   var employees = loadEmployees_();
   if (employees.length === 0) throw new Error('No employees found to seed.');
@@ -63,6 +83,14 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
     throw new Error('Seed data already exists in requests sheet for this date range (' + SEED_TAG + '); aborting.');
   }
 
+  var ctx = {
+    shiftRows: [],
+    requestRows: [],
+    shiftSeq: 1,
+    requestSeq: 1,
+    requestLayout: requestLayout
+  };
+
   var dayIndex = 0;
   for (var d = new Date(startDate); d <= endDate; d = addDays_(d, 1)) {
     if (isWeekend_(d)) {
@@ -71,21 +99,34 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
     }
 
     var dateStr = formatDate_(d);
+    var workDate = new Date(d.getTime());
     for (var e = 0; e < selectedEmployees.length; e++) {
       var emp = selectedEmployees[e];
       var pattern = (dayIndex * 7 + e) % 10;
 
       var jobPrimary = jobs[e % jobs.length];
-      var jobSecondary = jobs[(e + 1) % jobs.length];
 
-      applyScenario_(shiftSheet, requestsSheet, dateStr, dayIndex, e, emp, jobPrimary, jobSecondary, pattern);
+      applyScenario_(shiftSheet, requestsSheet, workDate, dateStr, dayIndex, e, emp, jobPrimary, jobSecondary, pattern, ctx);
     }
     dayIndex++;
+  }
+
+  // Batch append shifts
+  if (ctx.shiftRows.length > 0) {
+    var startRowShifts = shiftSheet.getLastRow() + 1;
+    shiftSheet.getRange(startRowShifts, 1, ctx.shiftRows.length, 12).setValues(ctx.shiftRows);
+  }
+
+  // Batch append requests (up to detected data columns to avoid touching formula columns to the right)
+  if (ctx.requestRows.length > 0) {
+    var dataCols = ctx.requestLayout.dataLastCol;
+    var startRowReq = requestsSheet.getLastRow() + 1;
+    requestsSheet.getRange(startRowReq, 1, ctx.requestRows.length, dataCols).setValues(ctx.requestRows);
   }
 }
 
 // --- Scenario application ---
-function applyScenario_(shiftSheet, requestsSheet, dateStr, dayIndex, empIndex, emp, jobA, jobB, pattern) {
+function applyScenario_(shiftSheet, requestsSheet, workDate, dateStr, dayIndex, empIndex, emp, jobA, jobB, pattern, ctx) {
   var entryMinutesBase = 8 * 60 + (empIndex % 3) * 10; // 08:00, 08:10, 08:20
   var exitMinutesBase = 16 * 60 + (empIndex % 2) * 10; // 16:00 or 16:10
 
@@ -100,195 +141,226 @@ function applyScenario_(shiftSheet, requestsSheet, dateStr, dayIndex, empIndex, 
     // Simple shift: clear G/H after insert, no request
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: entryTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'כניסה',
-      fixTime: entryTime,
+      fixDate: '',
+      fixTime: '',
       units: shiftUnitsFull,
-      scenarioLabel: 'SIMPLE',
-      clearFixAfterInsert: true
+      scenarioLabel: 'SIMPLE'
     });
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: exitTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'יציאה',
-      fixTime: exitTime,
+      fixDate: '',
+      fixTime: '',
       units: '',
-      scenarioLabel: 'SIMPLE',
-      clearFixAfterInsert: true
+      scenarioLabel: 'SIMPLE'
     });
   } else if (pattern === 5) {
     // Pending request, shift untouched (no fixes on row)
     var entryP = SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: entryTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'כניסה',
-      fixTime: entryTime,
+      fixDate: '',
+      fixTime: '',
       units: shiftUnitsFull,
-      scenarioLabel: 'PENDING_TIME',
-      clearFixAfterInsert: true
+      scenarioLabel: 'PENDING_TIME'
     });
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: exitTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'יציאה',
-      fixTime: exitTime,
+      fixDate: '',
+      fixTime: '',
       units: '',
-      scenarioLabel: 'PENDING_TIME',
-      clearFixAfterInsert: true
+      scenarioLabel: 'PENDING_TIME'
     });
     SEED_newRequest_({
-      requestsSheet: requestsSheet,
+      ctx: ctx,
       employee: emp,
       job: jobA,
       status: 'pending',
       shiftId: entryP.shiftId,
+      workDate: workDate,
       fixDate: dateStr,
       fixTime: formatTimeFromMinutes_(entryMinutesBase + 10),
       shiftNoteLabel: 'PENDING_TIME',
-      units: shiftUnitsFull
+      units: shiftUnitsFull,
+      direction: 'כניסה',
+      timestampTime: formatTimeFromMinutes_(entryMinutesBase + 10)
     });
   } else if (pattern === 6) {
     // Approved but NOT applied to shift row
     var entryA = SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: entryTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'כניסה',
-      fixTime: entryTime,
+      fixDate: '',
+      fixTime: '',
       units: shiftUnitsFull,
-      scenarioLabel: 'APPROVED_NOT_APPLIED',
-      clearFixAfterInsert: true
+      scenarioLabel: 'APPROVED_NOT_APPLIED'
     });
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: exitTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'יציאה',
-      fixTime: exitTime,
+      fixDate: '',
+      fixTime: '',
       units: '',
-      scenarioLabel: 'APPROVED_NOT_APPLIED',
-      clearFixAfterInsert: true
+      scenarioLabel: 'APPROVED_NOT_APPLIED'
     });
     SEED_newRequest_({
-      requestsSheet: requestsSheet,
+      ctx: ctx,
       employee: emp,
       job: jobA,
       status: 'approved',
       shiftId: entryA.shiftId,
+      workDate: workDate,
       fixDate: dateStr,
       fixTime: formatTimeFromMinutes_(entryMinutesBase - 5),
       shiftNoteLabel: 'APPROVED_NOT_APPLIED',
-      units: shiftUnitsFull
+      units: shiftUnitsFull,
+      direction: 'כניסה',
+      timestampTime: formatTimeFromMinutes_(entryMinutesBase - 5)
     });
   } else if (pattern === 7) {
     // Approved AND applied to shift row (G/H updated)
     var entryAA = SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: entryTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'כניסה',
-      fixTime: entryTime,
+      fixDate: dateStr,
+      fixTime: formatTimeFromMinutes_(entryMinutesBase - 5),
       units: shiftUnitsFull,
-      scenarioLabel: 'APPROVED_APPLIED',
-      clearFixAfterInsert: true
+      scenarioLabel: 'APPROVED_APPLIED'
     });
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: exitTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'יציאה',
-      fixTime: exitTime,
+      fixDate: '',
+      fixTime: '',
       units: '',
-      scenarioLabel: 'APPROVED_APPLIED',
-      clearFixAfterInsert: true
+      scenarioLabel: 'APPROVED_APPLIED'
     });
     var approvedFixTime = formatTimeFromMinutes_(entryMinutesBase - 5);
     SEED_newRequest_({
-      requestsSheet: requestsSheet,
+      ctx: ctx,
       employee: emp,
       job: jobA,
       status: 'approved',
       shiftId: entryAA.shiftId,
+      workDate: workDate,
       fixDate: dateStr,
       fixTime: approvedFixTime,
       shiftNoteLabel: 'APPROVED_APPLIED',
-      units: shiftUnitsFull
+      units: shiftUnitsFull,
+      direction: 'כניסה',
+      timestampTime: approvedFixTime
     });
-    SEED_applyFixToShift_(shiftSheet, entryAA.rowIndex, dateStr, approvedFixTime, 'APPROVED_APPLIED');
   } else if (pattern === 8) {
     // Rejected request, shift untouched
     var entryR = SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: entryTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'כניסה',
-      fixTime: entryTime,
+      fixDate: '',
+      fixTime: '',
       units: shiftUnitsFull,
-      scenarioLabel: 'REJECTED',
-      clearFixAfterInsert: true
+      scenarioLabel: 'REJECTED'
     });
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: exitTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'יציאה',
-      fixTime: exitTime,
+      fixDate: '',
+      fixTime: '',
       units: '',
-      scenarioLabel: 'REJECTED',
-      clearFixAfterInsert: true
+      scenarioLabel: 'REJECTED'
     });
     SEED_newRequest_({
-      requestsSheet: requestsSheet,
+      ctx: ctx,
       employee: emp,
       job: jobA,
       status: 'rejected',
       shiftId: entryR.shiftId,
+      workDate: workDate,
       fixDate: dateStr,
       fixTime: formatTimeFromMinutes_(entryMinutesBase + 15),
       shiftNoteLabel: 'REJECTED',
-      units: shiftUnitsFull + 1
+      units: shiftUnitsFull + 1,
+      direction: 'כניסה',
+      timestampTime: formatTimeFromMinutes_(entryMinutesBase + 15)
     });
   } else if (pattern === 9) {
     // Manual fix on shift row, no request
-    var entryM = SEED_newShift_({
+    SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: formatTimeFromMinutes_(entryMinutesBase - 10),
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'כניסה',
-      fixTime: entryTime,
+      fixDate: dateStr,
+      fixTime: formatTimeFromMinutes_(entryMinutesBase - 10),
       units: shiftUnitsFull,
-      scenarioLabel: 'MANUAL_FIX',
-      clearFixAfterInsert: true,
-      applyFixOverride: {
-        fixDate: dateStr,
-        fixTime: formatTimeFromMinutes_(entryMinutesBase - 10)
-      }
+      scenarioLabel: 'MANUAL_FIX'
     });
     SEED_newShift_({
       shiftSheet: shiftSheet,
+      ctx: ctx,
+      workDate: workDate,
+      timestampTime: exitTime,
       employee: emp,
       job: jobA,
-      dateStr: dateStr,
       direction: 'יציאה',
-      fixTime: exitTime,
+      fixDate: '',
+      fixTime: '',
       units: '',
-      scenarioLabel: 'MANUAL_FIX',
-      clearFixAfterInsert: true
+      scenarioLabel: 'MANUAL_FIX'
     });
     // No request created here by design.
   }
@@ -347,81 +419,67 @@ function loadJobs_() {
 
 function SEED_newShift_(opts) {
   var notes = (opts.scenarioLabel ? (opts.scenarioLabel + ' ') : '') + SEED_TAG;
-  var payload = {
-    employeeId: opts.employee.id,
-    employeeName: opts.employee.name,
-    direction: opts.direction,
-    fixDate: opts.dateStr,
-    fixTime: opts.fixTime,
-    jobId: opts.job.id,
-    jobName: opts.job.name,
-    department: opts.job.department,
-    notes: notes,
-    units: opts.units
-  };
+  var shiftId = 'SEED_SHIFT_' + opts.ctx.shiftSeq++;
 
-  var res = handleShiftPost({ postData: { contents: JSON.stringify(payload) } });
-  var shiftId = '';
-  try {
-    var parsed = JSON.parse(res && res.getContent ? res.getContent() : '{}');
-    if (parsed && parsed.shiftId) shiftId = parsed.shiftId;
-  } catch (err) {}
+  var ts = buildTimestamp_(opts.workDate, opts.timestampTime);
 
-  var rowIndex = findShiftRowById_(opts.shiftSheet, shiftId);
-  if (!rowIndex) {
-    throw new Error('Could not locate shift row for shiftId=' + shiftId);
+  var unitsVal = '';
+  if (opts.units !== null && opts.units !== undefined && String(opts.units).trim() !== '') {
+    var n = Number(opts.units);
+    unitsVal = isNaN(n) ? opts.units : n;
   }
 
-  if (opts.clearFixAfterInsert) {
-    opts.shiftSheet.getRange(rowIndex, 7, 1, 2).clearContent(); // G,H
-  }
+  var row = [
+    notes,
+    shiftId,
+    ts,
+    opts.employee.id,
+    opts.employee.name,
+    opts.direction,
+    opts.fixDate || '',
+    opts.fixTime || '',
+    opts.job.id,
+    opts.job.name,
+    opts.job.department,
+    unitsVal
+  ];
 
-  if (opts.applyFixOverride) {
-    // Only touch row we just wrote and that carries SEED_TAG in notes.
-    var noteVal = opts.shiftSheet.getRange(rowIndex, 1).getValue() || '';
-    if (noteVal.toString().indexOf(SEED_TAG) >= 0) {
-      opts.shiftSheet.getRange(rowIndex, 7, 1, 2).setValues([[opts.applyFixOverride.fixDate, opts.applyFixOverride.fixTime]]);
-    }
-  }
-
-  return { shiftId: shiftId, rowIndex: rowIndex };
-}
-
-function SEED_applyFixToShift_(shiftSheet, rowIndex, fixDate, fixTime, label) {
-  var noteVal = shiftSheet.getRange(rowIndex, 1).getValue() || '';
-  if (noteVal.toString().indexOf(SEED_TAG) < 0) return; // safety
-  shiftSheet.getRange(rowIndex, 7, 1, 2).setValues([[fixDate, fixTime]]);
-  // Optionally reinforce note label
-  var newNote = (label ? (label + ' ') : '') + SEED_TAG;
-  shiftSheet.getRange(rowIndex, 1).setValue(newNote);
+  opts.ctx.shiftRows.push(row);
+  return { shiftId: shiftId };
 }
 
 function SEED_newRequest_(opts) {
-  var note = (opts.shiftNoteLabel ? (opts.shiftNoteLabel + ' ') : '') + SEED_TAG;
-  var payload = {
-    employeeId: opts.employee.id,
-    employeeName: opts.employee.name,
-    status: opts.status,
-    shiftId: opts.shiftId || '',
-    direction: opts.direction || '',
-    fixDate: opts.fixDate,
-    fixTime: opts.fixTime,
-    jobId: opts.job.id,
-    jobName: opts.job.name,
-    department: opts.job.department,
-    shiftNote: note,
-    units: opts.units
-  };
+  var layout = opts.ctx.requestLayout;
+  var dataLastCol = layout.dataLastCol;
+  var row = new Array(dataLastCol);
+  for (var i = 0; i < dataLastCol; i++) row[i] = '';
 
-  var res = handleRequestPost({ postData: { contents: JSON.stringify(payload) } });
-  var requestId = '';
-  var rowIndex = null;
-  try {
-    var parsed = JSON.parse(res && res.getContent ? res.getContent() : '{}');
-    requestId = parsed && parsed.requestId ? parsed.requestId : '';
-    rowIndex = parsed && parsed.rowIndex ? parsed.rowIndex : null;
-  } catch (err) {}
-  return { requestId: requestId, rowIndex: rowIndex };
+  var requestId = 'SEED_REQ_' + opts.ctx.requestSeq++;
+  var ts = buildTimestamp_(opts.workDate, opts.timestampTime || opts.fixTime || '12:00');
+  var note = (opts.shiftNoteLabel ? (opts.shiftNoteLabel + ' ') : '') + SEED_TAG;
+  var unitsVal = '';
+  if (opts.units !== null && opts.units !== undefined && String(opts.units).trim() !== '') {
+    var n = Number(opts.units);
+    unitsVal = isNaN(n) ? opts.units : n;
+  }
+
+  if (layout.COL_STATUS) row[layout.COL_STATUS - 1] = opts.status;
+  row[layout.COL_REQUEST_ID - 1] = requestId;
+  if (layout.COL_SHIFT_NOTE) row[layout.COL_SHIFT_NOTE - 1] = note;
+  if (layout.COL_SHIFT_ID) row[layout.COL_SHIFT_ID - 1] = opts.shiftId || '';
+  if (layout.COL_TIMESTAMP) row[layout.COL_TIMESTAMP - 1] = ts;
+  if (layout.COL_EMP_ID) row[layout.COL_EMP_ID - 1] = opts.employee.id;
+  if (layout.COL_EMP_NAME) row[layout.COL_EMP_NAME - 1] = opts.employee.name;
+  if (layout.COL_DIRECTION) row[layout.COL_DIRECTION - 1] = opts.direction || '';
+  if (layout.COL_FIX_DATE) row[layout.COL_FIX_DATE - 1] = opts.fixDate || '';
+  if (layout.COL_FIX_TIME) row[layout.COL_FIX_TIME - 1] = opts.fixTime || '';
+  if (layout.COL_JOB_ID) row[layout.COL_JOB_ID - 1] = opts.job.id;
+  if (layout.COL_JOB_NAME) row[layout.COL_JOB_NAME - 1] = opts.job.name;
+  if (layout.COL_DEPT) row[layout.COL_DEPT - 1] = opts.job.department;
+  if (layout.COL_UNITS) row[layout.COL_UNITS - 1] = unitsVal;
+
+  opts.ctx.requestRows.push(row);
+  return { requestId: requestId };
 }
 
 function findShiftRowById_(sheet, shiftId) {
@@ -599,6 +657,51 @@ function getRequestsSheet_() {
   return sh;
 }
 
+function getRequestLayout_(sheet) {
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) lastCol = 1;
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) {
+    return String(h || '').trim();
+  });
+
+  function colByHeader_(name) {
+    var idx = headers.indexOf(name);
+    return idx >= 0 ? (idx + 1) : null; // 1-based
+  }
+
+  function colByAny_(names) {
+    for (var i = 0; i < names.length; i++) {
+      var c = colByHeader_(names[i]);
+      if (c) return c;
+    }
+    return null;
+  }
+
+  var layout = {
+    COL_STATUS:     colByAny_(['סטטוס בקשה']),
+    COL_REQUEST_ID: colByAny_(['ID בקשה']),
+    COL_SHIFT_NOTE: colByAny_(['הערות למשמרת']),
+    COL_SHIFT_ID:   colByAny_(['ID משמרת']),
+    COL_TIMESTAMP:  colByAny_(['חותמת זמן']),
+    COL_EMP_ID:     colByAny_(['ID עובד']),
+    COL_EMP_NAME:   colByAny_(['שם מלא']),
+    COL_DIRECTION:  colByAny_(['כניסה / יציאה']),
+    COL_FIX_DATE:   colByAny_(['תיקון תאריך']),
+    COL_FIX_TIME:   colByAny_(['תיקון שעה']),
+    COL_JOB_ID:     colByAny_(['ID סוג עבודה', 'ID סוגי עבודה']),
+    COL_JOB_NAME:   colByAny_(['סוג עבודה', 'סוגי עבודה', 'סוג העבודה']),
+    COL_DEPT:       colByAny_(['מחלקה']),
+    COL_UNITS:      colByAny_(['כמות היחידות']),
+    dataLastCol:    detectRequestDataLastCol_(headers, lastCol)
+  };
+
+  if (!layout.COL_REQUEST_ID || !layout.COL_TIMESTAMP) {
+    throw new Error('Requests sheet is missing required headers (ID בקשה / חותמת זמן).');
+  }
+
+  return layout;
+}
+
 // --- Generic helpers ---
 function normalizeDate_(v) {
   if (v instanceof Date) return new Date(v.getTime());
@@ -634,4 +737,19 @@ function asDate_(v) {
 function isWeekend_(d) {
   var day = d.getDay();
   return day === 5 || day === 6; // Fri/Sat
+}
+
+function buildTimestamp_(workDate, timeStr) {
+  var parts = String(timeStr || '00:00').split(':');
+  var hours = parts.length > 0 ? parseInt(parts[0], 10) || 0 : 0;
+  var minutes = parts.length > 1 ? parseInt(parts[1], 10) || 0 : 0;
+  return new Date(
+    workDate.getFullYear(),
+    workDate.getMonth(),
+    workDate.getDate(),
+    hours,
+    minutes,
+    0,
+    0
+  );
 }
