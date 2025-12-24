@@ -12,20 +12,51 @@
     --color-accent: #fcd34d;
     --color-accent-strong: #f59e0b;
     --color-border: #1f2937;
+    --color-border-strong: #334155;
+    --color-focus: rgba(252, 211, 77, 0.6);
+    --color-surface-highlight: rgba(252, 211, 77, 0.12);
+
+    --radius-lg: 16px;
+    --radius-md: 12px;
+    --radius-sm: 10px;
+    --radius-pill: 999px;
+
+    --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.18);
     --shadow-strong: 0 20px 50px rgba(0, 0, 0, 0.35);
   }
 
   body {
-    font-family: Arial, sans-serif;
+    font-family: var(--font-heebo, "Heebo"), "Segoe UI", Arial, sans-serif;
     font-size: 13px;
     direction: rtl;
     margin: 8px;
     background: var(--color-page-bg);
     color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+  }
+
+  .sidebar-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: var(--color-page-bg);
+    border-radius: var(--radius-lg);
+    padding: 6px;
+  }
+
+  .content-area {
+    background: transparent;
+    border-radius: var(--radius-md);
+    padding: 6px 6px 10px;
+    overflow: auto;
   }
 
   .section {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-md);
+    padding: 8px;
   }
 
   .label {
@@ -36,46 +67,50 @@
   }
 
   .section-title {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: bold;
+    margin: 0 0 4px 0;
+    font-size: 15px;
+    font-weight: 800;
     color: var(--color-text-primary);
   }
 
   #employee-section {
-    background: var(--color-surface-2);
-    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-lg);
     padding: 10px;
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-strong);
   }
 
   #global-message {
     margin-bottom: 8px;
     min-height: 16px;
     font-size: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    border: none;
   }
   #global-message.error {
-    color: #fca5a5; /* אדום רך יחסית */
+    color: #fca5a5;
+    background: transparent;
   }
   #global-message.info {
-    color: var(--color-accent);
+    color: var(--color-accent-strong);
+    background: transparent;
   }
 
   #search-results {
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     max-height: 160px;
     overflow-y: auto;
     margin-top: 4px;
     background: var(--color-surface);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
   }
   #search-results.hidden {
     display: none;
   }
 
   .search-item {
-    padding: 4px 6px;
+    padding: 6px 8px;
     cursor: pointer;
     color: var(--color-text-primary);
   }
@@ -88,7 +123,7 @@
   }
 
   .field-row {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .field-row input[type='text'],
@@ -99,29 +134,36 @@
     width: 100%;
     box-sizing: border-box;
     background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     color: var(--color-text-primary);
-    border-radius: 6px;
-    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   }
 
   .field-row input::placeholder {
     color: var(--color-text-muted);
   }
 
+  .field-row input:focus,
+  .field-row select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--color-focus);
+    background: var(--color-surface);
+  }
+
   .jobs-container {
-    border-top: 1px solid var(--color-border);
-    padding-top: 6px;
     margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .job-row {
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 6px;
-    margin-bottom: 6px;
-    background: var(--color-surface);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .job-row-header {
@@ -139,32 +181,47 @@
   button {
     font-family: inherit;
     font-size: 12px;
-    padding: 6px 10px;
+    padding: 8px 12px;
     margin-top: 4px;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     cursor: pointer;
+    border: 1px solid transparent;
     transition: background 0.15s ease, box-shadow 0.15s ease,
-      transform 0.08s ease;
+      transform 0.08s ease, border-color 0.15s ease;
+  }
+
+  button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--color-focus);
+    border-color: var(--color-accent);
   }
 
   .btn-primary {
-    background: var(--color-accent-strong);
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-strong));
     color: #111827;
-    border: none;
-    box-shadow: var(--shadow-strong);
+    border: 1px solid var(--color-accent-strong);
+    box-shadow: 0 10px 28px rgba(245, 158, 11, 0.26);
+    font-weight: 700;
   }
   .btn-primary:hover {
-    background: var(--color-accent);
+    background: linear-gradient(135deg, var(--color-accent-strong), #fbbf24);
     transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgba(245, 158, 11, 0.32);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.24);
   }
 
   .btn-secondary {
     background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     color: var(--color-text-primary);
+    font-weight: 600;
   }
   .btn-secondary:hover {
-    background: #1f2937;
+    background: var(--color-surface-highlight);
+    border-color: var(--color-accent);
   }
 
   .edit-mode-live {
@@ -180,17 +237,16 @@
   }
 
   .row-active-btn {
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     background: #1f2937;
-    color: #e2e8f0;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-weight: bold;
-    min-width: 90px;
+    color: var(--color-text-primary);
+    padding: 6px 10px;
+    border-radius: var(--radius-pill);
+    font-weight: 700;
+    margin-top: 0;
   }
-
   .row-active-btn.active {
-    background: rgba(22, 163, 74, 0.18);
+    background: rgba(22, 163, 74, 0.2);
     border-color: #16a34a;
     color: #bbf7d0;
     box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
@@ -216,8 +272,9 @@
 
   /* כותרת פרטי העובד + סטטוס */
   .employee-header {
-    border-bottom: 1px solid var(--color-border);
-    padding-bottom: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
     margin-bottom: 8px;
   }
 
@@ -225,27 +282,33 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
+    gap: 6px;
   }
 
   .status-pill {
     display: inline-block;
-    min-width: 64px;
-    padding: 2px 10px;
-    border-radius: 999px;
+    min-width: 72px;
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
     font-size: 11px;
     text-align: center;
-    border: 1px solid var(--color-border);
+    border: 1px solid transparent;
+    font-weight: 700;
+    background: rgba(148, 163, 184, 0.16);
+    color: #e2e8f0;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
   .status-pill.status-active {
-    background: rgba(22, 163, 74, 0.16);
+    background: rgba(22, 163, 74, 0.2);
     color: #bbf7d0;
     border-color: #16a34a;
+    box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
   }
 
   .status-pill.status-inactive {
-    background: rgba(148, 163, 184, 0.16);
+    background: rgba(148, 163, 184, 0.18);
     color: #e2e8f0;
     border-color: #475569;
   }
@@ -253,27 +316,30 @@
   .sidebar-layout {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 8px;
+    background: var(--color-page-bg);
+    border-radius: var(--radius-lg);
+    padding: 6px;
   }
 
   .tabs {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
     position: sticky;
     top: 8px;
     align-self: flex-start;
-    min-width: 58px;
+    min-width: 54px;
   }
 
   .tab-button {
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);
     color: var(--color-text-primary);
-    border-radius: 12px;
-    font-weight: bold;
+    border-radius: var(--radius-md);
+    font-weight: 700;
     font-size: 11px;
     padding: 0;
     display: flex;
@@ -309,6 +375,12 @@
   .content-area {
     flex: 1;
     min-width: 0;
+    max-width: 360px;
+    width: 100%;
+    padding: 4px 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .hidden {
@@ -321,6 +393,25 @@
     flex-wrap: wrap;
   }
 
+  /* שדה חיפוש מעוצב כמו שאר השדות */
+  #search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-text-primary);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+
+  #search-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px var(--color-focus);
+    background: var(--color-surface);
+  }
+
   .tab-warning {
     margin-top: 6px;
     font-size: 11px;
@@ -330,11 +421,11 @@
 
   /* חיווי פערי נתונים בפרטי עובד */
   .mismatch-banner {
-    background: #312e81;
+    background: rgba(49, 46, 129, 0.6);
     border: 1px solid #4338ca;
     color: #e0e7ff;
-    padding: 8px;
-    border-radius: 8px;
+    padding: 10px;
+    border-radius: var(--radius-md);
     margin-bottom: 10px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
   }
@@ -408,6 +499,9 @@
         </button>
         <button type="button" class="tab-button" data-tab="requests" data-short="בקשות" title="בקשות עובדים">
           <span class="tab-label">בקשות עובדים</span>
+        </button>
+        <button type="button" class="tab-button" data-tab="shifts" data-short="משמרות" title="משמרות">
+          <span class="tab-label">משמרות</span>
         </button>
         <button type="button" class="tab-button" data-tab="settings" data-short="הגדרות" title="הגדרות סייד בר">
           <span class="tab-label">הגדרות סייד בר</span>
@@ -530,7 +624,7 @@
           </div>
           <div class="field-row">
             <span class="label">ת. לידה</span>
-            <input id="emp-birthdate" type="date" />
+            <input id="emp-birthdate" type="text" placeholder="dd/mm/yyyy" />
             <div class="mismatch-options" data-field="birthdate"></div>
           </div>
           <div class="field-row">
@@ -556,21 +650,12 @@
         <button class="btn-primary" type="button" onclick="onSaveClick()">
           שמור שינויים
         </button>
-        <button
-          class="btn-secondary"
-          type="button"
-          onclick="onRevealFilterClick()"
-        >
-          בטל סינון בגליון
-        </button>
       </div>
     </div>
 
-    <div class="section tab-hidden" data-tab-section="requests">
-      <div class="muted">
-        כרטיסיית בקשות עובדים תהיה בשימוש בהמשך. בינתיים אין כאן פעולה לביצוע.
-      </div>
-    </div>
+    <div class="section tab-hidden" data-tab-section="requests"></div>
+
+    <div class="section tab-hidden" data-tab-section="shifts"></div>
 
     <div class="section tab-hidden" data-tab-section="settings">
       <div class="section" id="edit-mode-section">
@@ -650,14 +735,25 @@
 
       function formatPhoneForDisplay(val) {
         var digits = (val || '').replace(/\D+/g, '');
+        // אם חסרה ספרה מובילה (9 ספרות) נוסיף 0 בהתחלה לתצוגה
+        if (digits.length === 9) digits = '0' + digits;
         if (digits.length === 10) {
           return digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
         }
         return val || '';
       }
 
+      function formatIdForDisplay(val) {
+        var digits = (val || '').replace(/\D+/g, '');
+        if (digits.length === 9) {
+          return digits.replace(/(\d)(\d{7})(\d)/, '$1-$2-$3');
+        }
+        return val || '';
+      }
+
       function formatPhoneForSave(val) {
         var digits = (val || '').replace(/\D+/g, '');
+        if (digits.length === 9) digits = '0' + digits;
         if (digits.length === 10) {
           return digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
         }
@@ -665,18 +761,33 @@
       }
 
       function toDateInputValue(val) {
+        // Display consistently as DD/MM/YYYY even if the source is ISO or Date
         if (!val) return '';
         if (Object.prototype.toString.call(val) === '[object Date]' && !isNaN(val.getTime())) {
-          return val.toISOString().slice(0, 10);
+          var dIso = val;
+          var dd = ('0' + dIso.getDate()).slice(-2);
+          var mm = ('0' + (dIso.getMonth() + 1)).slice(-2);
+          var yyyy = dIso.getFullYear();
+          return dd + '/' + mm + '/' + yyyy;
         }
         var str = String(val).trim();
-        var m1 = str.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})$/);
-        if (m1) {
-          return m1[3] + '-' + m1[2] + '-' + m1[1];
+
+        // נסה לפרסר כמחרוזת תאריך JS מלאה עם timezone
+        var dParsed = new Date(str);
+        if (!isNaN(dParsed.getTime())) {
+          var ddp = ('0' + dParsed.getDate()).slice(-2);
+          var mmp = ('0' + (dParsed.getMonth() + 1)).slice(-2);
+          var yyyyp = dParsed.getFullYear();
+          return ddp + '/' + mmp + '/' + yyyyp;
         }
-        var m2 = str.match(/^(\d{4})[\/.\-](\d{2})[\/.\-](\d{2})$/);
-        if (m2) {
-          return m2[1] + '-' + m2[2] + '-' + m2[3];
+
+        var mIso = str.match(/^(\d{4})[\/.\-](\d{2})[\/.\-](\d{2})$/);
+        if (mIso) {
+          return mIso[3] + '/' + mIso[2] + '/' + mIso[1];
+        }
+        var mSlash = str.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})$/);
+        if (mSlash) {
+          return mSlash[1] + '/' + mSlash[2] + '/' + mSlash[3];
         }
         return str;
       }
@@ -704,6 +815,7 @@
         if (val === null || val === undefined || val === '') return 'ריק';
         if (fieldKey === 'phone') return formatPhoneForDisplay(String(val));
         if (fieldKey === 'birthdate') return toDateInputValue(val);
+        if (fieldKey === 'idNumber') return formatIdForDisplay(String(val));
         return String(val);
       }
 
@@ -813,6 +925,8 @@
           valForInput = formatPhoneForDisplay(String(value || ''));
         } else if (cfg.key === 'birthdate') {
           valForInput = toDateInputValue(value || '');
+        } else if (cfg.key === 'idNumber') {
+          valForInput = formatIdForDisplay(String(value || ''));
         }
         el.value = valForInput === undefined ? '' : valForInput;
       }
@@ -1073,20 +1187,31 @@
 
         google.script.run
           .withSuccessHandler(function (res) {
+            try {
+              console.log('[EMP_DEBUG] sidebar bootstrap result:', JSON.stringify(res));
+            } catch (e) {
+              // ignore log errors
+            }
+
             if (!res) {
-              setGlobalMessage('שגיאה בטעינת נתונים: תגובה ריקה מהשרת (bootstrap)', true);
+              setGlobalMessage('שגיאה בטעינת נתונים (אובייקט ריק מהשרת)', true);
               return;
             }
-            if (!res.ok) {
+
+            if (res.error) {
               setGlobalMessage(res.error || 'שגיאה בטעינת נתונים', true);
               return;
             }
+
             bootstrap = res;
             employees = res.employees || [];
             jobs = res.jobs || [];
             payments = res.payments || [];
+
             rebuildLookups();
             setGlobalMessage('', false);
+
+            startSelectionPolling();
 
             if (INITIAL_EMPLOYEE_ID) {
               loadEmployee(INITIAL_EMPLOYEE_ID);
@@ -1189,6 +1314,14 @@
         }
       }
 
+      function syncManualLoadVisibility() {
+        var manualSection = $('manual-load-section');
+        if (manualSection) {
+          manualSection.style.display =
+            activeTab === 'employees' && autoLoadMode === 'manual' ? 'block' : 'none';
+        }
+      }
+
       function setActiveTab(tabName) {
         activeTab = tabName || 'employees';
         var buttons = document.querySelectorAll('.tab-button');
@@ -1210,6 +1343,8 @@
             sections[s].classList.add('tab-hidden');
           }
         }
+
+        syncManualLoadVisibility();
       }
 
       function setAutoLoadMode(mode) {
@@ -1218,7 +1353,6 @@
         var autoBtn = $('auto-load-auto-btn');
         var manualBtn = $('auto-load-manual-btn');
         var warning = $('auto-load-warning');
-        var manualSection = $('manual-load-section');
 
         if (autoBtn && manualBtn) {
           if (autoLoadMode === 'auto') {
@@ -1238,9 +1372,7 @@
           warning.style.display = autoLoadMode === 'auto' ? 'block' : 'none';
         }
 
-        if (manualSection) {
-          manualSection.style.display = autoLoadMode === 'manual' ? 'block' : 'none';
-        }
+        syncManualLoadVisibility();
 
         if (autoLoadMode === 'auto') {
           startSelectionPolling();
@@ -1408,12 +1540,16 @@
         setGlobalMessage('טוען עובד...', false);
         google.script.run
           .withSuccessHandler(function (res) {
+            try {
+              console.log('[EMP_DEBUG] loadEmployee result for id', id, res);
+            } catch (_e) {}
+
             if (!res) {
               setGlobalMessage('שגיאה בטעינת עובד: תגובה ריקה מהשרת', true);
               return;
             }
-            if (!res.ok) {
-              setGlobalMessage(res.error || 'שגיאה בטעינת עובד', true);
+            if (res.error) {
+              setGlobalMessage('שגיאה בטעינת עובד: ' + res.error, true);
               return;
             }
             var emp = res.employee;
@@ -1459,7 +1595,7 @@
           emp.travelCost || '';
 
         if ($('emp-gender')) $('emp-gender').value = gender;
-        if ($('emp-idnum')) $('emp-idnum').value = idNumber;
+        if ($('emp-idnum')) $('emp-idnum').value = formatIdForDisplay(idNumber);
         if ($('emp-phone')) $('emp-phone').value = formatPhoneForDisplay(phone);
         if ($('emp-birthdate')) $('emp-birthdate').value = toDateInputValue(birthdate);
         if ($('emp-email')) $('emp-email').value = email;

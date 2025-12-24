@@ -461,6 +461,9 @@ var EMP = EMP || {};
             jobs = OPT.getAllJobs(true) || []; // רק פעילים
           }
         } catch (e) {
+          debugLog_(
+            "bootstrap jobs failed: " + (e && e.message ? e.message : e)
+          );
           jobs = [];
         }
 
@@ -469,6 +472,9 @@ var EMP = EMP || {};
             payments = OPT.getAllPayments(true) || []; // רק פעילים
           }
         } catch (e2) {
+          debugLog_(
+            "bootstrap payments failed: " + (e2 && e2.message ? e2.message : e2)
+          );
           payments = [];
         }
       }
@@ -824,6 +830,11 @@ var EMP = EMP || {};
 
   /** ריצה ב־onOpen (דרך EMP_onOpen) */
   function handleOpen_(e) {
+    if (!e || e.authMode !== ScriptApp.AuthMode.FULL) {
+      debugLog_("handleOpen skipped: authMode=" + (e && e.authMode));
+      return;
+    }
+
     var sheet = getEmployeesSheet_();
     if (!sheet) return;
 
@@ -960,27 +971,80 @@ function onSelectionChange(e) {
   }
 }
 
+function EMP_debugLog(msg) {
+  try {
+    Logger.log("[EMP_DEBUG] " + msg);
+  } catch (_e) {
+    // ignore
+  }
+}
+
 function EMP_getSidebarBootstrap() {
   try {
-    if (!EMP || typeof EMP.getSidebarBootstrap !== "function") {
-      debugLog_("EMP_getSidebarBootstrap: missing function");
-      return { ok: false, error: "EMP.getSidebarBootstrap not available" };
+    EMP_debugLog("EMP_getSidebarBootstrap: calling getSidebarBootstrap");
+
+    var bootstrap =
+      EMP && typeof EMP.getSidebarBootstrap === "function"
+        ? EMP.getSidebarBootstrap()
+        : null;
+
+    if (!bootstrap) {
+      EMP_debugLog("EMP_getSidebarBootstrap got empty bootstrap");
+      return { error: "EMP_getSidebarBootstrap returned empty" };
     }
-    var res = EMP.getSidebarBootstrap();
-    if (!res) {
-      debugLog_("EMP_getSidebarBootstrap: returned empty");
-      return { ok: false, error: "EMP_getSidebarBootstrap returned empty" };
-    }
-    return res;
-  } catch (e) {
-    var msg = e && e.message ? e.message : e;
-    debugLog_("EMP_getSidebarBootstrap: exception " + msg);
-    return { ok: false, error: "EMP_getSidebarBootstrap failed: " + msg };
+
+    // Enforce serialization-safe plain object for the sidebar client
+    var clean = JSON.parse(JSON.stringify(bootstrap));
+
+    var empCount = (clean.employees || []).length;
+    var jobCount = (clean.jobs || []).length;
+    var payCount = (clean.payments || []).length;
+
+    EMP_debugLog(
+      "EMP_getSidebarBootstrap ok (CLEAN): employees=" +
+        empCount +
+        " jobs=" +
+        jobCount +
+        " payments=" +
+        payCount
+    );
+
+    return clean;
+  } catch (err) {
+    EMP_debugLog("EMP_getSidebarBootstrap error: " + err);
+    return { error: "EMP_getSidebarBootstrap failed: " + err };
   }
 }
 
 function EMP_getEmployeeById(id) {
-  return EMP.getEmployeeById(id);
+  try {
+    EMP_debugLog("EMP_getEmployeeById: requesting id=" + id);
+
+    var res =
+      EMP && typeof EMP.getEmployeeById === "function"
+        ? EMP.getEmployeeById(id)
+        : null;
+
+    if (!res) {
+      EMP_debugLog("EMP_getEmployeeById empty result for id=" + id);
+      return { error: "EMP_getEmployeeById returned empty for id=" + id };
+    }
+
+    var clean = JSON.parse(JSON.stringify(res));
+    var hasEmployee = !!(clean && clean.employee);
+
+    EMP_debugLog(
+      "EMP_getEmployeeById ok (CLEAN) for id=" +
+        id +
+        " hasEmployee=" +
+        (hasEmployee ? "yes" : "no")
+    );
+
+    return clean;
+  } catch (err) {
+    EMP_debugLog("EMP_getEmployeeById error: " + err);
+    return { error: "EMP_getEmployeeById failed: " + err };
+  }
 }
 
 /**

@@ -37,6 +37,10 @@ function doGet(e) {
     return handleGetEmployees(params);
   }
 
+  if (action === "employeeExistsByEmail") {
+    return employeeExistsByEmail(params);
+  }
+
   return jsonResponse({
     success: false,
     error: "Unknown action: " + action,

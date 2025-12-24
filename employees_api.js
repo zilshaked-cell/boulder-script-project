@@ -180,3 +180,126 @@ function handleGetEmployees(params) {
     employees: employees,
   });
 }
+
+/**
+ * בדיקת קיום עובד לפי מייל (לשימוש הלוגין של הווב-אפ).
+ * מחזיר success+found, ואם נמצא – מצרף active+employeeId+employeeName.
+ */
+function employeeExistsByEmail(params) {
+  params = params || {};
+
+  function norm(v) {
+    if (v === null || v === undefined) return "";
+    return String(v).trim().toLowerCase();
+  }
+
+  var email = norm(params.email || params.mail || "");
+  if (!email) {
+    return jsonResponse({ success: false, error: "missing email" });
+  }
+
+  Logger.log("[employeeExistsByEmail] called with email=" + email);
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  Logger.log(
+    "[employeeExistsByEmail] spreadsheet name=" + ss.getName() +
+      ", id=" + ss.getId()
+  );
+
+  var sheet = ss.getSheetByName(EMPLOYEE_SHEET_NAME);
+  if (!sheet) {
+    return jsonResponse({
+      success: false,
+      error: "Sheet not found: " + EMPLOYEE_SHEET_NAME,
+    });
+  }
+
+  Logger.log(
+    "[employeeExistsByEmail] using sheet=" + sheet.getName() +
+      ", lastRow=" + sheet.getLastRow() +
+      ", lastCol=" + sheet.getLastColumn()
+  );
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= EMPLOYEE_HEADER_ROW) {
+    return jsonResponse({ success: true, found: false });
+  }
+
+  var lastCol = sheet.getLastColumn();
+  var headerRow = sheet
+    .getRange(EMPLOYEE_HEADER_ROW, 1, 1, lastCol)
+    .getValues()[0];
+
+  function buildHeaderIndex(headers) {
+    var map = {};
+    for (var i = 0; i < headers.length; i++) {
+      var key = norm(headers[i]);
+      if (key) map[key] = i + 1; // 1-based index
+    }
+    return map;
+  }
+
+  var H = buildHeaderIndex(headerRow);
+
+  function pickHeader(map, candidates) {
+    for (var i = 0; i < candidates.length; i++) {
+      var k = norm(candidates[i]);
+      if (map[k]) return map[k];
+    }
+    return 0;
+  }
+
+  var colEmail = pickHeader(H, [
+    "מייל",
+    "email",
+    "אימייל",
+    "mail",
+    "כתובת מייל",
+    "כתובת אימייל",
+    "email address",
+  ]);
+  var colStatus = pickHeader(H, ["סטטוס", "סטטוס פעיל", "active", "status"]);
+  var colId = pickHeader(H, ["id עובד", "id", "employee id"]);
+  var colName = pickHeader(H, ["שם מלא", "שמות עובדים", "שם", "name"]);
+
+  if (!colEmail) {
+    return jsonResponse({ success: false, error: "email column not found" });
+  }
+
+  var dataRange = sheet.getRange(
+    EMPLOYEE_HEADER_ROW + 1,
+    1,
+    lastRow - EMPLOYEE_HEADER_ROW,
+    lastCol
+  );
+  var values = dataRange.getValues();
+
+  for (var r = 0; r < values.length; r++) {
+    var row = values[r];
+    var rowEmail = norm(row[colEmail - 1]);
+    if (!rowEmail) continue;
+    if (rowEmail !== email) continue;
+
+    var statusVal = colStatus ? String(row[colStatus - 1] || "").trim() : "";
+
+    var statusLower = statusVal.toLowerCase();
+    var inactive =
+      statusLower.indexOf("לא פעיל") !== -1 || statusLower.indexOf("inactive") !== -1;
+    var active = !inactive;
+    var empId = colId ? String(row[colId - 1] || "").trim() : "";
+    var empName = colName ? String(row[colName - 1] || "").trim() : "";
+
+    return jsonResponse({
+      success: true,
+      found: true,
+      employee: {
+        id: empId,
+        name: empName,
+        email: rowEmail,
+        active: active,
+      },
+    });
+  }
+
+  return jsonResponse({ success: true, found: false });
+}

@@ -36,7 +36,9 @@ function onOpen(e) {
   }
 
   // מודול עובדים
-  EMP_onOpen(e);
+  if (e && e.authMode === ScriptApp.AuthMode.FULL) {
+    EMP_onOpen(e);
+  }
 
   try {
     if (typeof REQ_onOpen === "function") {
