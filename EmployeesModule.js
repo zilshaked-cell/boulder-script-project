@@ -908,7 +908,13 @@ var EMP = EMP || {};
 
 function EMP_onOpen(e) {
   // אם הפונקציה הזו מוגדרת בקובץ אחר - מצוין. אם לא, אפשר להסיר.
-  OPT_onOpen(e);
+  if (typeof OPT_onOpen === "function") {
+    try {
+      OPT_onOpen(e);
+    } catch (err) {
+      Logger.log("OPT_onOpen error: " + (err && err.stack ? err.stack : err));
+    }
+  }
   if (typeof EMP_checkEmployeesHeader_ === "function") {
     EMP_checkEmployeesHeader_();
   }
@@ -1048,12 +1054,12 @@ function EMP_getEmployeeById(id) {
 }
 
 /**
- * שמירת עובד מה-Sidebar:
+ * LEGACY: שמירת עובד מה-Sidebar:
  * - ממפה סוג עבודה ואופן תשלום ל-ID לפי "אופציות בחירה ו ID'S"
  * - עובד לפי כותרות ולא לפי אינדקסים קשיחים
  * - מחזיר אובייקט עובד מעודכן (כולל rowIndex לכל שורת עבודה) כדי שהסיידבר יתעדכן ולא יווצרו כפילויות.
  */
-function EMP_saveEmployeePayload(payload) {
+function EMP_saveEmployeePayload_LEGACY_(payload) {
   var lock = LockService.getDocumentLock();
   if (!lock.tryLock(5000)) {
     return { ok: false, error: "לא ניתן לקבל נעילה למסמך לשמירה (נסה שוב)." };
@@ -1438,6 +1444,37 @@ function EMP_saveEmployeePayload(payload) {
       employeeId: employeeId,
       appendedRowIndices: appendedRowIndices,
     };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        "שגיאה ב-EMP_saveEmployeePayload: " +
+        (err && err.message ? err.message : err),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function EMP_saveEmployeePayload(payload) {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) {
+    return { ok: false, error: "לא ניתן לקבל נעילה למסמך לשמירה (נסה שוב)." };
+  }
+
+  try {
+    if (!payload || !payload.name || !payload.rows || !payload.rows.length) {
+      return { ok: false, error: "payload לא תקין מה-Sidebar" };
+    }
+
+    if (typeof EMP !== "undefined" && EMP && typeof EMP.saveEmployeePayload === "function") {
+      return EMP.saveEmployeePayload(payload);
+    }
+    if (typeof saveEmployeePayload_ === "function") {
+      return saveEmployeePayload_(payload);
+    }
+
+    return { ok: false, error: "saveEmployeePayload_ missing" };
   } catch (err) {
     return {
       ok: false,

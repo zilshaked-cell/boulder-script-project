@@ -1,0 +1,31 @@
+{
+  "github.copilot.enable": {
+    "*": true,
+    "markdown": false,
+    "plaintext": false
+  },
+  "github.copilot.inlineSuggest.enable": true,
+  "editor.inlineSuggest.enabled": true,
+  "editor.inlineSuggest.showToolbar": "always",
+  "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+  "github.copilot.chat.codeGeneration.instructionsFiles": [
+    ".github/copilot-instructions.md"
+  ],
+  "github.copilot.chat.promptFiles": [
+    ".github/prompts"
+  ],
+  "github.copilot.chat.agents.customAgents": [
+    ".github/agents"
+  ],
+  "github.copilot.chat.checkpoints.enabled": true,
+  "github.copilot.chat.checkpoints.showFileChanges": true,
+  "github.copilot.chat.tools.execution.allowCommands": false,
+  "github.copilot.chat.tools.execution.allowGlobalTools": false,
+  "eslint.validate": [
+    "javascript"
+  ],
+  "eslint.alwaysShowStatus": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}
