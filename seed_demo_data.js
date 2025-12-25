@@ -1,3 +1,5 @@
+/* global OPT, SHEET_NAME, SHEET_NAME_REQUESTS */
+/* exported SEED_generateDemoDataForLastTwoMonths, SEED_clearAllDemoData */
 // Deterministic demo data seeding (manual-only). Uses batch writes (setValues) to avoid execution timeouts.
 // Scenarios distribution (pattern = (dayIndex*7 + empIndex) % 10):
 // 0-4: Simple shift (≈50%) – no request, no fix (G/H empty)
@@ -29,6 +31,8 @@
 // סוג עבודה/סוגי עבודה/סוג העבודה, מחלקה, כמות היחידות (only columns present are filled).
 
 var SEED_TAG = '[SEED_DEMO_M2]';
+var SEED_PROGRESS_KEY = 'SEED_DEMO_LAST_TWO_MONTHS_PROGRESS';
+var SEED_MAX_DAYS_PER_RUN = 7; // reduce if still close to timeout
 var REQUEST_DATA_HEADER_CANDIDATES = [
   'סטטוס בקשה',
   'ID בקשה',
@@ -50,11 +54,52 @@ var REQUEST_DATA_HEADER_CANDIDATES = [
 ];
 
 function SEED_generateDemoDataForLastTwoMonths() {
+  var props = PropertiesService.getScriptProperties();
+
   var today = new Date();
   var end = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  var start = new Date(end);
+  end.setHours(0, 0, 0, 0);
+
+  var start = new Date(end.getTime());
   start.setMonth(start.getMonth() - 2);
-  SEED_generateDemoDataForDateRange(start, end);
+  start.setHours(0, 0, 0, 0);
+
+  var progressIso = props.getProperty(SEED_PROGRESS_KEY);
+  var currentStart = progressIso ? new Date(progressIso) : new Date(start.getTime());
+  if (isNaN(currentStart.getTime()) || currentStart < start) {
+    currentStart = new Date(start.getTime());
+  }
+
+  if (currentStart > end) {
+    props.deleteProperty(SEED_PROGRESS_KEY);
+    Logger.log('SEED: last two months already fully seeded; nothing to do.');
+    return;
+  }
+
+  var chunkEnd = new Date(currentStart.getTime());
+  for (var i = 1; i < SEED_MAX_DAYS_PER_RUN; i++) {
+    var d = new Date(chunkEnd.getTime());
+    d.setDate(d.getDate() + 1);
+    if (d > end) break;
+    chunkEnd = d;
+  }
+
+  var rangeStart = new Date(currentStart.getFullYear(), currentStart.getMonth(), currentStart.getDate());
+  var rangeEnd = new Date(chunkEnd.getFullYear(), chunkEnd.getMonth(), chunkEnd.getDate());
+
+  var result = SEED_generateDemoDataForDateRange(rangeStart, rangeEnd);
+
+  var nextStart = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate());
+  nextStart.setDate(nextStart.getDate() + 1);
+  nextStart.setHours(0, 0, 0, 0);
+
+  if (nextStart > end) {
+    props.deleteProperty(SEED_PROGRESS_KEY);
+    Logger.log('SEED: completed last two months. Chunk ' + rangeStart.toDateString() + ' – ' + rangeEnd.toDateString() + '. Result: ' + JSON.stringify(result));
+  } else {
+    props.setProperty(SEED_PROGRESS_KEY, nextStart.toISOString());
+    Logger.log('SEED: processed chunk ' + rangeStart.toDateString() + ' – ' + rangeEnd.toDateString() + '. Next start: ' + nextStart.toDateString() + '. Result: ' + JSON.stringify(result));
+  }
 }
 
 function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
@@ -106,7 +151,7 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
 
       var jobPrimary = jobs[e % jobs.length];
 
-      applyScenario_(shiftSheet, requestsSheet, workDate, dateStr, dayIndex, e, emp, jobPrimary, jobSecondary, pattern, ctx);
+      applyScenario_(shiftSheet, requestsSheet, workDate, dateStr, dayIndex, e, emp, jobPrimary, pattern, ctx);
     }
     dayIndex++;
   }
@@ -123,10 +168,15 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
     var startRowReq = requestsSheet.getLastRow() + 1;
     requestsSheet.getRange(startRowReq, 1, ctx.requestRows.length, dataCols).setValues(ctx.requestRows);
   }
+
+  return {
+    createdShifts: ctx.shiftRows.length,
+    createdRequests: ctx.requestRows.length
+  };
 }
 
 // --- Scenario application ---
-function applyScenario_(shiftSheet, requestsSheet, workDate, dateStr, dayIndex, empIndex, emp, jobA, jobB, pattern, ctx) {
+function applyScenario_(shiftSheet, requestsSheet, workDate, dateStr, dayIndex, empIndex, emp, jobA, pattern, ctx) {
   var entryMinutesBase = 8 * 60 + (empIndex % 3) * 10; // 08:00, 08:10, 08:20
   var exitMinutesBase = 16 * 60 + (empIndex % 2) * 10; // 16:00 or 16:10
 
@@ -482,30 +532,22 @@ function SEED_newRequest_(opts) {
   return { requestId: requestId };
 }
 
-function findShiftRowById_(sheet, shiftId) {
-  if (!shiftId) return null;
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return null;
-  var rng = sheet.getRange(2, 2, lastRow - 1, 1);
-  var found = rng.createTextFinder(String(shiftId)).matchEntireCell(true).findNext();
-  return found ? found.getRow() : null;
-}
-
 function hasSeedTagInShifts_(sheet, startDate, endDate) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return false;
-  var lastCol = sheet.getLastColumn();
-  var data = sheet.getRange(2, 1, lastRow - 1, Math.max(8, lastCol)).getValues();
-  for (var i = 0; i < data.length; i++) {
-    var notes = (data[i][0] || '').toString();
-    if (notes.indexOf(SEED_TAG) < 0) continue;
-    var fixDate = asDate_(data[i][6]); // column G
-    var tsDate = asDate_(data[i][2]);  // column C timestamp
+  var notesRange = sheet.getRange(2, 1, lastRow - 1, 1);
+  var finder = notesRange.createTextFinder(SEED_TAG);
+  var match = finder ? finder.findNext() : null;
+  while (match) {
+    var r = match.getRow();
+    var rowVals = sheet.getRange(r, 1, 1, 8).getValues()[0];
+    var fixDate = asDate_(rowVals[6]); // G
+    var tsDate = asDate_(rowVals[2]);  // C
     var dateToCheck = fixDate || tsDate;
-    if (!dateToCheck) continue;
-    if (dateToCheck >= startDate && dateToCheck <= endDate) {
+    if (dateToCheck && dateToCheck >= startDate && dateToCheck <= endDate) {
       return true;
     }
+    match = finder.findNext();
   }
   return false;
 }
@@ -523,17 +565,20 @@ function hasSeedTagInRequests_(sheet, startDate, endDate) {
   var colFixDate = colByName('תיקון תאריך');
   var colTs = colByName('חותמת זמן');
   if (!colNote || !colFixDate) return false;
-  var data = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  for (var i = 0; i < data.length; i++) {
-    var note = (data[i][colNote - 1] || '').toString();
-    if (note.indexOf(SEED_TAG) < 0) continue;
-    var fixDate = asDate_(data[i][colFixDate - 1]);
-    var tsDate = colTs ? asDate_(data[i][colTs - 1]) : null;
+
+  var notesRange = sheet.getRange(2, colNote, lastRow - 1, 1);
+  var finder = notesRange.createTextFinder(SEED_TAG);
+  var match = finder ? finder.findNext() : null;
+  while (match) {
+    var r = match.getRow();
+    var rowVals = sheet.getRange(r, 1, 1, Math.max(colFixDate, colTs || colFixDate)).getValues()[0];
+    var fixDate = asDate_(rowVals[colFixDate - 1]);
+    var tsDate = colTs ? asDate_(rowVals[colTs - 1]) : null;
     var dateToCheck = fixDate || tsDate;
-    if (!dateToCheck) continue;
-    if (dateToCheck >= startDate && dateToCheck <= endDate) {
+    if (dateToCheck && dateToCheck >= startDate && dateToCheck <= endDate) {
       return true;
     }
+    match = finder.findNext();
   }
   return false;
 }

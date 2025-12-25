@@ -486,6 +486,183 @@
   .mismatch-option-btn:hover {
     background: rgba(245, 158, 11, 0.2);
   }
+
+  /* --- Shifts tab --- */
+  .shifts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .shifts-message {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    min-height: 18px;
+  }
+  .shifts-message.error { color: #fca5a5; }
+
+  .shifts-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--color-border-strong);
+    padding: 8px;
+    border-radius: var(--radius-md);
+  }
+
+  .filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .filters-row input,
+  .filters-row select {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .quick-range {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .quick-range button {
+    background: var(--color-surface-2);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-strong);
+    padding: 6px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+  }
+  .quick-range button:hover {
+    border-color: var(--color-accent);
+  }
+
+  .shifts-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    padding: 6px;
+    background: var(--color-surface);
+  }
+
+  .shift-row {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .shift-row:hover { border-color: var(--color-accent); }
+  .shift-row.selected {
+    border-color: var(--color-accent-strong);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .shift-row-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    font-weight: 700;
+  }
+
+  .shift-row-bottom {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .shift-badge {
+    background: var(--color-surface-highlight);
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-text-primary);
+    border-radius: var(--radius-pill);
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .shift-badge.status { background: rgba(99, 102, 241, 0.15); border-color: #6366f1; }
+  .shift-badge.warn { background: rgba(248, 113, 113, 0.15); border-color: #f87171; color: #fecaca; }
+  .shift-badge.manual { background: rgba(59, 130, 246, 0.12); border-color: #60a5fa; }
+
+  .shift-details {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    margin-top: 8px;
+  }
+
+  .shift-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+  }
+
+  .bonus-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .bonus-chip {
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid #22c55e;
+    color: #bbf7d0;
+    padding: 4px 8px;
+    border-radius: var(--radius-pill);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .bonus-chip button {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+
+  .bonus-add-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .bonus-add-row select {
+    min-width: 160px;
+    background: var(--color-surface-2);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+  }
+
+  .shifts-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 6px;
+  }
+
+  .shifts-empty {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    padding: 6px 0;
+  }
 </style>
 
   </head>
@@ -655,7 +832,137 @@
 
     <div class="section tab-hidden" data-tab-section="requests"></div>
 
-    <div class="section tab-hidden" data-tab-section="shifts"></div>
+    <div class="section tab-hidden" data-tab-section="shifts">
+      <div class="shifts-header">
+        <h2 class="section-title">משמרות</h2>
+        <div id="shifts-message" class="shifts-message"></div>
+      </div>
+
+      <div class="shifts-filters">
+        <div class="filters-row">
+          <div class="field-row" style="flex: 1">
+            <span class="label">חיפוש חופשי</span>
+            <input id="shifts-search-term" type="text" placeholder="שם / מייל / ID משמרת" />
+          </div>
+          <div class="field-row" style="flex: 1">
+            <span class="label">עובד/ת</span>
+            <select id="shifts-employee-select">
+              <option value="">-- כל העובדים --</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="filters-row">
+          <div class="field-row" style="flex: 1">
+            <span class="label">מתאריך</span>
+            <input id="shifts-date-from" type="date" />
+          </div>
+          <div class="field-row" style="flex: 1">
+            <span class="label">עד תאריך</span>
+            <input id="shifts-date-to" type="date" />
+          </div>
+        </div>
+
+        <div class="quick-range" id="shifts-quick-range">
+          <button type="button" data-range="today">היום</button>
+          <button type="button" data-range="yesterday">אתמול</button>
+          <button type="button" data-range="week">שבוע נוכחי</button>
+          <button type="button" data-range="month">חודש נוכחי</button>
+          <button type="button" data-range="prevMonth">חודש קודם</button>
+        </div>
+
+        <div class="filters-row">
+          <div class="field-row" style="flex: 1">
+            <span class="label">סטטוס משמרת (רב בחירה)</span>
+            <select id="shifts-status-select" multiple size="4"></select>
+          </div>
+          <div class="field-row" style="flex: 1">
+            <span class="label">מסננים נוספים</span>
+            <div class="pill-toggle">
+              <label><input type="checkbox" id="shifts-only-issues" /> רק בעייתיות</label>
+              <label><input type="checkbox" id="shifts-only-bonuses" /> רק עם בונוסים</label>
+              <label><input type="checkbox" id="shifts-only-manual" /> רק עם שינוי ידני</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="shifts-actions">
+        <button id="shifts-search-btn" class="btn-primary" type="button">חיפוש</button>
+        <button id="shifts-clear-btn" class="btn-secondary" type="button">ניקוי</button>
+      </div>
+
+      <div class="shifts-results" id="shifts-results"></div>
+      <div class="shifts-actions">
+        <button id="shifts-load-more-btn" class="btn-secondary hidden" type="button">טען עוד</button>
+      </div>
+
+      <div id="shift-details" class="shift-details hidden">
+        <div class="shifts-header">
+          <h3 class="section-title">פרטי משמרת</h3>
+          <div id="shift-details-status" class="shift-row-bottom"></div>
+        </div>
+
+        <div id="shift-details-summary" class="muted" style="margin-bottom: 6px"></div>
+
+        <div class="shift-details-grid">
+          <div class="field-row">
+            <span class="label">תאריך</span>
+            <input id="shift-date" type="date" />
+          </div>
+          <div class="field-row">
+            <span class="label">שעת התחלה</span>
+            <input id="shift-start-time" type="time" />
+          </div>
+          <div class="field-row">
+            <span class="label">שעת סיום</span>
+            <input id="shift-end-time" type="time" />
+          </div>
+          <div class="field-row">
+            <span class="label">סטטוס</span>
+            <select id="shift-status"></select>
+          </div>
+          <div class="field-row">
+            <span class="label">סוג עבודה</span>
+            <input id="shift-work-type" type="text" />
+          </div>
+          <div class="field-row">
+            <span class="label">ID סוג עבודה</span>
+            <input id="shift-work-type-id" type="text" />
+          </div>
+          <div class="field-row">
+            <span class="label">מחלקה</span>
+            <input id="shift-department" type="text" />
+          </div>
+          <div class="field-row">
+            <span class="label">יחידות</span>
+            <input id="shift-units" type="text" disabled />
+          </div>
+        </div>
+
+        <div class="section" style="margin-top: 8px">
+          <span class="label">בונוסים</span>
+          <div id="shift-bonus-chips" class="bonus-chip-row"></div>
+          <div class="bonus-add-row">
+            <select id="shift-bonus-picker"></select>
+            <button id="shift-add-bonus-btn" class="btn-secondary" type="button">הוסף בונוס</button>
+          </div>
+        </div>
+
+        <div class="section" style="margin-top: 8px">
+          <span class="label">הערת מנהל</span>
+          <textarea
+            id="shift-manual-note"
+            rows="2"
+            style="width: 100%; background: var(--color-surface-2); border: 1px solid var(--color-border-strong); color: var(--color-text-primary); border-radius: var(--radius-sm); padding: 8px;"
+          ></textarea>
+        </div>
+
+        <div class="shifts-actions">
+          <button id="shift-save-btn" class="btn-primary" type="button">שמור עריכת משמרת</button>
+        </div>
+      </div>
+    </div>
 
     <div class="section tab-hidden" data-tab-section="settings">
       <div class="section" id="edit-mode-section">
@@ -720,6 +1027,13 @@
       // מצב עריכה: 'manual' (שמירה ידנית) או 'live' (שמירה בזמן אמת)
       var editMode = 'manual';
       var liveSaveTimer = null;
+
+      // Shifts tab state
+      var shifts = [];
+      var shiftsState = { filters: { limit: 50, offset: 0 }, hasMore: false, loading: false };
+      var selectedShift = null;
+      var bonusCatalog = [];
+      var shiftStatuses = [];
 
       function $(id) {
         return document.getElementById(id);
@@ -1210,6 +1524,8 @@
 
             rebuildLookups();
             setGlobalMessage('', false);
+
+            initShiftsTab();
 
             startSelectionPolling();
 
@@ -1836,6 +2152,623 @@
             setGlobalMessage('שגיאה בטיפול בסינון: ' + err, true);
           })
           .EMP_revealAllRowsIfFiltered();
+      }
+
+      // ----- Shifts tab helpers -----
+      function setShiftsMessage(text, isError) {
+        var el = $('shifts-message');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'shifts-message' + (isError ? ' error' : '');
+      }
+
+      function formatDateForInput(val) {
+        if (!val) return '';
+        var d = new Date(val);
+        if (!isNaN(d.getTime())) {
+          var y = d.getFullYear();
+          var m = ('0' + (d.getMonth() + 1)).slice(-2);
+          var dd = ('0' + d.getDate()).slice(-2);
+          return y + '-' + m + '-' + dd;
+        }
+        var s = String(val).trim();
+        var mIso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (mIso) return s;
+        var mDmy = s.match(/^(\d{2})[\/.](\d{2})[\/.](\d{4})$/);
+        if (mDmy) return mDmy[3] + '-' + mDmy[2] + '-' + mDmy[1];
+        return '';
+      }
+
+      function formatTimeForInput(val) {
+        if (!val) return '';
+        var d = new Date(val);
+        if (!isNaN(d.getTime())) {
+          var h = ('0' + d.getHours()).slice(-2);
+          var m = ('0' + d.getMinutes()).slice(-2);
+          return h + ':' + m;
+        }
+        var s = String(val).trim();
+        var mt = s.match(/^(\d{1,2}):(\d{2})/);
+        if (mt) return ('0' + mt[1]).slice(-2) + ':' + mt[2];
+        return '';
+      }
+
+      function populateEmployeesForShifts() {
+        var sel = $('shifts-employee-select');
+        if (!sel || !employees) return;
+        sel.innerHTML = '<option value="">-- כל העובדים --</option>';
+        var added = {};
+        for (var i = 0; i < employees.length; i++) {
+          var emp = employees[i];
+          if (!emp || !emp.id || !emp.name) continue;
+          if (added[emp.id]) continue;
+          added[emp.id] = true;
+          var opt = document.createElement('option');
+          opt.value = emp.id;
+          opt.textContent = emp.name + (emp.email ? ' (' + emp.email + ')' : '');
+          sel.appendChild(opt);
+        }
+      }
+
+      function populateStatusSelect(options) {
+        var sel = $('shifts-status-select');
+        var editSel = $('shift-status');
+        var opts = options || [];
+        if (!sel && !editSel) return;
+
+        var seen = {};
+        function appendOpt(selectEl, value) {
+          if (!selectEl) return;
+          var opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = value || 'לא ידוע';
+          selectEl.appendChild(opt);
+        }
+
+        if (sel) {
+          var prev = Array.prototype.slice.call(sel.selectedOptions || []).map(function (o) { return o.value; });
+          sel.innerHTML = '';
+          for (var i = 0; i < opts.length; i++) {
+            var val = opts[i] || '';
+            if (seen[val]) continue;
+            seen[val] = true;
+            appendOpt(sel, val);
+          }
+          // keep previous selections where possible
+          for (var p = 0; p < sel.options.length; p++) {
+            if (prev.indexOf(sel.options[p].value) !== -1) {
+              sel.options[p].selected = true;
+            }
+          }
+        }
+
+        if (editSel) {
+          var current = editSel.value;
+          editSel.innerHTML = '';
+          appendOpt(editSel, '');
+          var added = {};
+          for (var j = 0; j < opts.length; j++) {
+            var v = opts[j] || '';
+            if (added[v]) continue;
+            added[v] = true;
+            appendOpt(editSel, v);
+          }
+          if (current) editSel.value = current;
+        }
+      }
+
+      function getSelectedStatuses() {
+        var sel = $('shifts-status-select');
+        if (!sel) return [];
+        var out = [];
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].selected) out.push(sel.options[i].value);
+        }
+        return out;
+      }
+
+      function collectShiftFilters(resetOffset) {
+        var filters = shiftsState.filters || { limit: 50, offset: 0 };
+        var term = ($('shifts-search-term') && $('shifts-search-term').value) || '';
+        filters.search = term.trim();
+
+        filters.employeeId = ($('shifts-employee-select') && $('shifts-employee-select').value) || '';
+        filters.employeeName = '';
+        filters.email = '';
+        if (filters.search && filters.search.indexOf('@') !== -1) {
+          filters.email = filters.search;
+        } else if (filters.search && !filters.employeeId) {
+          filters.employeeName = filters.search;
+        }
+
+        filters.dateFrom = $('shifts-date-from') ? $('shifts-date-from').value : '';
+        filters.dateTo = $('shifts-date-to') ? $('shifts-date-to').value : '';
+        filters.statuses = getSelectedStatuses();
+        filters.onlyWithIssues = $('shifts-only-issues') ? $('shifts-only-issues').checked : false;
+        filters.onlyWithBonuses = $('shifts-only-bonuses') ? $('shifts-only-bonuses').checked : false;
+        filters.onlyManualChanges = $('shifts-only-manual') ? $('shifts-only-manual').checked : false;
+
+        if (resetOffset) filters.offset = 0;
+        if (!filters.limit) filters.limit = 50;
+
+        shiftsState.filters = filters;
+        return filters;
+      }
+
+      function applyQuickRange(range) {
+        var from = null;
+        var to = new Date();
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        to = new Date(today.getTime());
+
+        if (range === 'today') {
+          from = new Date(today.getTime());
+        } else if (range === 'yesterday') {
+          from = new Date(today.getTime());
+          from.setDate(from.getDate() - 1);
+          to.setDate(to.getDate() - 1);
+        } else if (range === 'week') {
+          from = new Date(today.getTime());
+          var day = from.getDay();
+          var diff = day === 0 ? 6 : day - 1; // week starts Monday
+          from.setDate(from.getDate() - diff);
+        } else if (range === 'month') {
+          from = new Date(today.getFullYear(), today.getMonth(), 1);
+          to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        } else if (range === 'prevMonth') {
+          from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+          to = new Date(today.getFullYear(), today.getMonth(), 0);
+        }
+
+        if (from) {
+          if ($('shifts-date-from')) $('shifts-date-from').value = formatDateForInput(from);
+          if ($('shifts-date-to')) $('shifts-date-to').value = formatDateForInput(to);
+        }
+      }
+
+      function resetShiftsFilters() {
+        if ($('shifts-search-term')) $('shifts-search-term').value = '';
+        if ($('shifts-employee-select')) $('shifts-employee-select').value = '';
+        if ($('shifts-date-from')) $('shifts-date-from').value = '';
+        if ($('shifts-date-to')) $('shifts-date-to').value = '';
+        if ($('shifts-only-issues')) $('shifts-only-issues').checked = false;
+        if ($('shifts-only-bonuses')) $('shifts-only-bonuses').checked = false;
+        if ($('shifts-only-manual')) $('shifts-only-manual').checked = false;
+        if ($('shifts-status-select')) {
+          for (var i = 0; i < $('shifts-status-select').options.length; i++) {
+            $('shifts-status-select').options[i].selected = false;
+          }
+        }
+        shiftsState.filters = { limit: 50, offset: 0 };
+      }
+
+      function renderShiftBadges(shift) {
+        var html = '';
+        if (shift.status) {
+          html += '<span class="shift-badge status">' + shift.status + '</span>';
+        }
+        if (shift.hasIssues) {
+          html += '<span class="shift-badge warn">בעיה</span>';
+        }
+        if (shift.isManualEdited) {
+          html += '<span class="shift-badge manual">תיקון ידני</span>';
+        }
+        if (shift.bonusIds && shift.bonusIds.length) {
+          html += '<span class="shift-badge">בונוסים: ' + shift.bonusIds.length + '</span>';
+        }
+        return html;
+      }
+
+      function renderShiftsResults() {
+        var container = $('shifts-results');
+        if (!container) return;
+        if (!shifts || shifts.length === 0) {
+          container.innerHTML = '<div class="shifts-empty">לא נמצאו משמרות</div>';
+          renderShiftDetails(null);
+        } else {
+          var html = '';
+          for (var i = 0; i < shifts.length; i++) {
+            var s = shifts[i];
+            var selected = selectedShift && selectedShift.shiftId === s.shiftId;
+            html += '<div class="shift-row' + (selected ? ' selected' : '') + '" data-shift-id="' + (s.shiftId || '') + '">';
+            html += '<div class="shift-row-top">';
+            html += '<span>' + (s.date || 'תאריך?') + '</span>';
+            html += '<span>' + (s.employeeName || '') + '</span>';
+            html += '</div>';
+            html += '<div class="shift-row-bottom">';
+            var timeStr = '';
+            if (s.startTime || s.endTime) {
+              timeStr = (s.startTime || '?') + '–' + (s.endTime || '?');
+            } else if (s.direction) {
+              timeStr = s.direction;
+            }
+            if (timeStr) {
+              html += '<span class="shift-badge">' + timeStr + '</span>';
+            }
+            html += renderShiftBadges(s);
+            html += '</div>';
+            html += '</div>';
+          }
+          container.innerHTML = html;
+          var rows = container.querySelectorAll('.shift-row');
+          for (var r = 0; r < rows.length; r++) {
+            rows[r].addEventListener('click', function (e) {
+              var id = e.currentTarget.getAttribute('data-shift-id');
+              onShiftRowClick(id);
+            });
+          }
+        }
+
+        var loadMoreBtn = $('shifts-load-more-btn');
+        if (loadMoreBtn) {
+          loadMoreBtn.classList.toggle('hidden', !shiftsState.hasMore);
+        }
+      }
+
+      function renderBonusPicker() {
+        var picker = $('shift-bonus-picker');
+        if (!picker) return;
+        picker.innerHTML = '';
+        var optEmpty = document.createElement('option');
+        optEmpty.value = '';
+        optEmpty.textContent = '-- בחר בונוס --';
+        picker.appendChild(optEmpty);
+        for (var i = 0; i < bonusCatalog.length; i++) {
+          var b = bonusCatalog[i];
+          if (!b || !b.bonusId) continue;
+          var opt = document.createElement('option');
+          opt.value = b.bonusId;
+          var label = b.name || b.bonusId;
+          if (b.amount) label += ' (' + b.amount + ')';
+          opt.textContent = label;
+          picker.appendChild(opt);
+        }
+      }
+
+      function renderBonusChips(shift) {
+        var box = $('shift-bonus-chips');
+        if (!box) return;
+        box.innerHTML = '';
+        if (!shift || !shift.bonusIds || shift.bonusIds.length === 0) {
+          box.innerHTML = '<div class="shifts-empty">אין בונוסים למשמרת</div>';
+          return;
+        }
+
+        function labelForBonus(id) {
+          for (var i = 0; i < bonusCatalog.length; i++) {
+            if (bonusCatalog[i].bonusId === id) return bonusCatalog[i].name || id;
+          }
+          return id;
+        }
+
+        for (var j = 0; j < shift.bonusIds.length; j++) {
+          (function (bonusId) {
+            var chip = document.createElement('div');
+            chip.className = 'bonus-chip';
+            chip.textContent = labelForBonus(bonusId);
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = '×';
+            btn.addEventListener('click', function () {
+              removeBonusFromShift(bonusId);
+            });
+            chip.appendChild(btn);
+            box.appendChild(chip);
+          })(shift.bonusIds[j]);
+        }
+      }
+
+      function renderShiftDetails(shift) {
+        var panel = $('shift-details');
+        if (!panel) return;
+
+        if (!shift) {
+          panel.classList.add('hidden');
+          selectedShift = null;
+          return;
+        }
+
+        selectedShift = shift;
+        panel.classList.remove('hidden');
+
+        var summary = $('shift-details-summary');
+        if (summary) {
+          summary.textContent =
+            (shift.employeeName || 'עובד לא ידוע') +
+            (shift.employeeId ? ' (ID ' + shift.employeeId + ')' : '') +
+            (shift.shiftId ? ' • ' + shift.shiftId : '');
+        }
+
+        var statusBox = $('shift-details-status');
+        if (statusBox) {
+          statusBox.innerHTML = renderShiftBadges(shift);
+        }
+
+        if ($('shift-date')) $('shift-date').value = formatDateForInput(shift.date);
+        if ($('shift-start-time')) $('shift-start-time').value = formatTimeForInput(shift.startTime);
+        if ($('shift-end-time')) $('shift-end-time').value = formatTimeForInput(shift.endTime);
+        if ($('shift-status')) {
+          populateStatusSelect(shiftStatuses);
+          $('shift-status').value = shift.status || '';
+        }
+        if ($('shift-work-type')) $('shift-work-type').value = shift.workType || '';
+        if ($('shift-work-type-id')) $('shift-work-type-id').value = shift.workTypeId || '';
+        if ($('shift-department')) $('shift-department').value = shift.department || '';
+        if ($('shift-units')) $('shift-units').value = shift.units || '';
+        if ($('shift-manual-note')) $('shift-manual-note').value = shift.manualNote || '';
+
+        renderBonusChips(shift);
+        renderBonusPicker();
+      }
+
+      function patchShiftInList(updated) {
+        if (!updated || !updated.shiftId) return;
+        for (var i = 0; i < shifts.length; i++) {
+          if (shifts[i].shiftId === updated.shiftId) {
+            shifts[i] = updated;
+            return;
+          }
+        }
+      }
+
+      function onShiftRowClick(shiftId) {
+        if (!shiftId) return;
+        for (var i = 0; i < shifts.length; i++) {
+          if (shifts[i].shiftId === shiftId) {
+            renderShiftDetails(shifts[i]);
+            renderShiftsResults();
+            return;
+          }
+        }
+        setShiftsMessage('המשמרת לא נמצאה ברשימה (יתכן והוסרה)', true);
+      }
+
+      function loadBonusCatalog() {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.ok) {
+              bonusCatalog = res.bonuses || [];
+              renderBonusPicker();
+              renderBonusChips(selectedShift);
+            }
+          })
+          .withFailureHandler(function (err) {
+            setShiftsMessage('שגיאה בטעינת בונוסים: ' + err, true);
+          })
+          .BONUSES_listAll();
+      }
+
+      function fetchShifts(reset) {
+        if (shiftsState.loading) return;
+        shiftsState.loading = true;
+        if (reset) {
+          shifts = [];
+          shiftsState.filters.offset = 0;
+          selectedShift = null;
+        }
+
+        var filters = collectShiftFilters(reset);
+        setShiftsMessage('טוען משמרות...', false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            shiftsState.loading = false;
+            if (!res || !res.ok) {
+              setShiftsMessage((res && res.error) || 'שגיאה בטעינת משמרות', true);
+              return;
+            }
+
+            if (res.statuses && res.statuses.length) {
+              var uniq = {};
+              shiftStatuses = [];
+              for (var i = 0; i < res.statuses.length; i++) {
+                var st = res.statuses[i] || '';
+                if (uniq[st]) continue;
+                uniq[st] = true;
+                shiftStatuses.push(st);
+              }
+            }
+            populateStatusSelect(shiftStatuses);
+
+            if (reset) {
+              shifts = res.shifts || [];
+            } else {
+              shifts = shifts.concat(res.shifts || []);
+            }
+            shiftsState.hasMore = !!res.hasMore;
+
+            if (!shifts.length) {
+              setShiftsMessage('לא נמצאו משמרות', false);
+            } else {
+              setShiftsMessage('', false);
+            }
+
+            renderShiftsResults();
+          })
+          .withFailureHandler(function (err) {
+            shiftsState.loading = false;
+            setShiftsMessage('שגיאה בטעינת משמרות: ' + err, true);
+          })
+          .SHIFTS_list(filters);
+      }
+
+      function addBonusToShift() {
+        if (!selectedShift) return;
+        var picker = $('shift-bonus-picker');
+        if (!picker) return;
+        var bonusId = picker.value;
+        if (!bonusId) {
+          setShiftsMessage('בחר בונוס להוספה', true);
+          return;
+        }
+        if (selectedShift.bonusIds && selectedShift.bonusIds.indexOf(bonusId) !== -1) {
+          setShiftsMessage('הבונוס כבר קיים במשמרת', true);
+          return;
+        }
+
+        var addBtn = $('shift-add-bonus-btn');
+        if (addBtn) addBtn.disabled = true;
+        setShiftsMessage('מוסיף בונוס...', false);
+
+        var nextIds = (selectedShift.bonusIds || []).concat([bonusId]);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (addBtn) addBtn.disabled = false;
+            if (!res || !res.ok) {
+              setShiftsMessage((res && res.error) || 'שגיאה בהוספת בונוס', true);
+              return;
+            }
+            selectedShift.bonusIds = res.bonusIds || nextIds;
+            selectedShift.isManualEdited = true;
+            patchShiftInList(selectedShift);
+            renderBonusChips(selectedShift);
+            renderShiftsResults();
+            setShiftsMessage('הבונוס נוסף למשמרת', false);
+          })
+          .withFailureHandler(function (err) {
+            if (addBtn) addBtn.disabled = false;
+            setShiftsMessage('שגיאה בהוספת בונוס: ' + err, true);
+          })
+          .SHIFTS_updateBonuses(selectedShift.shiftId, nextIds);
+      }
+
+      function removeBonusFromShift(bonusId) {
+        if (!selectedShift || !bonusId) return;
+        var remaining = (selectedShift.bonusIds || []).filter(function (id) { return id !== bonusId; });
+        setShiftsMessage('מסיר בונוס...', false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setShiftsMessage((res && res.error) || 'שגיאה בהסרת בונוס', true);
+              return;
+            }
+            selectedShift.bonusIds = res.bonusIds || remaining;
+            selectedShift.isManualEdited = true;
+            patchShiftInList(selectedShift);
+            renderBonusChips(selectedShift);
+            renderShiftsResults();
+            setShiftsMessage('הבונוס הוסר', false);
+          })
+          .withFailureHandler(function (err) {
+            setShiftsMessage('שגיאה בהסרת בונוס: ' + err, true);
+          })
+          .SHIFTS_updateBonuses(selectedShift.shiftId, remaining);
+      }
+
+      function collectShiftEditPayload() {
+        if (!selectedShift) return null;
+        var payload = { shiftId: selectedShift.shiftId };
+        var dateVal = $('shift-date') ? $('shift-date').value : '';
+        if (dateVal && dateVal !== formatDateForInput(selectedShift.date)) payload.date = dateVal;
+
+        var startVal = $('shift-start-time') ? $('shift-start-time').value : '';
+        if (startVal && startVal !== formatTimeForInput(selectedShift.startTime)) payload.startTime = startVal;
+
+        var endVal = $('shift-end-time') ? $('shift-end-time').value : '';
+        if (endVal && endVal !== formatTimeForInput(selectedShift.endTime)) payload.endTime = endVal;
+
+        var statusVal = $('shift-status') ? $('shift-status').value : '';
+        if (statusVal !== (selectedShift.status || '')) payload.status = statusVal;
+
+        var workTypeVal = $('shift-work-type') ? $('shift-work-type').value : '';
+        if (workTypeVal !== (selectedShift.workType || '')) payload.workType = workTypeVal;
+
+        var workTypeIdVal = $('shift-work-type-id') ? $('shift-work-type-id').value : '';
+        if (workTypeIdVal !== (selectedShift.workTypeId || '')) payload.workTypeId = workTypeIdVal;
+
+        var deptVal = $('shift-department') ? $('shift-department').value : '';
+        if (deptVal !== (selectedShift.department || '')) payload.department = deptVal;
+
+        var noteVal = $('shift-manual-note') ? $('shift-manual-note').value : '';
+        if (noteVal !== (selectedShift.manualNote || '')) payload.manualNote = noteVal;
+
+        return payload;
+      }
+
+      function saveShiftEdit() {
+        if (!selectedShift) return;
+        var payload = collectShiftEditPayload();
+        if (!payload) return;
+
+        var keys = Object.keys(payload);
+        if (keys.length <= 1) {
+          setShiftsMessage('אין שינויים לשמור', false);
+          return;
+        }
+
+        var saveBtn = $('shift-save-btn');
+        if (saveBtn) saveBtn.disabled = true;
+        setShiftsMessage('שומר שינויים במשמרת...', false);
+
+        // TODO: re-check this flow once the automatic shift-building script is finalized to ensure no conflict with computed fields.
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (saveBtn) saveBtn.disabled = false;
+            if (!res || !res.ok) {
+              setShiftsMessage((res && res.error) || 'שגיאה בשמירת משמרת', true);
+              return;
+            }
+
+            if (res.shift) {
+              selectedShift = res.shift;
+            } else {
+              // fallback merge
+              if (payload.status !== undefined) selectedShift.status = payload.status;
+              if (payload.date !== undefined) selectedShift.date = payload.date;
+              if (payload.startTime !== undefined) selectedShift.startTime = payload.startTime;
+              if (payload.endTime !== undefined) selectedShift.endTime = payload.endTime;
+              if (payload.workType !== undefined) selectedShift.workType = payload.workType;
+              if (payload.workTypeId !== undefined) selectedShift.workTypeId = payload.workTypeId;
+              if (payload.department !== undefined) selectedShift.department = payload.department;
+              if (payload.manualNote !== undefined) selectedShift.manualNote = payload.manualNote;
+              selectedShift.isManualEdited = true;
+            }
+
+            patchShiftInList(selectedShift);
+            renderShiftDetails(selectedShift);
+            renderShiftsResults();
+            setShiftsMessage('השינויים נשמרו', false);
+          })
+          .withFailureHandler(function (err) {
+            if (saveBtn) saveBtn.disabled = false;
+            setShiftsMessage('שגיאה בשמירת משמרת: ' + err, true);
+          })
+          .SHIFTS_updateShift(payload);
+      }
+
+      function initShiftsTab() {
+        populateEmployeesForShifts();
+        populateStatusSelect(shiftStatuses);
+        loadBonusCatalog();
+
+        var searchBtn = $('shifts-search-btn');
+        if (searchBtn) searchBtn.addEventListener('click', function () { fetchShifts(true); });
+        var clearBtn = $('shifts-clear-btn');
+        if (clearBtn) clearBtn.addEventListener('click', function () { resetShiftsFilters(); fetchShifts(true); });
+        var loadMoreBtn = $('shifts-load-more-btn');
+        if (loadMoreBtn) loadMoreBtn.addEventListener('click', function () {
+          shiftsState.filters.offset = (shiftsState.filters.offset || 0) + (shiftsState.filters.limit || 50);
+          fetchShifts(false);
+        });
+
+        var quick = document.querySelectorAll('#shifts-quick-range button');
+        for (var i = 0; i < quick.length; i++) {
+          quick[i].addEventListener('click', function (e) {
+            var r = e.currentTarget.getAttribute('data-range');
+            applyQuickRange(r);
+          });
+        }
+
+        var addBonusBtn = $('shift-add-bonus-btn');
+        if (addBonusBtn) addBonusBtn.addEventListener('click', addBonusToShift);
+
+        var saveBtn = $('shift-save-btn');
+        if (saveBtn) saveBtn.addEventListener('click', saveShiftEdit);
+
+        fetchShifts(true);
       }
 
       window.addEventListener('load', init);
