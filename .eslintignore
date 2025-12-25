@@ -1,0 +1,6 @@
+node_modules
+appsscript.json
+.clasp.json
+.git
+dist/
+build/

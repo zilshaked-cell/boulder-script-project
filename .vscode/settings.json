@@ -21,11 +21,18 @@
   "github.copilot.chat.checkpoints.showFileChanges": true,
   "github.copilot.chat.tools.execution.allowCommands": false,
   "github.copilot.chat.tools.execution.allowGlobalTools": false,
+  "eslint.packageManager": "npm",
+  "eslint.workingDirectories": [
+    {
+      "directory": ".",
+      "changeProcessCWD": true
+    }
+  ],
   "eslint.validate": [
     "javascript"
   ],
   "eslint.alwaysShowStatus": true,
   "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
+    "source.fixAll.eslint": true
   }
 }
