@@ -94,8 +94,14 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
   },
-  "taskButtons.tasks": [
-    "script: clasp pull",
-    "script: clasp sync (status+push)"
+  "taskButtons.buttons": [
+    {
+      "task": "script: clasp pull",
+      "buttonLabel": "clasp pull"
+    },
+    {
+      "task": "script: clasp sync (status+push)",
+      "buttonLabel": "clasp sync"
+    }
   ]
 }
