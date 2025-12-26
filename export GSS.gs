@@ -4,10 +4,13 @@
    ========================================================= */
 
 /** ===== FIXED TARGET FOLDER (Drive) ===== */
+// Parent folder: "קבצי סיכום GSS ל GPT". The script will create/use a per-spreadsheet subfolder under this.
 const TARGET_FOLDER_ID = "1uALJXfY-9BTibw0BNI6JeFU4QXAMjG7y";
+// Project-specific child folder: "שכר בולדר חיפה" (fallback if parent is inaccessible)
+const TARGET_FOLDER_ID_FALLBACK = "1jBhLxYjWPLPmR99voDSsiTqm1kbLgDN5";
 
-/** ===== Menu (רק כשהספרייה רצה כפרויקט בפני עצמו; בבאונד זה לא נטרigger) ===== */
-function onOpen() {
+/** ===== Menu (standalone library only; not auto-wired to avoid overriding host onOpen) ===== */
+function exportGSS_onOpenStandalone() {
   SpreadsheetApp.getUi()
     .createMenu("GPT Export (LIB)")
     .addItem("All Sheets (Auto)", "exportAllSheets")
@@ -654,16 +657,40 @@ function pad4_(n) {
 function escapeRegExp_(s) {
   return s.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
 }
+function safeEmail_() {
+  try {
+    return Session.getActiveUser() && Session.getActiveUser().getEmail
+      ? Session.getActiveUser().getEmail()
+      : null;
+  } catch (_) {
+    try {
+      return Session.getEffectiveUser && Session.getEffectiveUser().getEmail
+        ? Session.getEffectiveUser().getEmail()
+        : null;
+    } catch (__) {
+      return null;
+    }
+  }
+}
 
 /** ===== Drive I/O & folders ===== */
 function getFixedTargetFolder_() {
-  try {
-    return DriveApp.getFolderById(TARGET_FOLDER_ID);
-  } catch (_) {
-    throw new Error(
-      "Target folder not found or no access. Update TARGET_FOLDER_ID."
-    );
+  const ids = [TARGET_FOLDER_ID, TARGET_FOLDER_ID_FALLBACK].filter(Boolean);
+  const errors = [];
+  for (const id of ids) {
+    try {
+      return DriveApp.getFolderById(id);
+    } catch (e) {
+      errors.push(id + ": " + (e && e.message ? e.message : e));
+    }
   }
+  const who = safeEmail_();
+  throw new Error(
+    "Target folder not found or no access. Tried: " +
+      ids.join(", ") +
+      (who ? " | User: " + who : "") +
+      (errors.length ? " | Errors: " + errors.join(" || ") : "")
+  );
 }
 function getOrCreateSpreadsheetFolderUnderTarget_(targetFolder, ss) {
   const name = sanitize_(ss.getName());
@@ -764,18 +791,14 @@ function showResultDialog_(res) {
   ui.alert("GPT Export", lines.join("\n\n"), ui.ButtonSet.OK);
 }
 
-// Expose library API when running as local code (fallback if library missing)
-if (typeof ExportGSS === "undefined") {
-  var ExportGSS = {
-    exportAllSheets: exportAllSheets,
-    exportSchemaOnlyAll: exportSchemaOnlyAll,
-    openExportSheetDialog: openExportSheetDialog,
-    exportSingleSheet: exportSingleSheet,
-    refreshSheetList: refreshSheetList,
-    getSheetList: getSheetList,
-    openSpreadsheetFolder: openSpreadsheetFolder,
-  };
-}
-if (typeof exportgoogleSS === "undefined") {
-  var exportgoogleSS = ExportGSS;
-}
+// Expose / override library API with this local code to avoid stale external versions
+var ExportGSS = {
+  exportAllSheets: exportAllSheets,
+  exportSchemaOnlyAll: exportSchemaOnlyAll,
+  openExportSheetDialog: openExportSheetDialog,
+  exportSingleSheet: exportSingleSheet,
+  refreshSheetList: refreshSheetList,
+  getSheetList: getSheetList,
+  openSpreadsheetFolder: openSpreadsheetFolder,
+};
+var exportgoogleSS = ExportGSS;
