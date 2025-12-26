@@ -109,6 +109,18 @@
     display: none;
   }
 
+  #shifts-search-results {
+    border: 1px solid var(--color-border-strong);
+    max-height: 160px;
+    overflow-y: auto;
+    margin-top: 4px;
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+  }
+  #shifts-search-results.hidden {
+    display: none;
+  }
+
   .search-item {
     padding: 6px 8px;
     cursor: pointer;
@@ -891,6 +903,7 @@
           <div class="field-row" style="flex: 1">
             <span class="label">חיפוש חופשי</span>
             <input id="shifts-search-term" type="text" placeholder="שם / מייל / ID משמרת" />
+            <div id="shifts-search-results" class="hidden"></div>
           </div>
           <div class="field-row" style="flex: 1">
             <span class="label">עובד/ת</span>
@@ -936,6 +949,7 @@
       </div>
 
       <div class="shifts-actions">
+        <button id="shifts-load-active-btn" class="btn-secondary" type="button">טען מהשורה הפעילה בגיליון</button>
         <button id="shifts-search-btn" class="btn-primary" type="button">חיפוש</button>
         <button id="shifts-clear-btn" class="btn-secondary" type="button">ניקוי</button>
       </div>
@@ -2233,6 +2247,171 @@
         el.className = 'shifts-message' + (isError ? ' error' : '');
       }
 
+      function hideShiftSearchResults() {
+        var box = $('shifts-search-results');
+        if (!box) return;
+        box.classList.add('hidden');
+        box.innerHTML = '';
+      }
+
+      function renderShiftSearchResults(term) {
+        var box = $('shifts-search-results');
+        if (!box) return;
+        var q = (term || '').trim().toLowerCase();
+        if (!q) {
+          hideShiftSearchResults();
+          return;
+        }
+
+        var matches = [];
+        for (var i = 0; i < shifts.length; i++) {
+          var s = shifts[i];
+          var blob = (
+            (s.shiftId || '') + ' ' +
+            (s.employeeName || '') + ' ' +
+            (s.employeeId || '') + ' ' +
+            (s.workType || '') + ' ' +
+            (s.department || '')
+          ).toLowerCase();
+          if (blob.indexOf(q) !== -1) {
+            matches.push(s);
+          }
+          if (matches.length >= 10) break;
+        }
+
+        var html = '';
+        if (!matches.length) {
+          html += '<div class="search-item small">אין תוצאות כרגע. נסה חיפוש או טען בחירה מהגיליון.</div>';
+        } else {
+          for (var j = 0; j < matches.length; j++) {
+            var m = matches[j];
+            html += '<div class="search-item" data-type="shift" data-id="' + (m.shiftId || '') + '">';
+            html += (m.employeeName || 'ללא שם') + (m.employeeId ? ' (ID ' + m.employeeId + ')' : '');
+            if (m.shiftId) html += ' • #' + m.shiftId;
+            if (m.date) html += ' • ' + m.date;
+            html += '</div>';
+          }
+        }
+
+        box.innerHTML = html;
+        box.classList.remove('hidden');
+      }
+
+      function onShiftsSearchResultsClick(e) {
+        var el = e.target;
+        while (el && !el.classList.contains('search-item')) {
+          el = el.parentElement;
+        }
+        if (!el) return;
+
+        var type = el.getAttribute('data-type');
+        if (type === 'shift') {
+          var id = el.getAttribute('data-id');
+          hideShiftSearchResults();
+          if (id) {
+            if (!onShiftRowClick(id)) {
+              loadShiftById(id);
+            }
+          }
+        }
+      }
+
+      function onShiftsSearchInputChange(e) {
+        renderShiftSearchResults((e && e.target && e.target.value) || '');
+      }
+
+      function onShiftsSearchKeyDown(e) {
+        if (e.key === 'Enter') {
+          var box = $('shifts-search-results');
+          if (box && !box.classList.contains('hidden')) {
+            var first = box.querySelector('.search-item');
+            if (first) {
+              first.click();
+              e.preventDefault();
+              return;
+            }
+          }
+        }
+
+        if (e.key === 'Escape') {
+          hideShiftSearchResults();
+        }
+      }
+
+      function upsertShiftInList(shift) {
+        if (!shift || !shift.shiftId) return;
+        var replaced = false;
+        for (var i = 0; i < shifts.length; i++) {
+          if (shifts[i].shiftId === shift.shiftId) {
+            shifts[i] = shift;
+            replaced = true;
+            break;
+          }
+        }
+        if (!replaced) {
+          shifts.unshift(shift);
+        }
+      }
+
+      function loadShiftById(shiftId) {
+        if (!shiftId) return;
+        setShiftsMessage('טוען משמרת #' + shiftId + '...', false);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok || !res.shift) {
+              setShiftsMessage((res && res.error) || 'המשמרת לא נמצאה', true);
+              return;
+            }
+            selectedShift = res.shift;
+            upsertShiftInList(res.shift);
+            renderShiftDetails(res.shift);
+            renderShiftsResults();
+            var input = $('shifts-search-term');
+            if (input) input.value = res.shift.shiftId || input.value;
+            renderShiftSearchResults(input ? input.value : '');
+            setShiftsMessage('', false);
+          })
+          .withFailureHandler(function (err) {
+            setShiftsMessage('שגיאה בטעינת משמרת: ' + err, true);
+          })
+          .SHIFTS_get(shiftId);
+      }
+
+      function loadShiftFromSheetSelection() {
+        setShiftsMessage('בודק בחירה פעילה בגיליון...', false);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.ok) {
+              setShiftsMessage((res && res.error) || 'שגיאה בקריאה מהגיליון', true);
+              return;
+            }
+            if (res.shiftId) {
+              loadShiftById(res.shiftId);
+              return;
+            }
+
+            var nameCandidate = res.employeeName || res.email || '';
+            var empId = res.employeeId || '';
+            var searchInput = $('shifts-search-term');
+            if (searchInput && nameCandidate) searchInput.value = nameCandidate;
+            if ($('shifts-employee-select') && empId) {
+              $('shifts-employee-select').value = empId;
+            }
+
+            if (empId || nameCandidate) {
+              hideShiftSearchResults();
+              fetchShifts(true);
+              return;
+            }
+
+            setShiftsMessage('לא נמצאה משמרת או עובד בשורה הפעילה.', true);
+          })
+          .withFailureHandler(function (err) {
+            setShiftsMessage('שגיאה בקריאה מהגיליון: ' + err, true);
+          })
+          .SHIFTS_getSelectedRef();
+      }
+
       function formatDateForInput(val) {
         if (!val) return '';
         var d = new Date(val);
@@ -2584,15 +2763,16 @@
       }
 
       function onShiftRowClick(shiftId) {
-        if (!shiftId) return;
+        if (!shiftId) return false;
         for (var i = 0; i < shifts.length; i++) {
           if (shifts[i].shiftId === shiftId) {
             renderShiftDetails(shifts[i]);
             renderShiftsResults();
-            return;
+            return true;
           }
         }
         setShiftsMessage('המשמרת לא נמצאה ברשימה (יתכן והוסרה)', true);
+        return false;
       }
 
       function loadBonusCatalog() {
@@ -2656,6 +2836,7 @@
             }
 
             renderShiftsResults();
+            renderShiftSearchResults($('shifts-search-term') ? $('shifts-search-term').value : '');
           })
           .withFailureHandler(function (err) {
             shiftsState.loading = false;
@@ -2831,6 +3012,21 @@
             var r = e.currentTarget.getAttribute('data-range');
             applyQuickRange(r);
           });
+        }
+
+        var searchInput = $('shifts-search-term');
+        if (searchInput) {
+          searchInput.addEventListener('input', onShiftsSearchInputChange);
+          searchInput.addEventListener('keydown', onShiftsSearchKeyDown);
+        }
+        var searchBox = $('shifts-search-results');
+        if (searchBox) {
+          searchBox.addEventListener('click', onShiftsSearchResultsClick);
+        }
+
+        var loadActiveBtn = $('shifts-load-active-btn');
+        if (loadActiveBtn) {
+          loadActiveBtn.addEventListener('click', loadShiftFromSheetSelection);
         }
 
         var addBonusBtn = $('shift-add-bonus-btn');
