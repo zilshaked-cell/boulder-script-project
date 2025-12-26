@@ -1,3 +1,5 @@
+/* global SHEET_NAME, OPT */
+/* exported SHIFTS_list, SHIFTS_get, SHIFTS_updateShift, SHIFTS_updateBonuses, BONUSES_listAll */
 var SHIFTS = SHIFTS || {};
 var BONUSES = BONUSES || {};
 
@@ -5,7 +7,7 @@ var BONUSES = BONUSES || {};
   'use strict';
 
   var CONFIG = {
-    SHEET_NAME: typeof SHEET_NAME !== 'undefined' ? SHEET_NAME : 'דיווח שעות עבודה',
+    SHEET_NAME: typeof SHEET_NAME !== 'undefined' ? SHEET_NAME : 'משמרות',
     HEADER_ROW: 1,
     BONUS_SEPARATOR: ',',
     COLS: {
@@ -83,7 +85,23 @@ var BONUSES = BONUSES || {};
     return cfg.fallbackIndex || null;
   }
 
-  function ensureColumnsForWrite_(sheet, headerMap, keys) {
+  var WRITE_ALLOWED_COLS = {
+    bonusIds: true,
+    manualEdited: true,
+    lastUpdatedBySidebar: true,
+    lastUpdatedAt: true
+  };
+
+  function hasHeader_(map, cfg) {
+    if (!cfg || !cfg.candidates) return false;
+    for (var i = 0; i < cfg.candidates.length; i++) {
+      var k = norm_(cfg.candidates[i]);
+      if (map[k]) return true;
+    }
+    return false;
+  }
+
+  function ensureColumnsForWrite_(sheet, headerMap, keys, allowlist) {
     var headers = sheet.getRange(CONFIG.HEADER_ROW, 1, 1, sheet.getLastColumn()).getValues()[0];
     var updated = false;
 
@@ -92,6 +110,8 @@ var BONUSES = BONUSES || {};
       var cfg = CONFIG.COLS[key];
       var col = cfg ? pickCol_(headerMap, cfg) : null;
       if (col) continue;
+
+      if (!allowlist || !allowlist[key]) continue; // do not auto-create non-allowed columns
 
       headers.push(cfg && cfg.candidates && cfg.candidates.length ? cfg.candidates[0] : key);
       updated = true;
@@ -118,14 +138,16 @@ var BONUSES = BONUSES || {};
     var s = norm_(val);
     if (!s) return '';
 
+    // eslint-disable-next-line no-useless-escape
     var mIso = s.match(/^(\d{4})[\/.\-](\d{2})[\/.\-](\d{2})$/);
     if (mIso) return mIso[1] + '-' + mIso[2] + '-' + mIso[3];
 
+    // eslint-disable-next-line no-useless-escape
     var mDmy = s.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})$/);
     if (mDmy) return mDmy[3] + '-' + mDmy[2] + '-' + mDmy[1];
 
-    var d = new Date(s);
-    if (!isNaN(d.getTime())) return toIsoDate_(d);
+    var parsedDate = new Date(s);
+    if (!isNaN(parsedDate.getTime())) return toIsoDate_(parsedDate);
     return s;
   }
 
@@ -346,11 +368,10 @@ var BONUSES = BONUSES || {};
     try {
       var sheet = getSheet_();
       var layoutInfo = getLayout_(sheet);
-      var layout = layoutInfo.layout;
-      var headerMap = layoutInfo.map;
 
-      headerMap = ensureColumnsForWrite_(sheet, headerMap, ['bonusIds', 'manualEdited', 'lastUpdatedBySidebar', 'lastUpdatedAt']);
-      layout = getLayout_(sheet).layout;
+      ensureColumnsForWrite_(sheet, layoutInfo.map, ['bonusIds', 'manualEdited', 'lastUpdatedBySidebar', 'lastUpdatedAt'], WRITE_ALLOWED_COLS);
+      layoutInfo = getLayout_(sheet);
+      var layout = layoutInfo.layout;
 
       var rowIndex = findRowByShiftId_(sheet, layout, shiftId);
       if (!rowIndex) return { ok: false, error: 'Shift not found for shiftId=' + shiftId };
@@ -369,7 +390,7 @@ var BONUSES = BONUSES || {};
       }
       return { ok: true, bonusIds: uniqueIds };
     } finally {
-      try { lock.releaseLock(); } catch (_e) {}
+      try { lock.releaseLock(); } catch (_e) { /* ignore lock release failures */ }
     }
   }
 
@@ -388,51 +409,47 @@ var BONUSES = BONUSES || {};
     try {
       var sheet = getSheet_();
       var layoutInfo = getLayout_(sheet);
-      var layout = layoutInfo.layout;
-      var headerMap = layoutInfo.map;
 
-      headerMap = ensureColumnsForWrite_(sheet, headerMap, [
-        'status',
-        'workDate',
-        'startTime',
-        'endTime',
+      ensureColumnsForWrite_(sheet, layoutInfo.map, [
         'bonusIds',
         'manualEdited',
         'manualNote',
         'lastUpdatedBySidebar',
         'lastUpdatedAt'
-      ]);
-      layout = getLayout_(sheet).layout;
+      ], WRITE_ALLOWED_COLS);
+
+      layoutInfo = getLayout_(sheet);
+      var layout = layoutInfo.layout;
 
       var rowIndex = findRowByShiftId_(sheet, layout, payload.shiftId);
       if (!rowIndex) return { ok: false, error: 'Shift not found for shiftId=' + payload.shiftId };
 
-      if (payload.status !== undefined && layout.status) {
+      if (payload.status !== undefined && layout.status && hasHeader_(layoutInfo.map, CONFIG.COLS.status)) {
         sheet.getRange(rowIndex, layout.status).setValue(payload.status);
       }
-      if (payload.workType !== undefined && layout.jobName) {
+      if (payload.workType !== undefined && layout.jobName && hasHeader_(layoutInfo.map, CONFIG.COLS.jobName)) {
         sheet.getRange(rowIndex, layout.jobName).setValue(payload.workType);
       }
-      if (payload.workTypeId !== undefined && layout.jobId) {
+      if (payload.workTypeId !== undefined && layout.jobId && hasHeader_(layoutInfo.map, CONFIG.COLS.jobId)) {
         sheet.getRange(rowIndex, layout.jobId).setValue(payload.workTypeId);
       }
-      if (payload.department !== undefined && layout.department) {
+      if (payload.department !== undefined && layout.department && hasHeader_(layoutInfo.map, CONFIG.COLS.department)) {
         sheet.getRange(rowIndex, layout.department).setValue(payload.department);
       }
-      if (payload.date !== undefined && layout.workDate) {
-        sheet.getRange(rowIndex, layout.workDate).setValue(payload.date);
+      if (payload.date !== undefined && layout.workDate && hasHeader_(layoutInfo.map, CONFIG.COLS.workDate)) {
+        sheet.getRange(rowIndex, layout.workDate).setValue(toIsoDate_(payload.date));
       }
-      if (payload.startTime !== undefined && layout.startTime) {
-        sheet.getRange(rowIndex, layout.startTime).setValue(payload.startTime);
+      if (payload.startTime !== undefined && layout.startTime && hasHeader_(layoutInfo.map, CONFIG.COLS.startTime)) {
+        sheet.getRange(rowIndex, layout.startTime).setValue(toTimeStr_(payload.startTime));
       }
-      if (payload.endTime !== undefined && layout.endTime) {
-        sheet.getRange(rowIndex, layout.endTime).setValue(payload.endTime);
+      if (payload.endTime !== undefined && layout.endTime && hasHeader_(layoutInfo.map, CONFIG.COLS.endTime)) {
+        sheet.getRange(rowIndex, layout.endTime).setValue(toTimeStr_(payload.endTime));
       }
-      if (payload.bonusIds !== undefined && layout.bonusIds) {
+      if (payload.bonusIds !== undefined && layout.bonusIds && hasHeader_(layoutInfo.map, CONFIG.COLS.bonusIds)) {
         var ids = splitBonusIds_(payload.bonusIds);
         sheet.getRange(rowIndex, layout.bonusIds).setValue(ids.join(CONFIG.BONUS_SEPARATOR));
       }
-      if (payload.manualNote !== undefined && layout.manualNote) {
+      if (payload.manualNote !== undefined && layout.manualNote && hasHeader_(layoutInfo.map, CONFIG.COLS.manualNote)) {
         sheet.getRange(rowIndex, layout.manualNote).setValue(payload.manualNote);
       }
 
@@ -444,7 +461,7 @@ var BONUSES = BONUSES || {};
       if (updated && updated.ok) return updated;
       return { ok: true };
     } finally {
-      try { lock.releaseLock(); } catch (_e) {}
+      try { lock.releaseLock(); } catch (_e) { /* ignore lock release failures */ }
     }
   }
 
@@ -519,7 +536,7 @@ var BONUSES = BONUSES || {};
       if (typeof OPT !== 'undefined' && OPT.ensureCatalogIds) {
         OPT.ensureCatalogIds(sh);
       }
-    } catch (_e) {}
+    } catch (_e) { /* ignore catalog ID enforcement failures */ }
 
     var lastRow = sh.getLastRow();
     if (lastRow <= BONUS_CONFIG.HEADER_ROW) return { ok: true, bonuses: [] };
@@ -567,6 +584,7 @@ var BONUSES = BONUSES || {};
 })();
 
 // ---- Global wrappers for google.script.run ----
+// eslint-disable-next-line no-unused-vars
 function SHIFTS_list(filters) {
   if (typeof SHIFTS !== 'undefined' && SHIFTS.list) {
     return SHIFTS.list(filters || {});
@@ -574,6 +592,7 @@ function SHIFTS_list(filters) {
   return { ok: false, error: 'SHIFTS module missing' };
 }
 
+// eslint-disable-next-line no-unused-vars
 function SHIFTS_get(shiftId) {
   if (typeof SHIFTS !== 'undefined' && SHIFTS.get) {
     return SHIFTS.get(shiftId);
@@ -581,6 +600,7 @@ function SHIFTS_get(shiftId) {
   return { ok: false, error: 'SHIFTS module missing' };
 }
 
+// eslint-disable-next-line no-unused-vars
 function SHIFTS_updateShift(payload) {
   if (typeof SHIFTS !== 'undefined' && SHIFTS.updateShift) {
     return SHIFTS.updateShift(payload || {});
@@ -588,6 +608,7 @@ function SHIFTS_updateShift(payload) {
   return { ok: false, error: 'SHIFTS module missing' };
 }
 
+// eslint-disable-next-line no-unused-vars
 function SHIFTS_updateBonuses(shiftId, bonusIds) {
   if (typeof SHIFTS !== 'undefined' && SHIFTS.updateBonuses) {
     return SHIFTS.updateBonuses(shiftId, bonusIds || []);
@@ -595,6 +616,7 @@ function SHIFTS_updateBonuses(shiftId, bonusIds) {
   return { ok: false, error: 'SHIFTS module missing' };
 }
 
+// eslint-disable-next-line no-unused-vars
 function BONUSES_listAll() {
   if (typeof BONUSES !== 'undefined' && BONUSES.listAll) {
     return BONUSES.listAll();
