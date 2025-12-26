@@ -838,6 +838,16 @@ var EMP = EMP || {};
     var sheet = getEmployeesSheet_();
     if (!sheet) return;
 
+    try {
+      SpreadsheetApp.getUi()
+        .createMenu("בולדר עובדים")
+        .addItem("פתח סייד בר עובדים", "EMP_openSidebar")
+        .addItem("רענן סייד בר", "EMP_reloadSidebar")
+        .addToUi();
+    } catch (_menuErr) {
+      // ignore menu errors so onOpen continues
+    }
+
     ensureEmployeeIds_(sheet);
     checkSchemaAndMaybeEmail_(sheet, "onOpen");
 
@@ -902,6 +912,7 @@ var EMP = EMP || {};
   EMP.handleEdit = handleEdit_;
   EMP.hasHiddenRowsForEmployee = hasHiddenRowsForEmployee_;
   EMP.ensureEmployeeIds = ensureEmployeeIds_;
+  EMP.showSidebar = showSidebar_;
 })();
 
 /** === עטיפות גלובליות לטריגרים ול-HTML === */
@@ -1019,6 +1030,24 @@ function EMP_getSidebarBootstrap() {
   } catch (err) {
     EMP_debugLog("EMP_getSidebarBootstrap error: " + err);
     return { error: "EMP_getSidebarBootstrap failed: " + err };
+  }
+}
+
+function EMP_openSidebar() {
+  try {
+    if (typeof EMP !== "undefined" && typeof EMP.showSidebar === "function") {
+      EMP.showSidebar("");
+    }
+  } catch (err) {
+    Logger.log("EMP_openSidebar error: " + err);
+  }
+}
+
+function EMP_reloadSidebar() {
+  try {
+    EMP_openSidebar();
+  } catch (err) {
+    Logger.log("EMP_reloadSidebar error: " + err);
   }
 }
 
@@ -1467,7 +1496,11 @@ function EMP_saveEmployeePayload(payload) {
       return { ok: false, error: "payload לא תקין מה-Sidebar" };
     }
 
-    if (typeof EMP !== "undefined" && EMP && typeof EMP.saveEmployeePayload === "function") {
+    if (
+      typeof EMP !== "undefined" &&
+      EMP &&
+      typeof EMP.saveEmployeePayload === "function"
+    ) {
       return EMP.saveEmployeePayload(payload);
     }
     if (typeof saveEmployeePayload_ === "function") {

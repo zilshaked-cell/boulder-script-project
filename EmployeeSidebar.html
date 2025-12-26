@@ -348,16 +348,13 @@
     position: relative;
   }
 
-  .tab-button::after {
-    content: attr(data-short);
+  .tab-label {
     display: block;
     text-align: center;
     line-height: 1.1;
-  }
-
-  .tab-label {
-    position: absolute;
-    left: -9999px;
+    width: 100%;
+    padding: 0 4px;
+    box-sizing: border-box;
   }
 
   .tab-button.active {
@@ -663,10 +660,61 @@
     font-size: 12px;
     padding: 6px 0;
   }
+
+  .sidebar-topbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .sidebar-icon-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-text-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-icon-btn:hover {
+    background: var(--color-surface-highlight);
+    border-color: var(--color-accent);
+  }
+
+  .sidebar-icon-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .sidebar-icon-btn span {
+    font-size: 16px;
+    line-height: 1;
+  }
 </style>
 
   </head>
   <body>
+    <div class="sidebar-topbar">
+      <button id="sidebar-close-btn" class="sidebar-icon-btn" type="button" title="סגור את הסייד בר">
+        <span aria-hidden="true">&times;</span>
+      </button>
+      <button id="sidebar-refresh-btn" class="sidebar-icon-btn" type="button" title="רענן את הנתונים בסייד בר">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 1 3 6.7"></path>
+          <polyline points="3 6 3 12 9 12"></polyline>
+        </svg>
+      </button>
+    </div>
     <div id="global-message"></div>
 
     <div class="sidebar-layout">
@@ -1045,6 +1093,20 @@
         el.className = '';
         if (!text) return;
         el.className = isError ? 'error' : 'info';
+      }
+
+      function closeSidebar() {
+        if (google && google.script && google.script.host && google.script.host.close) {
+          google.script.host.close();
+          return;
+        }
+        window.close();
+      }
+
+      function reloadSidebar() {
+        setGlobalMessage('מרענן את הסייד בר...', false);
+        stopSelectionPolling();
+        window.location.reload();
       }
 
       function formatPhoneForDisplay(val) {
@@ -1498,6 +1560,15 @@
 
       function init() {
         setGlobalMessage('טוען נתוני עובדים...', false);
+
+        var refreshBtn = $('sidebar-refresh-btn');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', reloadSidebar);
+        }
+        var closeBtn = $('sidebar-close-btn');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', closeSidebar);
+        }
 
         google.script.run
           .withSuccessHandler(function (res) {
