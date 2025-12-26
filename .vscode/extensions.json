@@ -5,6 +5,8 @@
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode",
     "eamodio.gitlens",
-    "usernamehw.errorlens"
+    "usernamehw.errorlens",
+    "Chlour.custom-bottom-status-bar",
+    "ttereves.taskbuttons"
   ]
 }

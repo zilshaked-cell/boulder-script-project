@@ -57,6 +57,7 @@
       "when": ".*"
     }
   ],
+  "customStatusBar.showOnStartup": true,
   "github.copilot.enable": {
     "*": true,
     "markdown": false,
