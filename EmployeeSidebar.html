@@ -121,6 +121,18 @@
     display: none;
   }
 
+  #shifts-employee-search-results {
+    border: 1px solid var(--color-border-strong);
+    max-height: 160px;
+    overflow-y: auto;
+    margin-top: 4px;
+    background: var(--color-surface);
+    border-radius: var(--radius-sm);
+  }
+  #shifts-employee-search-results.hidden {
+    display: none;
+  }
+
   .search-item {
     padding: 6px 8px;
     cursor: pointer;
@@ -549,6 +561,48 @@
   }
   .quick-range button:hover {
     border-color: var(--color-accent);
+  }
+  .quick-range button.active {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: #22c55e;
+    color: #bbf7d0;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.32);
+  }
+
+  .label-with-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .inline-toggle {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .filter-toggle {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border-strong);
+    color: var(--color-text-primary);
+    padding: 8px 12px;
+    border-radius: var(--radius-pill);
+    font-weight: 700;
+    min-height: 36px;
+  }
+  .filter-toggle.active {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: #22c55e;
+    color: #bbf7d0;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.3);
+  }
+
+  .toggle-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: stretch;
   }
 
   .shifts-results {
@@ -1015,16 +1069,35 @@
 
       <div class="shifts-filters">
         <div class="filters-row">
+          <button id="shifts-load-active-btn" class="btn-secondary" type="button">בחר משמרת מגיליון המשמרות</button>
+        </div>
+
+        <div class="filters-row">
           <div class="field-row" style="flex: 1">
             <span class="label">חיפוש חופשי</span>
             <input id="shifts-search-term" type="text" placeholder="שם / מייל / ID משמרת" />
             <div id="shifts-search-results" class="hidden"></div>
           </div>
+        </div>
+
+        <div class="filters-row">
           <div class="field-row" style="flex: 1">
-            <span class="label">עובד/ת</span>
-            <select id="shifts-employee-select">
-              <option value="">-- כל העובדים --</option>
-            </select>
+            <div class="label-with-actions">
+              <span class="label">עובד/ת</span>
+              <div class="inline-toggle">
+                <button type="button" id="shifts-emp-mode-all" class="filter-toggle active" data-mode="all">כל העובדים</button>
+                <button type="button" id="shifts-emp-mode-search" class="filter-toggle" data-mode="search">חפש עובד</button>
+              </div>
+            </div>
+            <div id="shifts-employee-select-wrapper">
+              <select id="shifts-employee-select">
+                <option value="">-- כל העובדים --</option>
+              </select>
+            </div>
+            <div id="shifts-employee-search-wrapper" class="hidden">
+              <input id="shifts-employee-search" type="text" placeholder="התחל להקליד שם עובד" autocomplete="off" />
+              <div id="shifts-employee-search-results" class="hidden"></div>
+            </div>
           </div>
         </div>
 
@@ -1040,31 +1113,26 @@
         </div>
 
         <div class="quick-range" id="shifts-quick-range">
-          <button type="button" data-range="today">היום</button>
-          <button type="button" data-range="yesterday">אתמול</button>
-          <button type="button" data-range="week">שבוע נוכחי</button>
           <button type="button" data-range="month">חודש נוכחי</button>
           <button type="button" data-range="prevMonth">חודש קודם</button>
+          <button type="button" data-range="week">שבוע נוכחי</button>
+          <button type="button" data-range="today">היום</button>
+          <button type="button" data-range="yesterday">אתמול</button>
         </div>
 
         <div class="filters-row">
           <div class="field-row" style="flex: 1">
-            <span class="label">סטטוס משמרת (רב בחירה)</span>
-            <select id="shifts-status-select" multiple size="4"></select>
-          </div>
-          <div class="field-row" style="flex: 1">
             <span class="label">מסננים נוספים</span>
-            <div class="pill-toggle">
-              <label><input type="checkbox" id="shifts-only-issues" /> רק בעייתיות</label>
-              <label><input type="checkbox" id="shifts-only-bonuses" /> רק עם בונוסים</label>
-              <label><input type="checkbox" id="shifts-only-manual" /> רק עם שינוי ידני</label>
+            <div class="toggle-row">
+              <button type="button" class="filter-toggle" id="shifts-toggle-issues">רק בעייתיות</button>
+              <button type="button" class="filter-toggle" id="shifts-toggle-bonuses">רק עם בונוסים</button>
+              <button type="button" class="filter-toggle" id="shifts-toggle-manual">רק עם שינוי ידני</button>
             </div>
           </div>
         </div>
       </div>
 
       <div class="shifts-actions">
-        <button id="shifts-load-active-btn" class="btn-secondary" type="button">טען מהשורה הפעילה בגיליון</button>
         <button id="shifts-search-btn" class="btn-primary" type="button">חיפוש</button>
         <button id="shifts-clear-btn" class="btn-secondary" type="button">ניקוי</button>
       </div>
@@ -1211,6 +1279,9 @@
       var selectedShift = null;
       var bonusCatalog = [];
       var shiftStatuses = [];
+      var shiftsEmployeeMode = 'all';
+      var shiftsEmployeeSearchSelection = { id: '', name: '' };
+      var shiftsQuickRangeSnapshot = null;
 
       // Requests tab state
       var requests = [];
@@ -2478,6 +2549,117 @@
         }
       }
 
+      function toggleFilterButton(btn, forceActive) {
+        if (!btn) return;
+        var nextActive = typeof forceActive === 'boolean' ? forceActive : !btn.classList.contains('active');
+        btn.classList.toggle('active', nextActive);
+        btn.setAttribute('aria-pressed', nextActive);
+      }
+
+      function isFilterButtonActive(id) {
+        var btn = $(id);
+        return !!(btn && btn.classList.contains('active'));
+      }
+
+      function setEmployeeMode(mode) {
+        shiftsEmployeeMode = mode === 'search' ? 'search' : 'all';
+        var btnAll = $('shifts-emp-mode-all');
+        var btnSearch = $('shifts-emp-mode-search');
+        if (btnAll) toggleFilterButton(btnAll, shiftsEmployeeMode === 'all');
+        if (btnSearch) toggleFilterButton(btnSearch, shiftsEmployeeMode === 'search');
+
+        var selectWrap = $('shifts-employee-select-wrapper');
+        var searchWrap = $('shifts-employee-search-wrapper');
+        if (selectWrap) selectWrap.classList.toggle('hidden', shiftsEmployeeMode !== 'all');
+        if (searchWrap) searchWrap.classList.toggle('hidden', shiftsEmployeeMode !== 'search');
+
+        if (shiftsEmployeeMode === 'all') {
+          shiftsEmployeeSearchSelection = { id: '', name: '' };
+          if ($('shifts-employee-search')) $('shifts-employee-search').value = '';
+          hideEmployeeSearchResults();
+        } else {
+          if ($('shifts-employee-select')) $('shifts-employee-select').value = '';
+        }
+      }
+
+      function hideEmployeeSearchResults() {
+        var box = $('shifts-employee-search-results');
+        if (box) {
+          box.classList.add('hidden');
+          box.innerHTML = '';
+        }
+      }
+
+      function renderEmployeeSearchResults(term) {
+        var box = $('shifts-employee-search-results');
+        var input = $('shifts-employee-search');
+        if (!box || !input) return;
+        var q = (term || '').trim().toLowerCase();
+        if (!q) {
+          hideEmployeeSearchResults();
+          shiftsEmployeeSearchSelection = { id: '', name: '' };
+          return;
+        }
+
+        var matches = [];
+        for (var i = 0; i < employees.length; i++) {
+          var emp = employees[i];
+          if (!emp || !emp.name) continue;
+          var hay = (emp.name + ' ' + (emp.email || '') + ' ' + (emp.id || '')).toLowerCase();
+          if (hay.indexOf(q) !== -1) matches.push(emp);
+          if (matches.length >= 10) break;
+        }
+
+        var html = '';
+        if (!matches.length) {
+          html += '<div class="search-item small">אין תוצאות. נסה להקליד עוד תווים.</div>';
+        } else {
+          for (var j = 0; j < matches.length; j++) {
+            var m = matches[j];
+            html += '<div class="search-item" data-type="emp" data-id="' + (m.id || '') + '">';
+            html += (m.name || 'ללא שם');
+            if (m.email) html += ' • ' + m.email;
+            if (m.id) html += ' • ID ' + m.id;
+            html += '</div>';
+          }
+        }
+
+        box.innerHTML = html;
+        box.classList.remove('hidden');
+      }
+
+      function onEmployeeSearchResultsClick(e) {
+        var el = e.target;
+        while (el && !el.classList.contains('search-item')) {
+          el = el.parentElement;
+        }
+        if (!el) return;
+        var type = el.getAttribute('data-type');
+        if (type !== 'emp') return;
+        var id = el.getAttribute('data-id') || '';
+        var text = el.textContent || '';
+        shiftsEmployeeSearchSelection = { id: id, name: text };
+        if ($('shifts-employee-search')) $('shifts-employee-search').value = text;
+        hideEmployeeSearchResults();
+      }
+
+      function onEmployeeSearchKeyDown(e) {
+        if (e.key === 'Enter') {
+          var box = $('shifts-employee-search-results');
+          if (box && !box.classList.contains('hidden')) {
+            var first = box.querySelector('.search-item');
+            if (first) {
+              first.click();
+              e.preventDefault();
+              return;
+            }
+          }
+        }
+        if (e.key === 'Escape') {
+          hideEmployeeSearchResults();
+        }
+      }
+
       function upsertShiftInList(shift) {
         if (!shift || !shift.shiftId) return;
         var replaced = false;
@@ -2534,8 +2716,17 @@
             var empId = res.employeeId || '';
             var searchInput = $('shifts-search-term');
             if (searchInput && nameCandidate) searchInput.value = nameCandidate;
-            if ($('shifts-employee-select') && empId) {
-              $('shifts-employee-select').value = empId;
+            if (empId) {
+              setEmployeeMode('all');
+              if ($('shifts-employee-select')) {
+                $('shifts-employee-select').value = empId;
+              }
+            } else if (nameCandidate) {
+              setEmployeeMode('search');
+              if ($('shifts-employee-search')) {
+                $('shifts-employee-search').value = nameCandidate;
+                renderEmployeeSearchResults(nameCandidate);
+              }
             }
 
             if (empId || nameCandidate) {
@@ -2657,26 +2848,62 @@
         return out;
       }
 
+      function setQuickRangeSnapshot(range, fromVal, toVal) {
+        shiftsQuickRangeSnapshot = {
+          range: range || '',
+          from: fromVal || '',
+          to: toVal || ''
+        };
+        updateQuickRangeHighlight();
+      }
+
+      function updateQuickRangeHighlight() {
+        var buttons = document.querySelectorAll('#shifts-quick-range button');
+        var currentFrom = $('shifts-date-from') ? $('shifts-date-from').value : '';
+        var currentTo = $('shifts-date-to') ? $('shifts-date-to').value : '';
+        var isSnapshotMatch =
+          shiftsQuickRangeSnapshot &&
+          shiftsQuickRangeSnapshot.from === currentFrom &&
+          shiftsQuickRangeSnapshot.to === currentTo;
+        var activeRange = isSnapshotMatch ? shiftsQuickRangeSnapshot.range : '';
+
+        for (var i = 0; i < buttons.length; i++) {
+          var btnRange = buttons[i].getAttribute('data-range');
+          var active = activeRange && btnRange === activeRange;
+          buttons[i].classList.toggle('active', active);
+          buttons[i].setAttribute('aria-pressed', active);
+        }
+      }
+
       function collectShiftFilters(resetOffset) {
         var filters = shiftsState.filters || { limit: 50, offset: 0 };
         var term = ($('shifts-search-term') && $('shifts-search-term').value) || '';
         filters.search = term.trim();
 
-        filters.employeeId = ($('shifts-employee-select') && $('shifts-employee-select').value) || '';
+        filters.employeeId = '';
         filters.employeeName = '';
         filters.email = '';
-        if (filters.search && filters.search.indexOf('@') !== -1) {
-          filters.email = filters.search;
-        } else if (filters.search && !filters.employeeId) {
-          filters.employeeName = filters.search;
+        if (shiftsEmployeeMode === 'all') {
+          filters.employeeId = ($('shifts-employee-select') && $('shifts-employee-select').value) || '';
+        } else {
+          var empTerm = ($('shifts-employee-search') && $('shifts-employee-search').value) || '';
+          filters.employeeId = shiftsEmployeeSearchSelection.id || '';
+          filters.employeeName = empTerm.trim();
+          if (empTerm && empTerm.indexOf('@') !== -1) {
+            filters.email = empTerm.trim();
+          }
+        }
+
+        if (!filters.email && filters.search && filters.search.indexOf('@') !== -1) {
+          filters.email = filters.search.trim();
         }
 
         filters.dateFrom = $('shifts-date-from') ? $('shifts-date-from').value : '';
         filters.dateTo = $('shifts-date-to') ? $('shifts-date-to').value : '';
-        filters.statuses = getSelectedStatuses();
-        filters.onlyWithIssues = $('shifts-only-issues') ? $('shifts-only-issues').checked : false;
-        filters.onlyWithBonuses = $('shifts-only-bonuses') ? $('shifts-only-bonuses').checked : false;
-        filters.onlyManualChanges = $('shifts-only-manual') ? $('shifts-only-manual').checked : false;
+        filters.statuses = [];
+        filters.onlyWithIssues = isFilterButtonActive('shifts-toggle-issues');
+        filters.onlyWithBonuses = isFilterButtonActive('shifts-toggle-bonuses');
+        filters.onlyManualChanges = isFilterButtonActive('shifts-toggle-manual');
 
         if (resetOffset) filters.offset = 0;
         if (!filters.limit) filters.limit = 50;
@@ -2715,21 +2942,27 @@
           if ($('shifts-date-from')) $('shifts-date-from').value = formatDateForInput(from);
           if ($('shifts-date-to')) $('shifts-date-to').value = formatDateForInput(to);
         }
+
+        var fromVal = $('shifts-date-from') ? $('shifts-date-from').value : '';
+        var toVal = $('shifts-date-to') ? $('shifts-date-to').value : '';
+        setQuickRangeSnapshot(range, fromVal, toVal);
       }
 
       function resetShiftsFilters() {
         if ($('shifts-search-term')) $('shifts-search-term').value = '';
         if ($('shifts-employee-select')) $('shifts-employee-select').value = '';
+        if ($('shifts-employee-search')) $('shifts-employee-search').value = '';
+        shiftsEmployeeSearchSelection = { id: '', name: '' };
+        hideEmployeeSearchResults();
+        setEmployeeMode('all');
         if ($('shifts-date-from')) $('shifts-date-from').value = '';
         if ($('shifts-date-to')) $('shifts-date-to').value = '';
-        if ($('shifts-only-issues')) $('shifts-only-issues').checked = false;
-        if ($('shifts-only-bonuses')) $('shifts-only-bonuses').checked = false;
-        if ($('shifts-only-manual')) $('shifts-only-manual').checked = false;
-        if ($('shifts-status-select')) {
-          for (var i = 0; i < $('shifts-status-select').options.length; i++) {
-            $('shifts-status-select').options[i].selected = false;
-          }
-        }
+
+        toggleFilterButton($('shifts-toggle-issues'), false);
+        toggleFilterButton($('shifts-toggle-bonuses'), false);
+        toggleFilterButton($('shifts-toggle-manual'), false);
+
+        applyQuickRange('month');
         shiftsState.filters = { limit: 50, offset: 0 };
       }
 
@@ -3282,6 +3515,7 @@
         populateEmployeesForShifts();
         populateStatusSelect(shiftStatuses);
         loadBonusCatalog();
+        setEmployeeMode(shiftsEmployeeMode);
 
         var searchBtn = $('shifts-search-btn');
         if (searchBtn) searchBtn.addEventListener('click', function () { fetchShifts(true); });
@@ -3300,6 +3534,33 @@
             applyQuickRange(r);
           });
         }
+
+        var dateFrom = $('shifts-date-from');
+        var dateTo = $('shifts-date-to');
+        if (dateFrom) dateFrom.addEventListener('change', updateQuickRangeHighlight);
+        if (dateTo) dateTo.addEventListener('change', updateQuickRangeHighlight);
+
+        var empModeAll = $('shifts-emp-mode-all');
+        var empModeSearch = $('shifts-emp-mode-search');
+        if (empModeAll) empModeAll.addEventListener('click', function () { setEmployeeMode('all'); });
+        if (empModeSearch) empModeSearch.addEventListener('click', function () { setEmployeeMode('search'); });
+
+        var empSearchInput = $('shifts-employee-search');
+        if (empSearchInput) {
+          empSearchInput.addEventListener('input', function (e) { renderEmployeeSearchResults(e.target.value); });
+          empSearchInput.addEventListener('keydown', onEmployeeSearchKeyDown);
+        }
+        var empSearchBox = $('shifts-employee-search-results');
+        if (empSearchBox) {
+          empSearchBox.addEventListener('click', onEmployeeSearchResultsClick);
+        }
+
+        ['shifts-toggle-issues', 'shifts-toggle-bonuses', 'shifts-toggle-manual'].forEach(function (id) {
+          var btn = $(id);
+          if (btn) {
+            btn.addEventListener('click', function () { toggleFilterButton(btn); });
+          }
+        });
 
         var searchInput = $('shifts-search-term');
         if (searchInput) {
@@ -3321,6 +3582,9 @@
 
         var saveBtn = $('shift-save-btn');
         if (saveBtn) saveBtn.addEventListener('click', saveShiftEdit);
+
+        applyQuickRange('month');
+        updateQuickRangeHighlight();
 
         fetchShifts(true);
 
