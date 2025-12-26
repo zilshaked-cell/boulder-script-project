@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <base target="_top" />
+    <style>
+      body{font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px}
+      .row{margin:8px 0}
+      button,a{font:inherit;padding:8px 12px;border:0;border-radius:8px;cursor:pointer}
+      .primary{background:#1a73e8;color:#fff}
+      .ghost{background:#eee}
+      .hint{color:#555;margin-top:6px}
+    </style>
+  </head>
+  <body>
+    <div class="row"><strong>פותח את התיקייה של הגיליון.</strong></div>
+    <div class="row">
+      <button class="primary" onclick="openNow()">פתח עכשיו</button>
+      <button class="ghost" onclick="copy()">העתק קישור</button>
+      <a id="alink" class="ghost" href="<?= url ?>" target="_blank" rel="noopener noreferrer">פתיחה כקישור</a>
+    </div>
+    <div id="msg" class="hint row"></div>
+
+    <script>
+      var url = '<?= url ?>';
+      function tryAuto() {
+        var w = null; try { w = window.open(url, '_blank'); } catch(e) {}
+        if (!w || w.closed || typeof w.closed === 'undefined') {
+          document.getElementById('msg').textContent =
+            'אם לא נפתח — ייתכן שחוסם פופ-אפים פעיל. לחץ "פתח עכשיו" או התיר פופ-אפים ל־script.google.com.';
+        } else {
+          setTimeout(function(){ google.script.host.close(); }, 400);
+        }
+      }
+      function openNow() {
+        window.open(url, '_blank');
+        setTimeout(function(){ google.script.host.close(); }, 200);
+      }
+      function copy() {
+        navigator.clipboard && navigator.clipboard.writeText
+          ? navigator.clipboard.writeText(url).then(function(){notify('הקישור הועתק.');})
+          : fallbackCopy(url);
+      }
+      function fallbackCopy(text){
+        var ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+        ta.select(); document.execCommand('copy'); document.body.removeChild(ta); notify('הקישור הועתק.');
+      }
+      function notify(t){ var m=document.getElementById('msg'); m.textContent=t; }
+      // הפעלה ראשונית
+      tryAuto();
+    </script>
+  </body>
+</html>

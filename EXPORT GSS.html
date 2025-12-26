@@ -1,0 +1,51 @@
+<!-- File: Ui.html -->
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; }
+      .row { margin: 8px 0; }
+      select, button { font: inherit; padding: 6px 10px; }
+      .ok { color: #0a7; margin-top: 8px; }
+      .err { color: #c00; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="row">
+      <label for="sheet">Choose a sheet to export:</label><br>
+      <select id="sheet"></select>
+    </div>
+    <div class="row">
+      <button onclick="run()">Export Selected Sheet</button>
+      <button onclick="google.script.host.close()">Close</button>
+    </div>
+    <div id="msg" class="row"></div>
+    <script>
+      function load() {
+        google.script.run.withSuccessHandler(function(list){
+          const sel = document.getElementById('sheet');
+          sel.innerHTML = '';
+          (list||[]).forEach(function(name){
+            const opt = document.createElement('option');
+            opt.value = opt.textContent = name;
+            sel.appendChild(opt);
+          });
+          if (!list || !list.length) document.getElementById('msg').textContent = 'No sheets found.';
+        }).getSheetList();
+      }
+      function run() {
+        const name = document.getElementById('sheet').value;
+        if (!name) return;
+        const msg = document.getElementById('msg');
+        msg.textContent = 'Exporting "' + name + '"…';
+        google.script.run.withSuccessHandler(function(){
+          msg.innerHTML = '<span class="ok">Done.</span> Files written to your target folder.';
+        }).withFailureHandler(function(err){
+          msg.innerHTML = '<span class="err">Failed:</span> ' + (err && err.message ? err.message : err);
+        }).exportSingleSheet(name);
+      }
+      load();
+    </script>
+  </body>
+</html>
