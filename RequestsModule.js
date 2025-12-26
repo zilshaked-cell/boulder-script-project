@@ -1,11 +1,29 @@
 var REQ = REQ || {};
 
 (function () {
-  'use strict';
+  "use strict";
 
   var CONFIG = {
-    SHEET_NAME_REQUESTS: 'בקשות עובדים',
-    HEADER_ROW: 1
+    SHEET_NAME_REQUESTS: "בקשות עובדים",
+    HEADER_ROW: 1,
+    COLS: {
+      requestId: { candidates: ["ID בקשה", "Request ID", "RequestID"] },
+      status: { candidates: ["סטטוס בקשה", "Status", "סטטוס"] },
+      timestamp: { candidates: ["חותמת זמן", "Timestamp", "Created", "Time"] },
+      employeeId: { candidates: ["ID עובד", "Employee ID"] },
+      employeeName: { candidates: ["שם מלא", "Employee Name", "Name"] },
+      shiftId: { candidates: ["ID משמרת", "Shift ID"] },
+      direction: { candidates: ["כניסה / יציאה", "כיוון", "Direction"] },
+      fixDate: { candidates: ["תיקון תאריך", "תאריך", "Date"] },
+      fixTime: { candidates: ["תיקון שעה", "שעה", "Time Fix"] },
+      jobId: { candidates: ["ID סוג עבודה", "ID סוגי עבודה", "Job ID"] },
+      jobName: {
+        candidates: ["סוג עבודה", "סוגי עבודה", "סוג העבודה", "Job Name"],
+      },
+      department: { candidates: ["מחלקה", "Department"] },
+      units: { candidates: ["כמות היחידות", "יחידות", "Units"] },
+      note: { candidates: ["הערות למשמרת", "הערות", "Notes", "Note"] },
+    },
   };
 
   function ss_() {
@@ -14,7 +32,8 @@ var REQ = REQ || {};
 
   function sh_() {
     var sh = ss_().getSheetByName(CONFIG.SHEET_NAME_REQUESTS);
-    if (!sh) throw new Error('לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_REQUESTS + '"');
+    if (!sh)
+      throw new Error('לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_REQUESTS + '"');
     return sh;
   }
 
@@ -23,8 +42,8 @@ var REQ = REQ || {};
   }
 
   function norm_(v) {
-    if (v === null || v === undefined) return '';
-    return String(v).replace(/\s+/g, ' ').trim();
+    if (v === null || v === undefined) return "";
+    return String(v).replace(/\s+/g, " ").trim();
   }
 
   function headersMap_(sheet) {
@@ -45,6 +64,190 @@ var REQ = REQ || {};
     return map[header] || null;
   }
 
+  function pickCol_(map, cfg) {
+    if (!cfg || !cfg.candidates) return null;
+    for (var i = 0; i < cfg.candidates.length; i++) {
+      var h = norm_(cfg.candidates[i]);
+      if (map[h]) return map[h];
+    }
+    return null;
+  }
+
+  function readRow_(row, map) {
+    if (!row) return null;
+    function v(col) {
+      return col ? norm_(row[col - 1]) : "";
+    }
+
+    var rec = {
+      requestId: v(map.requestId),
+      status: v(map.status),
+      timestamp: map.timestamp ? row[map.timestamp - 1] : "",
+      employeeId: v(map.employeeId),
+      employeeName: v(map.employeeName),
+      shiftId: v(map.shiftId),
+      direction: v(map.direction),
+      fixDate: v(map.fixDate),
+      fixTime: v(map.fixTime),
+      jobId: v(map.jobId),
+      jobName: v(map.jobName),
+      department: v(map.department),
+      units: map.units ? row[map.units - 1] : "",
+      note: map.note ? row[map.note - 1] : "",
+    };
+
+    if (rec.timestamp instanceof Date && !isNaN(rec.timestamp.getTime())) {
+      rec.timestampIso = rec.timestamp.toISOString();
+    } else if (rec.timestamp) {
+      rec.timestampIso = String(rec.timestamp);
+    } else {
+      rec.timestampIso = "";
+    }
+
+    return rec;
+  }
+
+  var DEFAULT_OPEN_STATUS = [
+    "pending",
+    "פתוח",
+    "פתוחה",
+    "ממתין",
+    "ממתינה",
+    "open",
+    "todo",
+  ];
+
+  function list_(filters) {
+    var sh = sh_();
+    var lastRow = sh.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) {
+      return {
+        ok: true,
+        requests: [],
+        total: 0,
+        returned: 0,
+        hasMore: false,
+        statuses: [],
+      };
+    }
+
+    var map = headersMap_(sh);
+    var cols = {};
+    Object.keys(CONFIG.COLS).forEach(function (k) {
+      cols[k] = pickCol_(map, CONFIG.COLS[k]);
+    });
+
+    var data = sh
+      .getRange(
+        CONFIG.HEADER_ROW + 1,
+        1,
+        lastRow - CONFIG.HEADER_ROW,
+        sh.getLastColumn()
+      )
+      .getValues();
+
+    function toIsoDate_(d) {
+      if (!d) return "";
+      if (
+        Object.prototype.toString.call(d) === "[object Date]" &&
+        !isNaN(d.getTime())
+      ) {
+        var y = d.getFullYear();
+        var m = ("0" + (d.getMonth() + 1)).slice(-2);
+        var dd = ("0" + d.getDate()).slice(-2);
+        return y + "-" + m + "-" + dd;
+      }
+      return norm_(d);
+    }
+
+    var search = norm_(filters && filters.search);
+    var statusesFilter = Array.isArray(filters && filters.statuses)
+      ? filters.statuses
+          .map(function (s) {
+            return norm_(s).toLowerCase();
+          })
+          .filter(Boolean)
+      : [];
+    var statusSet = {};
+    statusesFilter.forEach(function (s) {
+      statusSet[s] = true;
+    });
+
+    var includeClosed = !!(filters && filters.includeClosed);
+    var dateFrom = toIsoDate_(filters && filters.dateFrom);
+    var dateTo = toIsoDate_(filters && filters.dateTo);
+
+    var all = [];
+    var statusesFound = {};
+
+    for (var i = 0; i < data.length; i++) {
+      var rec = readRow_(data[i], cols);
+      if (!rec) continue;
+      var statusKey = norm_(rec.status).toLowerCase();
+      if (statusKey) statusesFound[statusKey] = rec.status;
+
+      // default filter: only open statuses unless includeClosed or explicit statuses provided
+      if (!includeClosed && statusesFilter.length === 0) {
+        if (DEFAULT_OPEN_STATUS.indexOf(statusKey) === -1) continue;
+      }
+
+      if (statusesFilter.length && !statusSet[statusKey]) continue;
+
+      if (search) {
+        var blob = (
+          (rec.requestId || "") +
+          " " +
+          (rec.employeeName || "") +
+          " " +
+          (rec.employeeId || "") +
+          " " +
+          (rec.shiftId || "") +
+          " " +
+          (rec.jobName || "") +
+          " " +
+          (rec.department || "") +
+          " " +
+          (rec.status || "") +
+          " " +
+          (rec.note || "")
+        ).toLowerCase();
+        if (blob.indexOf(search.toLowerCase()) === -1) continue;
+      }
+
+      if (dateFrom && rec.timestampIso && rec.timestampIso < dateFrom) continue;
+      if (dateTo && rec.timestampIso && rec.timestampIso > dateTo) continue;
+
+      all.push(rec);
+    }
+
+    // newest first by timestamp
+    all.sort(function (a, b) {
+      var at = a.timestamp instanceof Date ? a.timestamp.getTime() : 0;
+      var bt = b.timestamp instanceof Date ? b.timestamp.getTime() : 0;
+      if (at !== bt) return bt - at;
+      return String(b.requestId || "").localeCompare(String(a.requestId || ""));
+    });
+
+    var limit = Number(filters && filters.limit);
+    if (isNaN(limit) || limit <= 0) limit = 100;
+    var offset = Number(filters && filters.offset);
+    if (isNaN(offset) || offset < 0) offset = 0;
+
+    var sliced = all.slice(offset, offset + limit);
+    var hasMore = offset + limit < all.length;
+
+    return {
+      ok: true,
+      requests: sliced,
+      total: all.length,
+      returned: sliced.length,
+      hasMore: hasMore,
+      statuses: Object.keys(statusesFound).map(function (k) {
+        return statusesFound[k];
+      }),
+    };
+  }
+
   /**
    * ממלא UUID בעמודות ID שיש להן כותרת שמכילה "ID" + שיש תוכן בשורה (כלומר לא שורה ריקה).
    * ברירת מחדל: רק עמודת "ID בקשה" (אם קיימת) כדי לא לגעת בשדות אחרים.
@@ -58,13 +261,13 @@ var REQ = REQ || {};
 
     // אנחנו תומכים בכותרת מדויקת "ID בקשה".
     // אם אין, ננסה למצוא עמודה שהכותרת שלה כוללת "ID" וגם "בקשה".
-    var idCol = col_(map, 'ID בקשה');
+    var idCol = col_(map, "ID בקשה");
     if (!idCol) {
       // fallback חיפוש כותרת
       var keys = Object.keys(map);
       for (var i = 0; i < keys.length; i++) {
         var k = keys[i];
-        if (k.indexOf('ID') !== -1 && k.indexOf('בקשה') !== -1) {
+        if (k.indexOf("ID") !== -1 && k.indexOf("בקשה") !== -1) {
           idCol = map[k];
           break;
         }
@@ -77,7 +280,12 @@ var REQ = REQ || {};
     }
 
     var lastCol = sh.getLastColumn();
-    var dataRange = sh.getRange(CONFIG.HEADER_ROW + 1, 1, lastRow - CONFIG.HEADER_ROW, lastCol);
+    var dataRange = sh.getRange(
+      CONFIG.HEADER_ROW + 1,
+      1,
+      lastRow - CONFIG.HEADER_ROW,
+      lastCol
+    );
     var data = dataRange.getValues();
 
     // נגדיר "שורה לא ריקה" ככזו שיש בה משהו חוץ מה-ID עצמו
@@ -96,13 +304,18 @@ var REQ = REQ || {};
       // בדיקת שורה לא ריקה (יש תוכן כלשהו במישהו מהתאים חוץ מעמודת ה-ID)
       var hasContent = false;
       for (var c = 0; c < row.length; c++) {
-        if (c === (idCol - 1)) continue;
-        if (norm_(row[c])) { hasContent = true; break; }
+        if (c === idCol - 1) continue;
+        if (norm_(row[c])) {
+          hasContent = true;
+          break;
+        }
       }
       if (!hasContent) continue;
 
       var newId;
-      do { newId = uuid_(); } while (existing[newId]);
+      do {
+        newId = uuid_();
+      } while (existing[newId]);
       existing[newId] = true;
       row[idCol - 1] = newId;
       filled++;
@@ -116,7 +329,9 @@ var REQ = REQ || {};
   }
 
   function handleOpen_(e) {
-    try { ensureRequestIds_(); } catch (err) {}
+    try {
+      ensureRequestIds_();
+    } catch (err) {}
   }
 
   function handleEdit_(e) {
@@ -132,17 +347,18 @@ var REQ = REQ || {};
 
   // Export
   REQ.ensureRequestIds = ensureRequestIds_;
+  REQ.listRequests = list_;
   REQ.handleOpen = handleOpen_;
   REQ.handleEdit = handleEdit_;
 
   // --- wrappers גלובליים ---
   function REQ_onOpen(e) {
-    if (typeof REQ !== 'undefined' && REQ.handleOpen) {
+    if (typeof REQ !== "undefined" && REQ.handleOpen) {
       REQ.handleOpen(e || {});
     }
   }
   function REQ_onEdit(e) {
-    if (typeof REQ !== 'undefined' && REQ.handleEdit) {
+    if (typeof REQ !== "undefined" && REQ.handleEdit) {
       REQ.handleEdit(e || {});
     }
   }
@@ -150,17 +366,24 @@ var REQ = REQ || {};
   // חשיפה של ה-wrappers לשימוש חיצוני
   REQ.REQ_onOpen = REQ_onOpen;
   REQ.REQ_onEdit = REQ_onEdit;
-
 })();
 
 function REQ_onOpen(e) {
-  if (typeof REQ !== 'undefined' && REQ.REQ_onOpen) {
+  if (typeof REQ !== "undefined" && REQ.REQ_onOpen) {
     REQ.REQ_onOpen(e || {});
   }
 }
 
+// eslint-disable-next-line no-unused-vars
+function REQ_listRequests(filters) {
+  if (typeof REQ !== "undefined" && REQ.listRequests) {
+    return REQ.listRequests(filters || {});
+  }
+  return { ok: false, error: "REQ module missing" };
+}
+
 function REQ_onEdit(e) {
-  if (typeof REQ !== 'undefined' && REQ.REQ_onEdit) {
+  if (typeof REQ !== "undefined" && REQ.REQ_onEdit) {
     REQ.REQ_onEdit(e || {});
   }
 }

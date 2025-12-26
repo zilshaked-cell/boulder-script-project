@@ -673,6 +673,83 @@
     padding: 6px 0;
   }
 
+  /* --- Requests tab --- */
+  .requests-message {
+    font-size: 12px;
+    min-height: 18px;
+  }
+  .requests-message.error { color: #fca5a5; }
+
+  .requests-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--color-border-strong);
+    padding: 8px;
+    border-radius: var(--radius-md);
+  }
+
+  .requests-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 4px 0 8px;
+  }
+
+  .requests-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .request-card {
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .request-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    font-weight: 700;
+  }
+
+  .request-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .request-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface-2);
+    font-size: 11px;
+  }
+
+  .request-note {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--color-text-primary);
+  }
+
+  .requests-empty {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    padding: 6px 0;
+  }
+
   .sidebar-topbar {
     display: flex;
     justify-content: flex-end;
@@ -717,9 +794,6 @@
   </head>
   <body>
     <div class="sidebar-topbar">
-      <button id="sidebar-close-btn" class="sidebar-icon-btn" type="button" title="סגור את הסייד בר">
-        <span aria-hidden="true">&times;</span>
-      </button>
       <button id="sidebar-refresh-btn" class="sidebar-icon-btn" type="button" title="רענן את הנתונים בסייד בר">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M3 12a9 9 0 1 1 3 6.7"></path>
@@ -890,7 +964,48 @@
       </div>
     </div>
 
-    <div class="section tab-hidden" data-tab-section="requests"></div>
+    <div class="section tab-hidden" data-tab-section="requests">
+      <div class="shifts-header">
+        <h2 class="section-title">בקשות עובדים</h2>
+        <div id="requests-message" class="requests-message"></div>
+      </div>
+
+      <div class="requests-filters">
+        <div class="filters-row">
+          <div class="field-row" style="flex: 1">
+            <span class="label">חיפוש חופשי</span>
+            <input id="requests-search-term" type="text" placeholder="שם / ID בקשה / ID משמרת" />
+          </div>
+          <div class="field-row" style="flex: 1">
+            <span class="label">סטטוס בקשה (רב בחירה)</span>
+            <select id="requests-status-select" multiple size="4"></select>
+            <div class="muted">ברירת מחדל: מציג רק בקשות פתוחות. לסגורות – סמנו "כל הסטטוסים".</div>
+          </div>
+        </div>
+
+        <div class="filters-row">
+          <div class="field-row" style="flex: 1">
+            <span class="label">מתאריך</span>
+            <input id="requests-date-from" type="date" />
+          </div>
+          <div class="field-row" style="flex: 1">
+            <span class="label">עד תאריך</span>
+            <input id="requests-date-to" type="date" />
+          </div>
+        </div>
+
+        <div class="pill-toggle">
+          <label><input type="checkbox" id="requests-include-closed" /> כל הסטטוסים (כולל סגורות)</label>
+        </div>
+      </div>
+
+      <div class="requests-actions">
+        <button id="requests-search-btn" class="btn-primary" type="button">חיפוש</button>
+        <button id="requests-clear-btn" class="btn-secondary" type="button">ניקוי</button>
+      </div>
+
+      <div class="requests-results" id="requests-results"></div>
+    </div>
 
     <div class="section tab-hidden" data-tab-section="shifts">
       <div class="shifts-header">
@@ -1097,6 +1212,11 @@
       var bonusCatalog = [];
       var shiftStatuses = [];
 
+      // Requests tab state
+      var requests = [];
+      var requestsState = { filters: { limit: 50, offset: 0 }, hasMore: false, loading: false };
+      var requestStatuses = [];
+
       function $(id) {
         return document.getElementById(id);
       }
@@ -1118,9 +1238,22 @@
       }
 
       function reloadSidebar() {
-        setGlobalMessage('מרענן את הסייד בר...', false);
-        stopSelectionPolling();
-        window.location.reload();
+        setGlobalMessage('פותח סייד בר חדש...', false);
+        google.script.run
+          .withSuccessHandler(function () {
+            try {
+              if (google && google.script && google.script.host && google.script.host.close) {
+                google.script.host.close();
+                return;
+              }
+            } catch (_e) {
+              // ignore close issues
+            }
+          })
+          .withFailureHandler(function (err) {
+            setGlobalMessage('שגיאה בפתיחת סייד בר חדש: ' + err, true);
+          })
+          .EMP_reloadSidebar();
       }
 
       function formatPhoneForDisplay(val) {
@@ -1579,10 +1712,6 @@
         if (refreshBtn) {
           refreshBtn.addEventListener('click', reloadSidebar);
         }
-        var closeBtn = $('sidebar-close-btn');
-        if (closeBtn) {
-          closeBtn.addEventListener('click', closeSidebar);
-        }
 
         google.script.run
           .withSuccessHandler(function (res) {
@@ -1746,6 +1875,10 @@
         }
 
         syncManualLoadVisibility();
+
+        if (activeTab === 'requests' && requests.length === 0 && !requestsState.loading) {
+          fetchRequests(true);
+        }
       }
 
       function setAutoLoadMode(mode) {
@@ -2247,6 +2380,13 @@
         el.className = 'shifts-message' + (isError ? ' error' : '');
       }
 
+      function setRequestsMessage(text, isError) {
+        var el = $('requests-message');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'requests-message' + (isError ? ' error' : '');
+      }
+
       function hideShiftSearchResults() {
         var box = $('shifts-search-results');
         if (!box) return;
@@ -2591,6 +2731,153 @@
           }
         }
         shiftsState.filters = { limit: 50, offset: 0 };
+      }
+
+      // ----- Requests tab helpers -----
+      function getSelectedRequestStatuses() {
+        var sel = $('requests-status-select');
+        if (!sel) return [];
+        var out = [];
+        for (var i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].selected) out.push(sel.options[i].value);
+        }
+        return out;
+      }
+
+      function populateRequestStatuses(options) {
+        var sel = $('requests-status-select');
+        if (!sel) return;
+        var prev = Array.prototype.slice.call(sel.selectedOptions || []).map(function (o) { return o.value; });
+        sel.innerHTML = '';
+        var seen = {};
+        (options || []).forEach(function (st) {
+          var key = st || '';
+          if (seen[key]) return;
+          seen[key] = true;
+          var opt = document.createElement('option');
+          opt.value = st;
+          opt.textContent = st || 'ללא סטטוס';
+          sel.appendChild(opt);
+        });
+        for (var i = 0; i < sel.options.length; i++) {
+          if (prev.indexOf(sel.options[i].value) !== -1) sel.options[i].selected = true;
+        }
+      }
+
+      function collectRequestFilters(resetOffset) {
+        var filters = requestsState.filters || { limit: 50, offset: 0 };
+        filters.search = ($('requests-search-term') && $('requests-search-term').value) || '';
+        filters.dateFrom = $('requests-date-from') ? $('requests-date-from').value : '';
+        filters.dateTo = $('requests-date-to') ? $('requests-date-to').value : '';
+        filters.statuses = getSelectedRequestStatuses();
+        filters.includeClosed = $('requests-include-closed') ? $('requests-include-closed').checked : false;
+        if (resetOffset) filters.offset = 0;
+        if (!filters.limit) filters.limit = 50;
+        requestsState.filters = filters;
+        return filters;
+      }
+
+      function resetRequestFilters() {
+        if ($('requests-search-term')) $('requests-search-term').value = '';
+        if ($('requests-date-from')) $('requests-date-from').value = '';
+        if ($('requests-date-to')) $('requests-date-to').value = '';
+        if ($('requests-include-closed')) $('requests-include-closed').checked = false;
+        if ($('requests-status-select')) {
+          for (var i = 0; i < $('requests-status-select').options.length; i++) {
+            $('requests-status-select').options[i].selected = false;
+          }
+        }
+        requestsState.filters = { limit: 50, offset: 0 };
+      }
+
+      function renderRequestsResults() {
+        var box = $('requests-results');
+        if (!box) return;
+        if (!requests || !requests.length) {
+          box.innerHTML = '<div class="requests-empty">לא נמצאו בקשות</div>';
+          return;
+        }
+
+        var html = '';
+        for (var i = 0; i < requests.length; i++) {
+          var r = requests[i];
+          html += '<div class="request-card">';
+          html += '<div class="request-card-header">';
+          html += '<span>' + (r.employeeName || 'עובד לא ידוע') + (r.employeeId ? ' (ID ' + r.employeeId + ')' : '') + '</span>';
+          html += '<span class="request-badge">' + (r.status || 'ללא סטטוס') + '</span>';
+          html += '</div>';
+
+          html += '<div class="request-meta">';
+          if (r.requestId) html += '<span class="request-badge">ID בקשה: ' + r.requestId + '</span>';
+          if (r.shiftId) html += '<span class="request-badge">משמרת: ' + r.shiftId + '</span>';
+          if (r.timestampIso) html += '<span class="request-badge">' + r.timestampIso + '</span>';
+          if (r.direction) html += '<span class="request-badge">' + r.direction + '</span>';
+          if (r.jobName) html += '<span class="request-badge">' + r.jobName + '</span>';
+          if (r.department) html += '<span class="request-badge">' + r.department + '</span>';
+          html += '</div>';
+
+          if (r.note) {
+            html += '<div class="request-note">' + r.note + '</div>';
+          }
+
+          html += '</div>';
+        }
+
+        box.innerHTML = html;
+      }
+
+      function fetchRequests(reset) {
+        if (requestsState.loading) return;
+        requestsState.loading = true;
+        if (reset) {
+          requests = [];
+          requestsState.filters.offset = 0;
+        }
+
+        var filters = collectRequestFilters(reset);
+        setRequestsMessage('טוען בקשות...', false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            requestsState.loading = false;
+            if (!res || !res.ok) {
+              setRequestsMessage((res && res.error) || 'שגיאה בטעינת בקשות', true);
+              return;
+            }
+
+            if (res.statuses && res.statuses.length) {
+              var seen = {};
+              requestStatuses = [];
+              for (var i = 0; i < res.statuses.length; i++) {
+                var st = res.statuses[i] || '';
+                if (seen[st]) continue;
+                seen[st] = true;
+                requestStatuses.push(st);
+              }
+              populateRequestStatuses(requestStatuses);
+            }
+
+            if (reset) {
+              requests = res.requests || [];
+            } else {
+              requests = requests.concat(res.requests || []);
+            }
+
+            requestsState.hasMore = !!res.hasMore;
+
+            if (!requests.length) {
+              setRequestsMessage('לא נמצאו בקשות', false);
+            } else {
+              setRequestsMessage('', false);
+            }
+
+            renderRequestsResults();
+          })
+          .withFailureHandler(function (err) {
+            requestsState.loading = false;
+            setRequestsMessage('שגיאה בטעינת בקשות: ' + err, true);
+          })
+          .REQ_listRequests(filters);
       }
 
       function renderShiftBadges(shift) {
@@ -3036,6 +3323,11 @@
         if (saveBtn) saveBtn.addEventListener('click', saveShiftEdit);
 
         fetchShifts(true);
+
+        var reqSearchBtn = $('requests-search-btn');
+        if (reqSearchBtn) reqSearchBtn.addEventListener('click', function () { fetchRequests(true); });
+        var reqClearBtn = $('requests-clear-btn');
+        if (reqClearBtn) reqClearBtn.addEventListener('click', function () { resetRequestFilters(); fetchRequests(true); });
       }
 
       window.addEventListener('load', init);

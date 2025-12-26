@@ -93,15 +93,5 @@
   "eslint.alwaysShowStatus": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
-  },
-  "taskButtons.buttons": [
-    {
-      "task": "script: clasp pull",
-      "buttonLabel": "clasp pull"
-    },
-    {
-      "task": "script: clasp sync (status+push)",
-      "buttonLabel": "clasp sync"
-    }
-  ]
+  }
 }
