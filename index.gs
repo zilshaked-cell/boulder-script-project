@@ -1575,6 +1575,8 @@ function employeeExistsByEmail_(payload) {
       success: true,
       found: true,
       exists: true, // legacy compatibility for callers that check "exists"
+      employeeId: colId ? stringValue(row[colId - 1]) : "",
+      fullName: colName ? stringValue(row[colName - 1]) : "",
       employee: {
         id: colId ? stringValue(row[colId - 1]) : "",
         name: colName ? stringValue(row[colName - 1]) : "",
