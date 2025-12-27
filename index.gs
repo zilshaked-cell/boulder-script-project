@@ -116,7 +116,10 @@ function doPost(e) {
     const parsed = parseBody(e);
     if (parsed.error) {
       return jsonResponse(
-        withOk_({ ok: false, error: "Invalid JSON body: " + String(parsed.error) }),
+        withOk_({
+          ok: false,
+          error: "Invalid JSON body: " + String(parsed.error),
+        }),
         400
       );
     }
@@ -159,10 +162,31 @@ function handleNewPost_(action, payload) {
     case "employeeExistsByEmail":
       return jsonResponse(withOk_(employeeExistsByEmail_(payload || {})));
     // Legacy stubs so existing screens stay alive until you wire real data
-    case "getCurrentEmployee":
-      return jsonResponse(
-        withOk_({ employee: { id: "demo-employee", name: "Demo User" } })
-      );
+    case "getCurrentEmployee": {
+      const email =
+        (payload && payload.email) ||
+        (payload && payload.user && payload.user.email) ||
+        "";
+
+      if (!email) {
+        return jsonResponse({ ok: false, error: "Missing email" }, 400);
+      }
+
+      const result = employeeExistsByEmail_({ email: email });
+      if (result && result.ok === true && result.exists === true) {
+        return jsonResponse(
+          withOk_({
+            employee: {
+              id: result.employeeId || "",
+              name: result.fullName || result.name || "",
+              email: email,
+            },
+          })
+        );
+      }
+
+      return jsonResponse(withOk_({ employee: null }));
+    }
     case "getWorkLogs":
       return jsonResponse(withOk_({ workLogs: [] }));
     case "getEmployeeRequests":

@@ -70,16 +70,14 @@
   "github.copilot.chat.codeGeneration.instructionsFiles": [
     ".github/copilot-instructions.md"
   ],
-  "github.copilot.chat.promptFiles": [
-    ".github/prompts"
-  ],
-  "github.copilot.chat.agents.customAgents": [
-    ".github/agents"
-  ],
+  "github.copilot.chat.promptFiles": [".github/prompts"],
+  "github.copilot.chat.agents.customAgents": [".github/agents"],
   "github.copilot.chat.checkpoints.enabled": true,
   "github.copilot.chat.checkpoints.showFileChanges": true,
   "github.copilot.chat.tools.execution.allowCommands": false,
   "github.copilot.chat.tools.execution.allowGlobalTools": false,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
   "eslint.packageManager": "npm",
   "eslint.workingDirectories": [
     {
@@ -87,9 +85,7 @@
       "changeProcessCWD": true
     }
   ],
-  "eslint.validate": [
-    "javascript"
-  ],
+  "eslint.validate": ["javascript"],
   "eslint.alwaysShowStatus": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
