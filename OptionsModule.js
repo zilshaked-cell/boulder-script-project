@@ -1,34 +1,34 @@
 var OPT = OPT || {};
 
 (function () {
-  'use strict';
+  "use strict";
 
   var CONFIG = {
-    SHEET_NAME_OPTIONS: 'אופציות בחירה ו ID\'S',
+    SHEET_NAME_OPTIONS: "אופציות בחירה ו ID'S",
     HEADER_ROW: 1,
     COL: {
-      // לפי SHEETS_CONTRACT.md
-      JOB_STATUS: 1,       // A
-      JOB_ID: 2,           // B
-      JOB_NAME: 3,         // C
-      JOB_DEPARTMENT: 4,   // D
+      // לפי SHEETS_CONTRACT.md (pay columns are N-P)
+      JOB_STATUS: 1, // A
+      JOB_ID: 2, // B
+      JOB_NAME: 3, // C
+      JOB_DEPARTMENT: 4, // D
 
-      BONUS_STATUS: 5,     // E
-      BONUS_ID: 6,         // F
-      BONUS_NAME: 7,       // G
+      BONUS_STATUS: 5, // E
+      BONUS_ID: 6, // F
+      BONUS_NAME: 7, // G
 
-      PAY_STATUS: 8,       // H
-      PAY_ID: 9,           // I
-      PAY_NAME: 10,        // J
+      SENIORITY_STATUS: 8, // H
+      SENIORITY_ID: 9, // I
+      SENIORITY_NAME: 10, // J
 
-      SENIORITY_STATUS: 11,// K
-      SENIORITY_ID: 12,    // L
-      SENIORITY_NAME: 13,  // M
+      TRAIN_STATUS: 11, // K
+      TRAIN_ID: 12, // L
+      TRAIN_NAME: 13, // M
 
-      TRAIN_STATUS: 14,    // N
-      TRAIN_ID: 15,        // O
-      TRAIN_NAME: 16       // P
-    }
+      PAY_STATUS: 14, // N
+      PAY_ID: 15, // O
+      PAY_NAME: 16, // P
+    },
   };
 
   var cache = null;
@@ -36,7 +36,10 @@ var OPT = OPT || {};
   function getSheet_() {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(CONFIG.SHEET_NAME_OPTIONS);
-    if (!sh) throw new Error('לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME_OPTIONS + '"');
+    if (!sh)
+      throw new Error(
+        'לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME_OPTIONS + '"'
+      );
     return sh;
   }
 
@@ -45,8 +48,8 @@ var OPT = OPT || {};
   }
 
   function norm_(v) {
-    if (v === null || v === undefined) return '';
-    return String(v).replace(/\s+/g, ' ').trim();
+    if (v === null || v === undefined) return "";
+    return String(v).replace(/\s+/g, " ").trim();
   }
 
   function normKey_(v) {
@@ -55,9 +58,9 @@ var OPT = OPT || {};
 
   function isActive_(statusVal) {
     var s = norm_(statusVal);
-    if (!s) return true;          // ריק = פעיל
-    if (s === 'פעיל') return true;
-    if (String(s).toUpperCase() === 'TRUE') return true;
+    if (!s) return true; // ריק = פעיל
+    if (s === "פעיל") return true;
+    if (String(s).toUpperCase() === "TRUE") return true;
     return false;
   }
 
@@ -74,6 +77,9 @@ var OPT = OPT || {};
 
     // הקטלוגים הם A..P
     var lastCol = Math.max(
+      CONFIG.COL.PAY_NAME,
+      CONFIG.COL.PAY_ID,
+      CONFIG.COL.PAY_STATUS,
       CONFIG.COL.TRAIN_NAME,
       CONFIG.COL.TRAIN_ID,
       CONFIG.COL.TRAIN_STATUS
@@ -93,7 +99,7 @@ var OPT = OPT || {};
         CONFIG.COL.BONUS_ID,
         CONFIG.COL.PAY_ID,
         CONFIG.COL.SENIORITY_ID,
-        CONFIG.COL.TRAIN_ID
+        CONFIG.COL.TRAIN_ID,
       ];
       for (var k = 0; k < idCols.length; k++) {
         var idv = norm_(row[idCols[k] - 1]);
@@ -148,24 +154,53 @@ var OPT = OPT || {};
     var lastRow = sh.getLastRow();
     if (lastRow <= headerRow) {
       cache = {
-        jobsByName: {}, jobsById: {}, jobs: [],
-        bonusesByName: {}, bonusesById: {}, bonuses: [],
-        paysByName: {}, paysById: {}, pays: [],
-        seniorityByName: {}, seniorityById: {}, seniority: [],
-        trainsByName: {}, trainsById: {}, trains: []
+        jobsByName: {},
+        jobsById: {},
+        jobs: [],
+        bonusesByName: {},
+        bonusesById: {},
+        bonuses: [],
+        paysByName: {},
+        paysById: {},
+        pays: [],
+        seniorityByName: {},
+        seniorityById: {},
+        seniority: [],
+        trainsByName: {},
+        trainsById: {},
+        trains: [],
       };
       return cache;
     }
 
-    var lastCol = Math.max(CONFIG.COL.TRAIN_NAME, CONFIG.COL.TRAIN_ID, CONFIG.COL.TRAIN_STATUS);
-    var data = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol).getValues();
+    var lastCol = Math.max(
+      CONFIG.COL.PAY_NAME,
+      CONFIG.COL.PAY_ID,
+      CONFIG.COL.PAY_STATUS,
+      CONFIG.COL.TRAIN_NAME,
+      CONFIG.COL.TRAIN_ID,
+      CONFIG.COL.TRAIN_STATUS
+    );
+    var data = sh
+      .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
+      .getValues();
 
     var out = {
-      jobsByName: {}, jobsById: {}, jobs: [],
-      bonusesByName: {}, bonusesById: {}, bonuses: [],
-      paysByName: {}, paysById: {}, pays: [],
-      seniorityByName: {}, seniorityById: {}, seniority: [],
-      trainsByName: {}, trainsById: {}, trains: []
+      jobsByName: {},
+      jobsById: {},
+      jobs: [],
+      bonusesByName: {},
+      bonusesById: {},
+      bonuses: [],
+      paysByName: {},
+      paysById: {},
+      pays: [],
+      seniorityByName: {},
+      seniorityById: {},
+      seniority: [],
+      trainsByName: {},
+      trainsById: {},
+      trains: [],
     };
 
     for (var i = 0; i < data.length; i++) {
@@ -177,7 +212,12 @@ var OPT = OPT || {};
       var jobStatus = norm_(row[CONFIG.COL.JOB_STATUS - 1]);
       var dept = norm_(row[CONFIG.COL.JOB_DEPARTMENT - 1]);
       if (jobName || jobId) {
-        var job = { id: jobId, name: jobName, department: dept, status: jobStatus };
+        var job = {
+          id: jobId,
+          name: jobName,
+          department: dept,
+          status: jobStatus,
+        };
         out.jobs.push(job);
         if (jobId && !out.jobsById[jobId]) out.jobsById[jobId] = job;
         var jKey = normKey_(jobName);
@@ -191,7 +231,8 @@ var OPT = OPT || {};
       if (bonusName || bonusId) {
         var bonus = { id: bonusId, name: bonusName, status: bonusStatus };
         out.bonuses.push(bonus);
-        if (bonusId && !out.bonusesById[bonusId]) out.bonusesById[bonusId] = bonus;
+        if (bonusId && !out.bonusesById[bonusId])
+          out.bonusesById[bonusId] = bonus;
         var bKey = normKey_(bonusName);
         if (bKey && !out.bonusesByName[bKey]) out.bonusesByName[bKey] = bonus;
       }
@@ -254,10 +295,12 @@ var OPT = OPT || {};
   function getAllJobs_(onlyActive) {
     var list = buildCache_().jobs.slice();
     if (onlyActive) {
-      list = list.filter(function (r) { return isActive_(r.status); });
+      list = list.filter(function (r) {
+        return isActive_(r.status);
+      });
     }
     list.sort(function (a, b) {
-      return String(a.name || '').localeCompare(String(b.name || ''));
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
     return list;
   }
@@ -265,10 +308,12 @@ var OPT = OPT || {};
   function getAllPayments_(onlyActive) {
     var list = buildCache_().pays.slice();
     if (onlyActive) {
-      list = list.filter(function (r) { return isActive_(r.status); });
+      list = list.filter(function (r) {
+        return isActive_(r.status);
+      });
     }
     list.sort(function (a, b) {
-      return String(a.name || '').localeCompare(String(b.name || ''));
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
     return list;
   }
@@ -295,13 +340,16 @@ var OPT = OPT || {};
       CONFIG.COL.BONUS_NAME,
       CONFIG.COL.PAY_NAME,
       CONFIG.COL.SENIORITY_NAME,
-      CONFIG.COL.TRAIN_NAME
+      CONFIG.COL.TRAIN_NAME,
     ];
 
     var touches = false;
     for (var i = 0; i < nameCols.length; i++) {
       var c = nameCols[i];
-      if (c >= startCol && c <= endCol) { touches = true; break; }
+      if (c >= startCol && c <= endCol) {
+        touches = true;
+        break;
+      }
     }
 
     if (!touches) return;
@@ -318,18 +366,17 @@ var OPT = OPT || {};
   OPT.getAllPayments = getAllPayments_;
   OPT.handleOpen = handleOpen_;
   OPT.handleEdit = handleEdit_;
-
 })();
 
 // עטיפות גלובליות (נוחות לקריאה ממקומות אחרים)
 function OPT_onOpen(e) {
-  if (typeof OPT !== 'undefined' && OPT.handleOpen) {
+  if (typeof OPT !== "undefined" && OPT.handleOpen) {
     OPT.handleOpen(e || {});
   }
 }
 
 function OPT_onEdit(e) {
-  if (typeof OPT !== 'undefined' && OPT.handleEdit) {
+  if (typeof OPT !== "undefined" && OPT.handleEdit) {
     OPT.handleEdit(e || {});
   }
 }
