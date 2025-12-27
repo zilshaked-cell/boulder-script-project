@@ -415,16 +415,20 @@ function handleNewPost_(action, payload, logger) {
       const result = employeeExistsByEmail_({ email: email });
       if (result && result.ok === true && result.exists === true) {
         const foundEmployee = result.employee || {};
+        const idFromSheet =
+          result.employeeId || result.id || foundEmployee.id || "";
+        const nameFromSheet =
+          result.fullName ||
+          result.name ||
+          foundEmployee.name ||
+          foundEmployee.fullName ||
+          "";
         response = jsonResponse(
           withOk_({
             employee: {
-              id: result.employeeId || result.id || foundEmployee.id || "",
-              name:
-                result.fullName ||
-                result.name ||
-                foundEmployee.name ||
-                foundEmployee.fullName ||
-                "",
+              id: idFromSheet || email, // never return empty id
+              employeeId: idFromSheet || email,
+              name: nameFromSheet,
               email: email,
             },
           })
