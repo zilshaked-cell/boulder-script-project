@@ -1,3 +1,5 @@
+/* global SpreadsheetApp, Logger, OPT, REQ, SCH, OPT_onOpen, OPT_onEdit, REQ_onEdit, SCH_onChange, EMP_checkEmployeesHeader_, getEmployeeById_, saveEmployeePayload_ */
+/* eslint-disable no-inner-declarations, no-prototype-builtins */
 var EMP = EMP || {};
 
 (function () {

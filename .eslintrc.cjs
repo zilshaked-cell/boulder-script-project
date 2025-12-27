@@ -2,12 +2,12 @@
 module.exports = {
   env: {
     es2021: true,
-    node: true
+    node: true,
   },
   extends: ["eslint:recommended"],
   parserOptions: {
     ecmaVersion: 12,
-    sourceType: "script"
+    sourceType: "script",
   },
   globals: {
     // Google Apps Script globals
@@ -21,11 +21,17 @@ module.exports = {
     Logger: "readonly",
     Session: "readonly",
     Utilities: "readonly",
-    GoogleAppsScript: "readonly"
+    GoogleAppsScript: "readonly",
+    OPT: "readonly",
+    REQ: "readonly",
+    SCH: "readonly",
+    jsonResponse: "readonly",
   },
   rules: {
     // השארתי יחסית מינימלי כדי לא לשבור את הקוד הקיים
     "no-unused-vars": ["warn", { args: "none", vars: "all" }],
-    "no-undef": "error"
-  }
+    "no-undef": "error",
+    "no-inner-declarations": "off",
+    "no-prototype-builtins": "off",
+  },
 };
