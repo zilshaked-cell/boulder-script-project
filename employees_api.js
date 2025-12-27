@@ -46,30 +46,22 @@ function handleGetEmployees(params) {
 
   var H = buildHeaderIndex(headerRow);
 
-  var colStatus  = H["סטטוס"]      || 0;
-  var colId      = H["ID עובד"]    || 0;
-  var colName    = H["שם מלא"]     || 0;
-  var colJobName = H["סוג עבודה"]  || 0;
-  var colJobId   = H["ID סוג עבודה"] || 0;
-  var colDept    = H["מחלקה"]      || 0;
+  var colStatus = H["סטטוס"] || 0;
+  var colId = H["ID עובד"] || 0;
+  var colName = H["שם מלא"] || 0;
+  var colJobName = H["סוג עבודה"] || 0;
+  var colJobId = H["ID סוג עבודה"] || 0;
+  var colDept = H["מחלקה"] || 0;
 
   var employeeIdFilter =
-    norm(
-      params.employeeId ||
-        params.employee_id ||
-        params.id ||
-        ""
-    ) || "";
+    norm(params.employeeId || params.employee_id || params.id || "") || "";
   var employeeNameFilter =
-    norm(
-      params.employeeName ||
-        params.employee_name ||
-        params.name ||
-        ""
-    ) || "";
+    norm(params.employeeName || params.employee_name || params.name || "") ||
+    "";
 
-  var activeOnlyRaw =
-    String(params.onlyActive || params.activeOnly || "").toLowerCase();
+  var activeOnlyRaw = String(
+    params.onlyActive || params.activeOnly || ""
+  ).toLowerCase();
   var activeOnly =
     activeOnlyRaw === "true" ||
     activeOnlyRaw === "1" ||
@@ -92,11 +84,11 @@ function handleGetEmployees(params) {
     var name = colName ? norm(row[colName - 1]) : "";
     if (!name) continue; // אין טעם בשורה בלי שם
 
-    var id        = colId      ? norm(row[colId - 1])      : "";
-    var statusVal = colStatus  ? norm(row[colStatus - 1])  : "";
-    var jobName   = colJobName ? norm(row[colJobName - 1]) : "";
-    var jobId     = colJobId   ? norm(row[colJobId - 1])   : "";
-    var dept      = colDept    ? norm(row[colDept - 1])    : "";
+    var id = colId ? norm(row[colId - 1]) : "";
+    var statusVal = colStatus ? norm(row[colStatus - 1]) : "";
+    var jobName = colJobName ? norm(row[colJobName - 1]) : "";
+    var jobId = colJobId ? norm(row[colJobId - 1]) : "";
+    var dept = colDept ? norm(row[colDept - 1]) : "";
 
     // פילטרים – קודם ID, אחר כך שם
     if (employeeIdFilter) {
@@ -134,8 +126,7 @@ function handleGetEmployees(params) {
       var exists = false;
       for (var j = 0; j < emp.jobs.length; j++) {
         var jItem = emp.jobs[j];
-        var jKey =
-          (jItem.jobId || "") + "|" + (jItem.jobName || "");
+        var jKey = (jItem.jobId || "") + "|" + (jItem.jobName || "");
         if (jKey === jobKey) {
           exists = true;
           break;
@@ -202,8 +193,10 @@ function employeeExistsByEmail(params) {
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   Logger.log(
-    "[employeeExistsByEmail] spreadsheet name=" + ss.getName() +
-      ", id=" + ss.getId()
+    "[employeeExistsByEmail] spreadsheet name=" +
+      ss.getName() +
+      ", id=" +
+      ss.getId()
   );
 
   var sheet = ss.getSheetByName(EMPLOYEE_SHEET_NAME);
@@ -215,9 +208,12 @@ function employeeExistsByEmail(params) {
   }
 
   Logger.log(
-    "[employeeExistsByEmail] using sheet=" + sheet.getName() +
-      ", lastRow=" + sheet.getLastRow() +
-      ", lastCol=" + sheet.getLastColumn()
+    "[employeeExistsByEmail] using sheet=" +
+      sheet.getName() +
+      ", lastRow=" +
+      sheet.getLastRow() +
+      ", lastCol=" +
+      sheet.getLastColumn()
   );
 
   var lastRow = sheet.getLastRow();
@@ -241,30 +237,28 @@ function employeeExistsByEmail(params) {
 
   var H = buildHeaderIndex(headerRow);
 
-  function pickHeader(map, candidates) {
-    for (var i = 0; i < candidates.length; i++) {
-      var k = norm(candidates[i]);
-      if (map[k]) return map[k];
-    }
-    return 0;
+  var requiredHeaders = ["מייל", "סטטוס", "ID עובד", "שם מלא"];
+  var missing = [];
+  requiredHeaders.forEach(function (colName) {
+    if (!H[norm(colName)]) missing.push(colName);
+  });
+
+  if (missing.length) {
+    return jsonResponse({
+      success: false,
+      error: "schema_mismatch",
+      message:
+        "employeeExistsByEmail: missing required columns in '" +
+        EMPLOYEE_SHEET_NAME +
+        "': " +
+        missing.join(", "),
+    });
   }
 
-  var colEmail = pickHeader(H, [
-    "מייל",
-    "email",
-    "אימייל",
-    "mail",
-    "כתובת מייל",
-    "כתובת אימייל",
-    "email address",
-  ]);
-  var colStatus = pickHeader(H, ["סטטוס", "סטטוס פעיל", "active", "status"]);
-  var colId = pickHeader(H, ["id עובד", "id", "employee id"]);
-  var colName = pickHeader(H, ["שם מלא", "שמות עובדים", "שם", "name"]);
-
-  if (!colEmail) {
-    return jsonResponse({ success: false, error: "email column not found" });
-  }
+  var colEmail = H[norm("מייל")];
+  var colStatus = H[norm("סטטוס")];
+  var colId = H[norm("ID עובד")];
+  var colName = H[norm("שם מלא")];
 
   var dataRange = sheet.getRange(
     EMPLOYEE_HEADER_ROW + 1,
@@ -284,7 +278,8 @@ function employeeExistsByEmail(params) {
 
     var statusLower = statusVal.toLowerCase();
     var inactive =
-      statusLower.indexOf("לא פעיל") !== -1 || statusLower.indexOf("inactive") !== -1;
+      statusLower.indexOf("לא פעיל") !== -1 ||
+      statusLower.indexOf("inactive") !== -1;
     var active = !inactive;
     var empId = colId ? String(row[colId - 1] || "").trim() : "";
     var empName = colName ? String(row[colName - 1] || "").trim() : "";

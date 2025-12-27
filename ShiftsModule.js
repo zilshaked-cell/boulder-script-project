@@ -101,6 +101,19 @@ var BONUSES = BONUSES || {};
     },
   };
 
+  // התאמת shiftId לפי סכימה ידועה
+  if (CONFIG.SHEET_NAME === "דיווח שעות עבודה") {
+    CONFIG.COLS.shiftId = {
+      candidates: ["ID דיווח"],
+      fallbackIndex: null,
+    };
+  } else if (CONFIG.SHEET_NAME === "משמרות") {
+    CONFIG.COLS.shiftId = {
+      candidates: ["ID משמרת"],
+      fallbackIndex: null,
+    };
+  }
+
   function ss_() {
     return SpreadsheetApp.getActiveSpreadsheet();
   }
