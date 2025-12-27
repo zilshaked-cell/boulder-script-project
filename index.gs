@@ -46,6 +46,169 @@ const MONTHLY_ALERT_RECIPIENTS = (
     return !!s;
   });
 
+var LOG_LEVEL_SCRIPT = (
+  SCRIPT_PROPERTIES.getProperty("LOG_LEVEL_SCRIPT") || "info"
+)
+  .toLowerCase()
+  .trim();
+var SYSTEM_LOG_SHEET_NAME = "system_logs";
+var LOG_TO_SHEET_ENABLED =
+  (SCRIPT_PROPERTIES.getProperty("LOG_TO_SHEET_ENABLED") || "true")
+    .toLowerCase()
+    .trim() === "true";
+var __activeTraceContext = null;
+var ERROR_CODES = {
+  EMPLOYEE_NOT_FOUND: "EMPLOYEE_NOT_FOUND",
+  EMPLOYEE_INACTIVE: "EMPLOYEE_INACTIVE",
+  SHEET_MISSING: "SHEET_MISSING",
+  SHEET_RANGE_EMPTY: "SHEET_RANGE_EMPTY",
+  VALIDATION_FAILED: "VALIDATION_FAILED",
+  APPS_SCRIPT_EXCEPTION: "APPS_SCRIPT_EXCEPTION",
+  NETWORK_ERROR_TO_SCRIPT: "NETWORK_ERROR_TO_SCRIPT",
+  UNAUTHORIZED: "UNAUTHORIZED",
+  CONFLICTING_SHIFT: "CONFLICTING_SHIFT",
+  UNKNOWN_ERROR: "UNKNOWN_ERROR",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  PROFILE_SAVE_FAILED: "PROFILE_SAVE_FAILED",
+  PROFILE_LOAD_FAILED: "PROFILE_LOAD_FAILED",
+  REQUEST_LIST_FAILED: "REQUEST_LIST_FAILED",
+  WORK_LOG_LOAD_FAILED: "WORK_LOG_LOAD_FAILED",
+  SHIFT_CORRECTION_SAVE_FAILED: "SHIFT_CORRECTION_SAVE_FAILED",
+  PREFERENCES_SAVE_FAILED: "PREFERENCES_SAVE_FAILED",
+  MONTHLY_JOB_ERROR_REPORT_FAILED: "MONTHLY_JOB_ERROR_REPORT_FAILED",
+  INVALID_JSON: "INVALID_JSON",
+  EMPTY_RESPONSE: "EMPTY_RESPONSE",
+};
+
+function mapActionToOperation_(action) {
+  if (!action) return "APPS_SCRIPT_PROXY_GENERIC";
+  var map = {
+    "jobTypes.list": "REPORT_LOAD",
+    "employee.linkedJobs": "REPORT_LOAD",
+    "workLogs.listByEmployee": "WORK_LOG_LOAD",
+    "requests.listByEmployee": "REQUEST_LIST",
+    reportAccessIssue: "REPORT_SAVE",
+    "shiftReport.submit": "WORK_LOG_SAVE",
+    "shiftCorrection.submit": "SHIFT_CORRECTION_SAVE",
+    "shiftReport.monthlyErrorNotify": "MONTHLY_JOB_ERROR_REPORT",
+    "requests.approve": "REQUEST_DECIDE",
+    "employee.save": "PROFILE_SAVE",
+    employeeExistsByEmail: "PROFILE_LOAD",
+    getCurrentEmployee: "PROFILE_LOAD",
+    getWorkLogs: "WORK_LOG_LOAD",
+    getEmployeeRequests: "REQUEST_LIST",
+  };
+  return map[action] || "APPS_SCRIPT_PROXY_GENERIC";
+}
+
+function makeTraceId_() {
+  var shortUuid = Utilities.getUuid().split("-")[0];
+  return new Date().getTime().toString(36) + "-" + shortUuid;
+}
+
+function createScriptTraceContext_(meta, action) {
+  meta = meta || {};
+  var traceId = meta.traceId || makeTraceId_();
+  return {
+    traceId: traceId,
+    operation: meta.operation || mapActionToOperation_(action),
+    source: meta.source || "apps-script-router",
+    layer: meta.layer || "apps-script-router",
+    actor: meta.actor || null,
+    version: meta.version || "1.0",
+  };
+}
+
+function shouldLogScript_(severity) {
+  var order = { debug: 10, info: 20, warn: 30, error: 40 };
+  var envLevel = order[LOG_LEVEL_SCRIPT] || order.info;
+  return order[severity] >= envLevel;
+}
+
+function appendSystemLogRow_(event) {
+  if (!LOG_TO_SHEET_ENABLED) return;
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SYSTEM_LOG_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(SYSTEM_LOG_SHEET_NAME);
+      sheet.hideSheet();
+    }
+    var row = [
+      new Date(event.timestamp),
+      event.traceId,
+      event.layer,
+      event.operation,
+      event.step,
+      event.severity,
+      event.actor || "",
+      event.errorCode || "",
+      event.details ? JSON.stringify(event.details).slice(0, 500) : "",
+      "",
+    ];
+    sheet.appendRow(row);
+  } catch (err) {
+    // Never throw from logging path
+  }
+}
+
+function logScriptEvent_(context, severity, step, details, errorCode, error) {
+  if (!shouldLogScript_(severity)) return;
+  try {
+    var event = {
+      timestamp: new Date().toISOString(),
+      traceId: context && context.traceId ? context.traceId : makeTraceId_(),
+      operation: context && context.operation ? context.operation : "unknown",
+      layer: (context && context.layer) || "apps-script-router",
+      step: step || "response",
+      severity: severity,
+      actor: context && context.actor ? context.actor : null,
+      errorCode: errorCode || null,
+      errorMessage:
+        error && error.message
+          ? String(error.message).slice(0, 500)
+          : undefined,
+      details: details || {},
+    };
+    Logger.log(JSON.stringify(event));
+    appendSystemLogRow_(event);
+  } catch (err) {
+    // swallow logging failures
+  }
+}
+
+function createScriptLogger_(context) {
+  return {
+    context: context,
+    debug: function (step, details) {
+      logScriptEvent_(context, "debug", step, details);
+    },
+    info: function (step, details) {
+      logScriptEvent_(context, "info", step, details);
+    },
+    warn: function (step, details, errorCode) {
+      logScriptEvent_(context, "warn", step, details, errorCode);
+    },
+    error: function (step, details, errorCode, error) {
+      logScriptEvent_(context, "error", step, details, errorCode, error);
+    },
+  };
+}
+
+function getModuleLogger_(operation) {
+  var ctx = __activeTraceContext || {
+    traceId: makeTraceId_(),
+    operation: operation || "APPS_SCRIPT_PROXY_GENERIC",
+    source: "apps-script-module",
+    layer: "apps-script-module",
+    actor: null,
+    version: "1.0",
+  };
+  ctx.layer = "apps-script-module";
+  ctx.operation = ctx.operation || operation || "APPS_SCRIPT_PROXY_GENERIC";
+  return createScriptLogger_(ctx);
+}
+
 const HEADER_KEY_MAP = {
   "ID משמרת": "shiftId",
   "ID דיווח": "shiftId",
@@ -127,63 +290,116 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  const parsed = parseBody(e);
+  const body = parsed.body || {};
+  const action = stringValue(body.action);
+  const payload = body.payload || {};
+  const traceContext = createScriptTraceContext_(body.meta, action);
+  __activeTraceContext = traceContext;
+  const logger = createScriptLogger_(traceContext);
+
+  if (!body.meta || !body.meta.traceId) {
+    logger.warn(
+      "start",
+      { reason: "Missing traceId from client" },
+      "MISSING_TRACE_ID"
+    );
+  }
+
   try {
-    const parsed = parseBody(e);
     if (parsed.error) {
+      logger.warn(
+        "validate-input",
+        { reason: "Invalid JSON body", error: String(parsed.error) },
+        "VALIDATION_FAILED"
+      );
       return jsonResponse(
         withOk_({
           ok: false,
           error: "Invalid JSON body: " + String(parsed.error),
+          errorCode: "VALIDATION_FAILED",
         }),
         400
       );
     }
 
-    const body = parsed.body || {};
-    const action = stringValue(body.action);
-    const payload = body.payload || {};
+    logger.info("start", {
+      action: action || "legacy",
+      hasPayload: !!payload,
+    });
 
     if (!action) {
-      return handleLegacyPost_(e, body);
+      logger.info("dispatch", { handler: "legacy" });
+      return handleLegacyPost_(e, body, logger);
     }
 
-    return handleNewPost_(action, payload);
+    logger.info("dispatch", { action: action });
+    const response = handleNewPost_(action, payload, logger);
+    logger.info("response", { action: action });
+    return response;
   } catch (err) {
+    logger.error(
+      "error",
+      {
+        action: action,
+        message: err && err.message ? err.message : "Unexpected error",
+      },
+      "APPS_SCRIPT_EXCEPTION",
+      err
+    );
     return jsonResponse(
       {
         ok: false,
         error: err && err.message ? err.message : "Unexpected error",
         stack: err && err.stack ? String(err.stack).slice(0, 500) : undefined,
+        errorCode: "APPS_SCRIPT_EXCEPTION",
       },
       500
     );
+  } finally {
+    __activeTraceContext = null;
   }
 }
 
-function handleNewPost_(action, payload) {
+function handleNewPost_(action, payload, logger) {
+  if (logger) logger.info("dispatch", { action: action });
+  var response;
   switch (action) {
     case "jobTypes.list":
-      return jsonResponse(withOk_({ jobTypes: listJobTypes_() }));
+      response = jsonResponse(withOk_({ jobTypes: listJobTypes_() }));
+      break;
     case "employee.linkedJobs":
-      return jsonResponse(withOk_(listEmployeeLinkedJobIds_(payload)));
+      response = jsonResponse(withOk_(listEmployeeLinkedJobIds_(payload)));
+      break;
     case "workLogs.listByEmployee":
-      return jsonResponse(withOk_(listWorkLogsByEmployee_(payload)));
+      response = jsonResponse(withOk_(listWorkLogsByEmployee_(payload)));
+      break;
     case "requests.listByEmployee":
-      return jsonResponse(withOk_(listRequestsByEmployee_(payload)));
+      response = jsonResponse(withOk_(listRequestsByEmployee_(payload)));
+      break;
     case "reportAccessIssue":
-      return jsonResponse(withOk_(reportAccessIssue_(payload || {})));
+      response = jsonResponse(withOk_(reportAccessIssue_(payload || {})));
+      break;
     case "shiftReport.submit":
-      return jsonResponse(withOk_(handleShiftReportSubmit_(payload)));
+      response = jsonResponse(withOk_(handleShiftReportSubmit_(payload)));
+      break;
     case "shiftCorrection.submit":
-      return jsonResponse(withOk_(handleShiftCorrectionSubmit_(payload)));
+      response = jsonResponse(withOk_(handleShiftCorrectionSubmit_(payload)));
+      break;
     case "shiftReport.monthlyErrorNotify":
-      return jsonResponse(withOk_(handleShiftReportMonthlyErrorNotify_(payload)));
+      response = jsonResponse(
+        withOk_(handleShiftReportMonthlyErrorNotify_(payload))
+      );
+      break;
     case "requests.approve":
-      return jsonResponse(withOk_(handleRequestApprove_(payload)));
+      response = jsonResponse(withOk_(handleRequestApprove_(payload)));
+      break;
     case "employee.save":
-      return jsonResponse(withOk_(handleEmployeeSave_(payload)));
+      response = jsonResponse(withOk_(handleEmployeeSave_(payload)));
+      break;
     case "employeeExistsByEmail":
-      return jsonResponse(withOk_(employeeExistsByEmail_(payload || {})));
+      response = jsonResponse(withOk_(employeeExistsByEmail_(payload || {})));
+      break;
     // Legacy stubs so existing screens stay alive until you wire real data
     case "getCurrentEmployee": {
       const email =
@@ -192,12 +408,13 @@ function handleNewPost_(action, payload) {
         "";
 
       if (!email) {
-        return jsonResponse({ ok: false, error: "Missing email" }, 400);
+        response = jsonResponse({ ok: false, error: "Missing email" }, 400);
+        break;
       }
 
       const result = employeeExistsByEmail_({ email: email });
       if (result && result.ok === true && result.exists === true) {
-        return jsonResponse(
+        response = jsonResponse(
           withOk_({
             employee: {
               id: result.employeeId || "",
@@ -206,20 +423,28 @@ function handleNewPost_(action, payload) {
             },
           })
         );
+        break;
       }
 
-      return jsonResponse(withOk_({ employee: null }));
+      response = jsonResponse(withOk_({ employee: null }));
+      break;
     }
     case "getWorkLogs":
-      return jsonResponse(withOk_({ workLogs: [] }));
+      response = jsonResponse(withOk_({ workLogs: [] }));
+      break;
     case "getEmployeeRequests":
-      return jsonResponse(withOk_({ requests: [] }));
+      response = jsonResponse(withOk_({ requests: [] }));
+      break;
     default:
-      return jsonResponse({ ok: false, error: "Unknown action" }, 400);
+      response = jsonResponse({ ok: false, error: "Unknown action" }, 400);
+      break;
   }
+
+  if (logger) logger.info("response", { action: action });
+  return response;
 }
 
-function handleLegacyPost_(e, body) {
+function handleLegacyPost_(e, body, _logger) {
   const paramAction = stringValue(
     e && e.parameter && e.parameter.action ? e.parameter.action : ""
   );
@@ -269,7 +494,25 @@ function normalizeLegacyShiftPayload_(body) {
 }
 
 function jsonResponse(data, status) {
-  const output = ContentService.createTextOutput(JSON.stringify(data || {}));
+  var body = data || {};
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    var incomingMeta =
+      body.meta && typeof body.meta === "object" ? body.meta : {};
+    body = Object.assign({}, body, {
+      meta: Object.assign({}, incomingMeta, {
+        traceId:
+          __activeTraceContext && __activeTraceContext.traceId
+            ? __activeTraceContext.traceId
+            : incomingMeta.traceId,
+        operation:
+          __activeTraceContext && __activeTraceContext.operation
+            ? __activeTraceContext.operation
+            : incomingMeta.operation,
+      }),
+    });
+  }
+
+  const output = ContentService.createTextOutput(JSON.stringify(body || {}));
   output.setMimeType(ContentService.MimeType.JSON);
   if (typeof status === "number") {
     output.setResponseCode(status);
@@ -286,6 +529,8 @@ function withOk_(data) {
 }
 
 function listJobTypes_() {
+  var logger = getModuleLogger_("REPORT_LOAD");
+  logger.info("start", { sheetNames: OPTIONS_SHEET_NAMES });
   const sheet = getSheetByPossibleNames_(OPTIONS_SHEET_NAMES);
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
@@ -306,9 +551,19 @@ function listJobTypes_() {
   );
   const deptCol = getRequiredColumn_(headerMap, ["מחלקות", "מחלקה"], sheetName);
   const payStatusCol = getOptionalColumn_(headerMap, ["סטטוס אופן תשלום"]);
-  const payIdCol = getOptionalColumn_(headerMap, ["ID אופני תשלום", "ID אופן תשלום"]);
-  const payNameCol = getOptionalColumn_(headerMap, ["אופני תשלום", "אופן תשלום"]);
+  const payIdCol = getOptionalColumn_(headerMap, [
+    "ID אופני תשלום",
+    "ID אופן תשלום",
+  ]);
+  const payNameCol = getOptionalColumn_(headerMap, [
+    "אופני תשלום",
+    "אופן תשלום",
+  ]);
   const dataRange = sheet.getDataRange().getValues();
+  logger.info("read-sheet", {
+    sheetName: sheetName,
+    rows: dataRange.length - 1,
+  });
   let blanks = 0;
   const results = [];
   for (let i = 1; i < dataRange.length; i++) {
@@ -345,9 +600,17 @@ function listJobTypes_() {
 }
 
 function listEmployeeLinkedJobIds_(payload) {
+  var logger = getModuleLogger_("REPORT_LOAD");
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
-  if (!employeeId) throw new Error("Missing employeeId");
+  if (!employeeId) {
+    logger.warn(
+      "validation",
+      { reason: "Missing employeeId" },
+      ERROR_CODES.VALIDATION_FAILED
+    );
+    throw new Error("Missing employeeId");
+  }
   const sheet = getEmployeesSheet_();
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
@@ -363,6 +626,7 @@ function listEmployeeLinkedJobIds_(payload) {
   );
   const statusCol = getRequiredColumn_(headerMap, ["סטטוס"], sheetName);
   const values = sheet.getDataRange().getValues();
+  logger.info("read-sheet", { sheetName: sheetName, rows: values.length - 1 });
   const jobTypeIds = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
@@ -519,8 +783,14 @@ function listRequestsByEmployee_(payload) {
   );
   const fixDateCol = getOptionalColumn_(reqHeaders, ["תיקון תאריך"]);
   const fixTimeCol = getOptionalColumn_(reqHeaders, ["תיקון שעה"]);
-  const payTypeCol = getOptionalColumn_(reqHeaders, ["אופן תשלום", "אופני תשלום"]);
-  const payTypeIdCol = getOptionalColumn_(reqHeaders, ["ID אופן תשלום", "ID אופני תשלום"]);
+  const payTypeCol = getOptionalColumn_(reqHeaders, [
+    "אופן תשלום",
+    "אופני תשלום",
+  ]);
+  const payTypeIdCol = getOptionalColumn_(reqHeaders, [
+    "ID אופן תשלום",
+    "ID אופני תשלום",
+  ]);
 
   const jobTypes = listJobTypes_();
   const jobTypeNames = jobTypes.map((j) => j.name);
@@ -540,7 +810,8 @@ function listRequestsByEmployee_(payload) {
         jobTypeNames.indexOf(jobName) >= 0 ? "job_not_linked" : "new_job_type";
     }
     const submittedAt = submittedCol ? stringValue(row[submittedCol - 1]) : "";
-    const requestedSummary = stringValue(row[directionCol - 1]) ||
+    const requestedSummary =
+      stringValue(row[directionCol - 1]) ||
       (unitsCol ? stringValue(row[unitsCol - 1]) : "");
     const noteToManager = noteCol ? stringValue(row[noteCol - 1]) : "";
     const rawPayType = payTypeCol ? stringValue(row[payTypeCol - 1]) : "";
@@ -579,7 +850,8 @@ function listRequestsByEmployee_(payload) {
       payTypeLabel: rawPayType,
       payTypeId: payTypeIdCol ? stringValue(row[payTypeIdCol - 1]) : "",
       createdAt: submittedAt,
-      description: jobName && workDate ? jobName + " • " + workDate : jobName || workDate,
+      description:
+        jobName && workDate ? jobName + " • " + workDate : jobName || workDate,
       correction: correction,
     });
   }
@@ -591,21 +863,50 @@ function findRequestById_(requestId) {
   const headers = getHeaderMap_(reqSheet);
   const reqSheetName = reqSheet.getName();
   const shiftIdCol = getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
-  const statusCol = getRequiredColumn_(headers, ["סטטוס", "סטטוס בקשה"], reqSheetName);
+  const statusCol = getRequiredColumn_(
+    headers,
+    ["סטטוס", "סטטוס בקשה"],
+    reqSheetName
+  );
   const typeCol = getOptionalColumn_(headers, ["סוג בקשה"]);
-  const empIdCol = getOptionalColumn_(headers, ["מזהה עובד", "ID עובד", "ת.ז", "תז"]);
+  const empIdCol = getOptionalColumn_(headers, [
+    "מזהה עובד",
+    "ID עובד",
+    "ת.ז",
+    "תז",
+  ]);
   const empNameCol = getOptionalColumn_(headers, ["שם מלא"]);
-  const jobIdCol = getOptionalColumn_(headers, ["ID סוג עבודה", "ID סוגי עבודה"]);
+  const jobIdCol = getOptionalColumn_(headers, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
   const jobNameCol = getOptionalColumn_(headers, ["סוג עבודה", "סוגי עבודה"]);
   const deptCol = getOptionalColumn_(headers, ["מחלקה", "מחלקות"]);
-  const workDateCol = getOptionalColumn_(headers, ["תאריך משמרת", "תיקון תאריך", "חותמת זמן"]);
-  const directionCol = getOptionalColumn_(headers, ["דיווח שעות", "כניסה / יציאה"]);
+  const workDateCol = getOptionalColumn_(headers, [
+    "תאריך משמרת",
+    "תיקון תאריך",
+    "חותמת זמן",
+  ]);
+  const directionCol = getOptionalColumn_(headers, [
+    "דיווח שעות",
+    "כניסה / יציאה",
+  ]);
   const fixDateCol = getOptionalColumn_(headers, ["תיקון תאריך"]);
   const fixTimeCol = getOptionalColumn_(headers, ["תיקון שעה"]);
-  const unitsCol = getOptionalColumn_(headers, ["כמות היחידות", "דיווח יחידות"]);
-  const noteCol = getOptionalColumn_(headers, ["הערה למנהל", "הערות", "הערות למשמרת"]);
+  const unitsCol = getOptionalColumn_(headers, [
+    "כמות היחידות",
+    "דיווח יחידות",
+  ]);
+  const noteCol = getOptionalColumn_(headers, [
+    "הערה למנהל",
+    "הערות",
+    "הערות למשמרת",
+  ]);
   const payTypeCol = getOptionalColumn_(headers, ["אופן תשלום", "אופני תשלום"]);
-  const payTypeIdCol = getOptionalColumn_(headers, ["ID אופן תשלום", "ID אופני תשלום"]);
+  const payTypeIdCol = getOptionalColumn_(headers, [
+    "ID אופן תשלום",
+    "ID אופני תשלום",
+  ]);
   const decidedAtCol = getOptionalColumn_(headers, ["תאריך החלטה"]);
 
   const values = reqSheet.getDataRange().getValues();
@@ -702,7 +1003,12 @@ function handleShiftReportSubmit_(payload) {
   const workDate = stringValue(payload.workDate) || timestamp.split("T")[0];
 
   const employeePay = jobTypeId
-    ? resolveEmployeeJobPayType_(employeesSheet, empHeaders, employeeId, jobTypeId)
+    ? resolveEmployeeJobPayType_(
+        employeesSheet,
+        empHeaders,
+        employeeId,
+        jobTypeId
+      )
     : null;
   const payTypeName = employeePay
     ? employeePay.payTypeName
@@ -730,7 +1036,9 @@ function handleShiftReportSubmit_(payload) {
   const manualDate = stringValue(
     payload.manualDate || payload.workDate || payload.fixDate || workDate
   );
-  const manualTime = stringValue(payload.manualTime || payload.fixTime || fixTime);
+  const manualTime = stringValue(
+    payload.manualTime || payload.fixTime || fixTime
+  );
   const isManualHourly =
     payType === "hourly" &&
     (reportMode.toLowerCase() === "manual" || !!manualDate || !!manualTime);
@@ -883,14 +1191,20 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
     const sheet = getEmployeesSheet_();
     const headers = getHeaderMap_(sheet);
     const sheetName = sheet.getName();
-    const empIdCol = getRequiredColumn_(headers, ["מזהה עובד", "ID עובד"], sheetName);
+    const empIdCol = getRequiredColumn_(
+      headers,
+      ["מזהה עובד", "ID עובד"],
+      sheetName
+    );
     const nameCol = getOptionalColumn_(headers, ["שם מלא"]);
     const emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
       if (stringValue(rows[i][empIdCol - 1]) !== employeeId) continue;
-      if (!resolvedName && nameCol) resolvedName = stringValue(rows[i][nameCol - 1]);
-      if (!resolvedEmail && emailCol) resolvedEmail = stringValue(rows[i][emailCol - 1]);
+      if (!resolvedName && nameCol)
+        resolvedName = stringValue(rows[i][nameCol - 1]);
+      if (!resolvedEmail && emailCol)
+        resolvedEmail = stringValue(rows[i][emailCol - 1]);
       break;
     }
   }
@@ -981,7 +1295,11 @@ function handleShiftCorrectionSubmit_(payload) {
 
   getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
   getRequiredColumn_(headers, ["סטטוס", "סטטוס בקשה"], reqSheetName);
-  getRequiredColumn_(headers, ["מזהה עובד", "ID עובד", "ת.ז", "תז"], reqSheetName);
+  getRequiredColumn_(
+    headers,
+    ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
+    reqSheetName
+  );
   getRequiredColumn_(headers, ["שם מלא"], reqSheetName);
   getRequiredColumn_(headers, ["סוג עבודה", "סוגי עבודה"], reqSheetName);
   getRequiredColumn_(headers, ["ID סוג עבודה", "ID סוגי עבודה"], reqSheetName);
@@ -1038,7 +1356,9 @@ function handleShiftCorrectionSubmit_(payload) {
 }
 
 function handleRequestApprove_(payload) {
-  const requestId = stringValue(payload.requestId || payload.shiftId || payload.id);
+  const requestId = stringValue(
+    payload.requestId || payload.shiftId || payload.id
+  );
   if (!requestId) throw new Error("Missing requestId");
 
   const found = findRequestById_(requestId);
@@ -1117,13 +1437,20 @@ function handleEmployeeSave_(payload) {
   const employeeId = stringValue(payload.employeeId);
   if (!employeeId) throw new Error("Missing employeeId");
 
-  const forbiddenName = payload.hasOwnProperty("fullName") || payload.hasOwnProperty("name") || payload.hasOwnProperty("employeeName");
+  const forbiddenName =
+    payload.hasOwnProperty("fullName") ||
+    payload.hasOwnProperty("name") ||
+    payload.hasOwnProperty("employeeName");
   if (forbiddenName) return { ok: false, error: "fullName_read_only" };
 
   const sheet = getEmployeesSheet_();
   let headers = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
-  const empIdCol = getRequiredColumn_(headers, ["מזהה עובד", "ID עובד"], sheetName);
+  const empIdCol = getRequiredColumn_(
+    headers,
+    ["מזהה עובד", "ID עובד"],
+    sheetName
+  );
   const phoneCol = getOptionalColumn_(headers, ["טלפון"]);
   const birthCol = getOptionalColumn_(headers, ["ת. לידה", "תאריך לידה"]);
 
@@ -1146,7 +1473,9 @@ function handleEmployeeSave_(payload) {
     sheet.getRange(targetRow, phoneCol).setValue(stringValue(payload.phone));
   }
   if (payload.birthDate !== undefined && birthCol) {
-    sheet.getRange(targetRow, birthCol).setValue(stringValue(payload.birthDate));
+    sheet
+      .getRange(targetRow, birthCol)
+      .setValue(stringValue(payload.birthDate));
   }
   if (payload.size !== undefined && payload.size !== null) {
     sheet.getRange(targetRow, sizeCol).setValue(stringValue(payload.size));
@@ -1157,10 +1486,17 @@ function handleEmployeeSave_(payload) {
     id: employeeId,
     phone: payload.phone !== undefined ? stringValue(payload.phone) : undefined,
     birthDate:
-      payload.birthDate !== undefined ? stringValue(payload.birthDate) : undefined,
-    size: payload.size !== undefined && payload.size !== null ? stringValue(payload.size) : undefined,
+      payload.birthDate !== undefined
+        ? stringValue(payload.birthDate)
+        : undefined,
+    size:
+      payload.size !== undefined && payload.size !== null
+        ? stringValue(payload.size)
+        : undefined,
     sizeSource:
-      payload.size !== undefined && payload.size !== null ? "webapp" : undefined,
+      payload.size !== undefined && payload.size !== null
+        ? "webapp"
+        : undefined,
   };
 
   return { ok: true, status: "updated", employee: response };
@@ -1290,12 +1626,9 @@ function normalizePayType_(name) {
   if (!key) return "";
   if (key.indexOf("חודשי") !== -1 || key.indexOf("month") !== -1)
     return "monthly";
-  if (key.indexOf("יחיד") !== -1 || key.indexOf("unit") !== -1)
-    return "unit";
-  if (key.indexOf("יומי") !== -1 || key.indexOf("day") !== -1)
-    return "daily";
-  if (key.indexOf("שעת") !== -1 || key.indexOf("hour") !== -1)
-    return "hourly";
+  if (key.indexOf("יחיד") !== -1 || key.indexOf("unit") !== -1) return "unit";
+  if (key.indexOf("יומי") !== -1 || key.indexOf("day") !== -1) return "daily";
+  if (key.indexOf("שעת") !== -1 || key.indexOf("hour") !== -1) return "hourly";
   return "";
 }
 
@@ -1368,14 +1701,11 @@ function resolveEmployeeJobPayType_(sheet, headers, employeeId, jobTypeId) {
     ["ID סוג עבודה", "ID סוגי עבודה"],
     sheet.getName()
   );
-  const payIdCol = getOptionalColumn_(
-    headers,
-    ["ID אופן תשלום", "ID אופני תשלום"]
-  );
-  const payNameCol = getOptionalColumn_(
-    headers,
-    ["אופן תשלום", "אופני תשלום"]
-  );
+  const payIdCol = getOptionalColumn_(headers, [
+    "ID אופן תשלום",
+    "ID אופני תשלום",
+  ]);
+  const payNameCol = getOptionalColumn_(headers, ["אופן תשלום", "אופני תשלום"]);
   const statusCol = getOptionalColumn_(headers, ["סטטוס"]);
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
@@ -1400,13 +1730,23 @@ function sendMonthlyBlockEmail_(details) {
   const bodyLines = [
     "דיווח נחסם בגלל אופן תשלום חודשי:",
     "זמן: " + (details.timestamp || ""),
-    "עובד: " + (details.employeeName || "") + " (" + (details.employeeId || "") + ")",
+    "עובד: " +
+      (details.employeeName || "") +
+      " (" +
+      (details.employeeId || "") +
+      ")",
     "אימייל: " + (details.employeeEmail || ""),
-    "סוג עבודה: " + (details.jobName || "") + " (" + (details.jobTypeId || "") + ")",
+    "סוג עבודה: " +
+      (details.jobName || "") +
+      " (" +
+      (details.jobTypeId || "") +
+      ")",
   ];
-  const body = bodyLines.filter(function (l) {
-    return stringValue(l);
-  }).join("\n");
+  const body = bodyLines
+    .filter(function (l) {
+      return stringValue(l);
+    })
+    .join("\n");
   recipients.forEach(function (to) {
     if (!to) return;
     MailApp.sendEmail({ to: to, subject: subject, body: body });
@@ -1581,16 +1921,39 @@ function stringValue(value) {
   return String(value).trim();
 }
 
-function linkJobTypeToEmployee_(employeeId, employeeName, jobTypeId, jobName, department, payTypeId, payTypeName) {
+function linkJobTypeToEmployee_(
+  employeeId,
+  employeeName,
+  jobTypeId,
+  jobName,
+  department,
+  payTypeId,
+  payTypeName
+) {
   const sheet = getEmployeesSheet_();
   const headers = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
-  const empIdCol = getRequiredColumn_(headers, ["מזהה עובד", "ID עובד"], sheetName);
+  const empIdCol = getRequiredColumn_(
+    headers,
+    ["מזהה עובד", "ID עובד"],
+    sheetName
+  );
   const empNameCol = getRequiredColumn_(headers, ["שם מלא"], sheetName);
-  const jobTypeIdCol = getRequiredColumn_(headers, ["ID סוג עבודה", "ID סוגי עבודה"], sheetName);
-  const jobNameCol = getRequiredColumn_(headers, ["סוג עבודה", "סוגי עבודה"], sheetName);
+  const jobTypeIdCol = getRequiredColumn_(
+    headers,
+    ["ID סוג עבודה", "ID סוגי עבודה"],
+    sheetName
+  );
+  const jobNameCol = getRequiredColumn_(
+    headers,
+    ["סוג עבודה", "סוגי עבודה"],
+    sheetName
+  );
   const deptCol = getOptionalColumn_(headers, ["מחלקה", "מחלקות"]);
-  const payIdCol = getOptionalColumn_(headers, ["ID אופן תשלום", "ID אופני תשלום"]);
+  const payIdCol = getOptionalColumn_(headers, [
+    "ID אופן תשלום",
+    "ID אופני תשלום",
+  ]);
   const payNameCol = getOptionalColumn_(headers, ["אופן תשלום", "אופני תשלום"]);
 
   const values = sheet.getDataRange().getValues();
@@ -1608,17 +1971,22 @@ function linkJobTypeToEmployee_(employeeId, employeeName, jobTypeId, jobName, de
     sheet.getRange(targetRow, 1, 1, rowArr.length).setValues([rowArr]);
   }
 
-  if (employeeName) sheet.getRange(targetRow, empNameCol).setValue(employeeName);
+  if (employeeName)
+    sheet.getRange(targetRow, empNameCol).setValue(employeeName);
   sheet.getRange(targetRow, empIdCol).setValue(employeeId);
   sheet.getRange(targetRow, jobTypeIdCol).setValue(jobTypeId || "");
   sheet.getRange(targetRow, jobNameCol).setValue(jobName || "");
   if (deptCol) sheet.getRange(targetRow, deptCol).setValue(department || "");
   if (payIdCol) sheet.getRange(targetRow, payIdCol).setValue(payTypeId || "");
-  if (payNameCol) sheet.getRange(targetRow, payNameCol).setValue(payTypeName || "");
+  if (payNameCol)
+    sheet.getRange(targetRow, payNameCol).setValue(payTypeName || "");
 }
 
 function ensureEmployeeSizeColumns_(sheet, headers) {
-  let sizeCol = getOptionalColumn_(headers, ["מידה (WebApp)", "מידת חולצה (WebApp)"]); 
+  let sizeCol = getOptionalColumn_(headers, [
+    "מידה (WebApp)",
+    "מידת חולצה (WebApp)",
+  ]);
   let sourceCol = getOptionalColumn_(headers, ["SOURCE_SIZE", "מקור מידה"]);
   if (sizeCol && sourceCol) return { sizeCol, sourceCol, headers };
 
