@@ -519,6 +519,8 @@ function listRequestsByEmployee_(payload) {
   );
   const fixDateCol = getOptionalColumn_(reqHeaders, ["תיקון תאריך"]);
   const fixTimeCol = getOptionalColumn_(reqHeaders, ["תיקון שעה"]);
+  const payTypeCol = getOptionalColumn_(reqHeaders, ["אופן תשלום", "אופני תשלום"]);
+  const payTypeIdCol = getOptionalColumn_(reqHeaders, ["ID אופן תשלום", "ID אופני תשלום"]);
 
   const jobTypes = listJobTypes_();
   const jobTypeNames = jobTypes.map((j) => j.name);
@@ -537,15 +539,34 @@ function listRequestsByEmployee_(payload) {
       requestType =
         jobTypeNames.indexOf(jobName) >= 0 ? "job_not_linked" : "new_job_type";
     }
+    const submittedAt = submittedCol ? stringValue(row[submittedCol - 1]) : "";
+    const requestedSummary = stringValue(row[directionCol - 1]) ||
+      (unitsCol ? stringValue(row[unitsCol - 1]) : "");
+    const noteToManager = noteCol ? stringValue(row[noteCol - 1]) : "";
+    const rawPayType = payTypeCol ? stringValue(row[payTypeCol - 1]) : "";
+    const payType = normalizePayType_(rawPayType);
+    let correction = null;
+    if (requestType === "shift_correction" && noteToManager) {
+      try {
+        const parsed = JSON.parse(noteToManager);
+        if (parsed && typeof parsed === "object") {
+          correction = parsed;
+        }
+      } catch (err) {
+        correction = null;
+      }
+    }
+    const workDate = workDateCol ? stringValue(row[workDateCol - 1]) : "";
+
     requests.push({
       id: stringValue(row[shiftIdCol - 1]),
       status: stringValue(row[statusCol - 1]),
       jobName: jobName,
-      workDate: workDateCol ? stringValue(row[workDateCol - 1]) : "",
-      requestedSummary: stringValue(row[directionCol - 1]),
+      workDate: workDate,
+      requestedSummary: requestedSummary,
       units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
-      noteToManager: noteCol ? stringValue(row[noteCol - 1]) : "",
-      submittedAt: submittedCol ? stringValue(row[submittedCol - 1]) : "",
+      noteToManager: noteToManager,
+      submittedAt: submittedAt,
       decidedAt: decidedCol ? stringValue(row[decidedCol - 1]) : "",
       type: requestType,
       employeeId: employeeId,
@@ -554,6 +575,12 @@ function listRequestsByEmployee_(payload) {
       jobTypeId: stringValue(row[jobTypeIdCol - 1]),
       fixDate: fixDateCol ? stringValue(row[fixDateCol - 1]) : "",
       fixTime: fixTimeCol ? stringValue(row[fixTimeCol - 1]) : "",
+      payType: payType,
+      payTypeLabel: rawPayType,
+      payTypeId: payTypeIdCol ? stringValue(row[payTypeIdCol - 1]) : "",
+      createdAt: submittedAt,
+      description: jobName && workDate ? jobName + " • " + workDate : jobName || workDate,
+      correction: correction,
     });
   }
   return { requests };
@@ -688,6 +715,7 @@ function handleShiftReportSubmit_(payload) {
     ? stringValue(job.payTypeId)
     : "";
   const payType = normalizePayType_(payTypeName);
+  const payTypeForRequestRow = payType || payTypeName;
 
   if (payType === "monthly") {
     return {
@@ -812,7 +840,7 @@ function handleShiftReportSubmit_(payload) {
       managerDecision: "",
       requestType: requestType,
       payTypeId: payTypeId,
-      payType: payTypeName,
+      payType: payTypeForRequestRow,
     });
     reqSheet.appendRow(row);
     return {
