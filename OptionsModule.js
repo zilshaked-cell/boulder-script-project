@@ -7,7 +7,7 @@ var OPT = OPT || {};
     SHEET_NAME_OPTIONS: "אופציות בחירה ו ID'S",
     HEADER_ROW: 1,
     COL: {
-      // לפי SHEETS_CONTRACT.md (pay columns are N-P)
+      // לפי SHEETS_CONTRACT.md (pay columns are H-J)
       JOB_STATUS: 1, // A
       JOB_ID: 2, // B
       JOB_NAME: 3, // C
@@ -17,17 +17,17 @@ var OPT = OPT || {};
       BONUS_ID: 6, // F
       BONUS_NAME: 7, // G
 
-      SENIORITY_STATUS: 8, // H
-      SENIORITY_ID: 9, // I
-      SENIORITY_NAME: 10, // J
+      PAY_STATUS: 8, // H
+      PAY_ID: 9, // I
+      PAY_NAME: 10, // J
 
-      TRAIN_STATUS: 11, // K
-      TRAIN_ID: 12, // L
-      TRAIN_NAME: 13, // M
+      SENIORITY_STATUS: 11, // K
+      SENIORITY_ID: 12, // L
+      SENIORITY_NAME: 13, // M
 
-      PAY_STATUS: 14, // N
-      PAY_ID: 15, // O
-      PAY_NAME: 16, // P
+      TRAIN_STATUS: 14, // N
+      TRAIN_ID: 15, // O
+      TRAIN_NAME: 16, // P
     },
   };
 
@@ -75,16 +75,7 @@ var OPT = OPT || {};
     var lastRow = sh.getLastRow();
     if (lastRow <= headerRow) return { created: 0 };
 
-    // הקטלוגים הם A..P
-    var lastCol = Math.max(
-      CONFIG.COL.PAY_NAME,
-      CONFIG.COL.PAY_ID,
-      CONFIG.COL.PAY_STATUS,
-      CONFIG.COL.TRAIN_NAME,
-      CONFIG.COL.TRAIN_ID,
-      CONFIG.COL.TRAIN_STATUS
-    );
-
+    var lastCol = sh.getLastColumn();
     var range = sh.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
     var values = range.getValues();
 
@@ -173,14 +164,27 @@ var OPT = OPT || {};
       return cache;
     }
 
-    var lastCol = Math.max(
-      CONFIG.COL.PAY_NAME,
-      CONFIG.COL.PAY_ID,
-      CONFIG.COL.PAY_STATUS,
-      CONFIG.COL.TRAIN_NAME,
-      CONFIG.COL.TRAIN_ID,
-      CONFIG.COL.TRAIN_STATUS
-    );
+    var lastCol = sh.getLastColumn();
+    var headers = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+
+    function findCol_(candidates) {
+      for (var i = 0; i < headers.length; i++) {
+        var h = norm_(headers[i]);
+        for (var c = 0; c < candidates.length; c++) {
+          if (h === norm_(candidates[c])) return i + 1; // 1-based
+        }
+      }
+      return null;
+    }
+
+    var payStatusCol =
+      findCol_(["סטטוס אופן תשלום", "סטטוס אופני תשלום"]) ||
+      CONFIG.COL.PAY_STATUS;
+    var payIdCol =
+      findCol_(["ID אופן תשלום", "ID אופני תשלום"]) || CONFIG.COL.PAY_ID;
+    var payNameCol =
+      findCol_(["אופן תשלום", "אופני תשלום"]) || CONFIG.COL.PAY_NAME;
+
     var data = sh
       .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
       .getValues();
@@ -238,9 +242,9 @@ var OPT = OPT || {};
       }
 
       // pays
-      var payName = norm_(row[CONFIG.COL.PAY_NAME - 1]);
-      var payId = norm_(row[CONFIG.COL.PAY_ID - 1]);
-      var payStatus = norm_(row[CONFIG.COL.PAY_STATUS - 1]);
+      var payName = norm_(row[payNameCol - 1]);
+      var payId = norm_(row[payIdCol - 1]);
+      var payStatus = norm_(row[payStatusCol - 1]);
       if (payName || payId) {
         var pay = { id: payId, name: payName, status: payStatus };
         out.pays.push(pay);

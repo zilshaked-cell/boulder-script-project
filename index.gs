@@ -80,9 +80,30 @@ var ERROR_CODES = {
   EMPTY_RESPONSE: "EMPTY_RESPONSE",
 };
 
+// Contract/health metadata used by the status endpoint
+const CONTRACT_SCHEMA_VERSION = 1;
+const SUPPORTED_ACTIONS = [
+  "health",
+  "jobTypes.list",
+  "employee.linkedJobs",
+  "workLogs.listByEmployee",
+  "requests.listByEmployee",
+  "reportAccessIssue",
+  "shiftReport.submit",
+  "shiftCorrection.submit",
+  "shiftReport.monthlyErrorNotify",
+  "requests.approve",
+  "employee.save",
+  "employeeExistsByEmail",
+  "getCurrentEmployee",
+  "getWorkLogs",
+  "getEmployeeRequests",
+];
+
 function mapActionToOperation_(action) {
   if (!action) return "APPS_SCRIPT_PROXY_GENERIC";
   var map = {
+    health: "HEALTH",
     "jobTypes.list": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
     "workLogs.listByEmployee": "WORK_LOG_LOAD",
@@ -365,6 +386,10 @@ function handleNewPost_(action, payload, logger) {
   if (logger) logger.info("dispatch", { action: action });
   var response;
   switch (action) {
+    case "health":
+      // SPEC-OPS-001
+      response = jsonResponse(withOk_(healthCheck_()));
+      break;
     case "jobTypes.list":
       response = jsonResponse(withOk_({ jobTypes: listJobTypes_() }));
       break;
@@ -402,6 +427,7 @@ function handleNewPost_(action, payload, logger) {
       break;
     // Legacy stubs so existing screens stay alive until you wire real data
     case "getCurrentEmployee": {
+      // SPEC-EMP-001 / SPEC-EMP-002
       const email =
         (payload && payload.email) ||
         (payload && payload.user && payload.user.email) ||
@@ -413,23 +439,23 @@ function handleNewPost_(action, payload, logger) {
       }
 
       const result = employeeExistsByEmail_({ email: email });
-      if (result && result.ok === true && result.exists === true) {
-        const foundEmployee = result.employee || {};
-        const idFromSheet =
-          result.employeeId || result.id || foundEmployee.id || "";
+      const found =
+        result &&
+        result.ok === true &&
+        (result.found === true || result.exists === true);
+
+      if (found) {
+        const emp = result.employee || {};
+        const idFromSheet = emp.id || result.employeeId || result.id || "";
         const nameFromSheet =
-          result.fullName ||
-          result.name ||
-          foundEmployee.name ||
-          foundEmployee.fullName ||
-          "";
+          emp.name || result.fullName || result.name || emp.fullName || "";
         response = jsonResponse(
           withOk_({
             employee: {
               id: idFromSheet || email, // never return empty id
               employeeId: idFromSheet || email,
               name: nameFromSheet,
-              email: email,
+              email: emp.email || email,
             },
           })
         );
@@ -452,6 +478,96 @@ function handleNewPost_(action, payload, logger) {
 
   if (logger) logger.info("response", { action: action });
   return response;
+}
+
+// SPEC-OPS-001
+function healthCheck_() {
+  const requiredSheets = [
+    {
+      key: "Employees",
+      possibleNames: EMPLOYEES_SHEET_NAMES,
+      requiredColumns: [
+        ["מזהה עובד", "ID עובד", "Employee ID"],
+        ["שם מלא", "name"],
+        EMAIL_HEADER_CANDIDATES,
+        ["סטטוס", "סטטוס פעיל", "active", "status"],
+      ],
+    },
+    {
+      key: "WorkLogs",
+      possibleNames: [WORK_LOGS_SHEET_NAME],
+      requiredColumns: [
+        ["ID משמרת", "ID דיווח", "Shift ID"],
+        ["חותמת זמן", "timestamp"],
+        ["ID עובד", "מזהה עובד", "Employee ID"],
+        ["שם מלא", "name"],
+        ["כניסה / יציאה", "דיווח שעות"],
+        ["תיקון תאריך"],
+        ["תיקון שעה"],
+        ["ID סוג עבודה", "ID סוגי עבודה"],
+        ["סוג עבודה", "סוגי עבודה"],
+        ["מחלקה", "מחלקות"],
+        ["כמות היחידות", "דיווח יחידות"],
+        ["הערות", "הערה"],
+      ],
+    },
+    {
+      key: "Requests",
+      possibleNames: REQUESTS_SHEET_NAMES,
+      requiredColumns: [
+        ["ID משמרת"],
+        ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
+        ["סטטוס", "סטטוס בקשה"],
+        ["סוג עבודה", "סוגי עבודה"],
+        ["תאריך משמרת", "חותמת זמן", "תיקון תאריך"],
+        ["ID סוג עבודה", "ID סוגי עבודה"],
+        ["הערות", "הערה למנהל", "הערות למשמרת"],
+      ],
+    },
+  ];
+
+  const sheetChecks = requiredSheets.map(function (spec) {
+    const entry = {
+      key: spec.key,
+      ok: false,
+      foundSheetName: null,
+      missingColumns: [],
+    };
+
+    try {
+      const sheet = getSheetByPossibleNames_(spec.possibleNames);
+      entry.foundSheetName = sheet.getName();
+      const headerMap = getHeaderMap_(sheet);
+      for (let i = 0; i < spec.requiredColumns.length; i++) {
+        const colCandidates = spec.requiredColumns[i];
+        try {
+          getRequiredColumn_(headerMap, colCandidates, sheet.getName());
+        } catch (err) {
+          const label = Array.isArray(colCandidates)
+            ? stringValue(colCandidates[0])
+            : stringValue(colCandidates);
+          if (label) entry.missingColumns.push(label);
+        }
+      }
+      entry.ok = entry.missingColumns.length === 0;
+    } catch (err) {
+      entry.error = String(err && err.message ? err.message : err);
+      entry.missingColumns = spec.requiredColumns.map(function (col) {
+        return Array.isArray(col) ? stringValue(col[0]) : stringValue(col);
+      });
+    }
+
+    return entry;
+  });
+
+  return {
+    ok: sheetChecks.every(function (c) {
+      return c.ok;
+    }),
+    schemaVersion: CONTRACT_SCHEMA_VERSION,
+    supportedActions: SUPPORTED_ACTIONS.slice(),
+    sheetChecks: sheetChecks,
+  };
 }
 
 function handleLegacyPost_(e, body, _logger) {
@@ -651,6 +767,7 @@ function listEmployeeLinkedJobIds_(payload) {
 }
 
 function listWorkLogsByEmployee_(payload) {
+  // SPEC-SHIFT-001
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) throw new Error("Missing employeeId");
@@ -717,6 +834,7 @@ function listWorkLogsByEmployee_(payload) {
 }
 
 function listRequestsByEmployee_(payload) {
+  // SPEC-REQ-001
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) throw new Error("Missing employeeId");
@@ -1570,16 +1688,20 @@ function employeeExistsByEmail_(payload) {
       statusLower.indexOf("inactive") !== -1;
     const active = !inactive;
 
+    const empId = colId ? stringValue(row[colId - 1]) : "";
+    const empName = colName ? stringValue(row[colName - 1]) : "";
+
     return {
       ok: true,
       success: true,
       found: true,
       exists: true, // legacy compatibility for callers that check "exists"
-      employeeId: colId ? stringValue(row[colId - 1]) : "",
-      fullName: colName ? stringValue(row[colName - 1]) : "",
+      employeeId: empId,
+      fullName: empName,
+      name: empName,
       employee: {
-        id: colId ? stringValue(row[colId - 1]) : "",
-        name: colName ? stringValue(row[colName - 1]) : "",
+        id: empId,
+        name: empName,
         email: rowEmail,
         active: active,
         status: statusVal,
@@ -1592,6 +1714,9 @@ function employeeExistsByEmail_(payload) {
     success: true,
     found: false,
     exists: false,
+    employeeId: "",
+    fullName: "",
+    name: "",
     employee: null,
   };
 }

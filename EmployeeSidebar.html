@@ -3,852 +3,883 @@
   <head>
     <base target="_top" />
     <style>
-  :root {
-    --color-page-bg: #0b1224;
-    --color-surface: #0f172a;
-    --color-surface-2: #111827;
-    --color-text-primary: #f8fafc;
-    --color-text-muted: #cbd5e1;
-    --color-accent: #fcd34d;
-    --color-accent-strong: #f59e0b;
-    --color-border: #1f2937;
-    --color-border-strong: #334155;
-    --color-focus: rgba(252, 211, 77, 0.6);
-    --color-surface-highlight: rgba(252, 211, 77, 0.12);
-
-    --radius-lg: 16px;
-    --radius-md: 12px;
-    --radius-sm: 10px;
-    --radius-pill: 999px;
-
-    --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.18);
-    --shadow-strong: 0 20px 50px rgba(0, 0, 0, 0.35);
-  }
-
-  body {
-    font-family: var(--font-heebo, "Heebo"), "Segoe UI", Arial, sans-serif;
-    font-size: 13px;
-    direction: rtl;
-    margin: 8px;
-    background: var(--color-page-bg);
-    color: var(--color-text-primary);
-    -webkit-font-smoothing: antialiased;
-    line-height: 1.6;
-  }
-
-  .sidebar-layout {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    background: var(--color-page-bg);
-    border-radius: var(--radius-lg);
-    padding: 6px;
-  }
-
-  .content-area {
-    background: transparent;
-    border-radius: var(--radius-md);
-    padding: 6px 6px 10px;
-    overflow: auto;
-  }
-
-  .section {
-    margin-bottom: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-md);
-    padding: 8px;
-  }
-
-  .label {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    margin-bottom: 4px;
-    display: block;
-  }
-
-  .section-title {
-    margin: 0 0 4px 0;
-    font-size: 15px;
-    font-weight: 800;
-    color: var(--color-text-primary);
-  }
-
-  #employee-section {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-lg);
-    padding: 10px;
-  }
-
-  #global-message {
-    margin-bottom: 8px;
-    min-height: 16px;
-    font-size: 12px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    border: none;
-  }
-  #global-message.error {
-    color: #fca5a5;
-    background: transparent;
-  }
-  #global-message.info {
-    color: var(--color-accent-strong);
-    background: transparent;
-  }
-
-  #search-results {
-    border: 1px solid var(--color-border-strong);
-    max-height: 160px;
-    overflow-y: auto;
-    margin-top: 4px;
-    background: var(--color-surface);
-    border-radius: var(--radius-sm);
-  }
-  #search-results.hidden {
-    display: none;
-  }
-
-  #shifts-search-results {
-    border: 1px solid var(--color-border-strong);
-    max-height: 160px;
-    overflow-y: auto;
-    margin-top: 4px;
-    background: var(--color-surface);
-    border-radius: var(--radius-sm);
-  }
-  #shifts-search-results.hidden {
-    display: none;
-  }
-
-  #shifts-employee-search-results {
-    border: 1px solid var(--color-border-strong);
-    max-height: 160px;
-    overflow-y: auto;
-    margin-top: 4px;
-    background: var(--color-surface);
-    border-radius: var(--radius-sm);
-  }
-  #shifts-employee-search-results.hidden {
-    display: none;
-  }
-
-  .search-item {
-    padding: 6px 8px;
-    cursor: pointer;
-    color: var(--color-text-primary);
-  }
-  .search-item.small {
-    font-size: 11px;
-    color: var(--color-text-muted);
-  }
-  .search-item:hover {
-    background: #1f2937;
-  }
-
-  .field-row {
-    margin-bottom: 4px;
-  }
-
-  .field-row input[type='text'],
-  .field-row input[type='number'],
-  .field-row input[type='date'],
-  .field-row input[type='email'],
-  .field-row select {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-strong);
-    color: var(--color-text-primary);
-    border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-  }
-
-  .field-row input::placeholder {
-    color: var(--color-text-muted);
-  }
-
-  .field-row input:focus,
-  .field-row select:focus {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px var(--color-focus);
-    background: var(--color-surface);
-  }
-
-  .jobs-container {
-    margin-top: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .job-row {
-    border-radius: var(--radius-md);
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .job-row-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-  }
-
-  .job-row-header-title {
-    font-weight: bold;
-    color: var(--color-text-primary);
-  }
-
-  button {
-    font-family: inherit;
-    font-size: 12px;
-    padding: 8px 12px;
-    margin-top: 4px;
-    border-radius: var(--radius-pill);
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: background 0.15s ease, box-shadow 0.15s ease,
-      transform 0.08s ease, border-color 0.15s ease;
-  }
-
-  button:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--color-focus);
-    border-color: var(--color-accent);
-  }
-
-  .btn-primary {
-    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-strong));
-    color: #111827;
-    border: 1px solid var(--color-accent-strong);
-    box-shadow: 0 10px 28px rgba(245, 158, 11, 0.26);
-    font-weight: 700;
-  }
-  .btn-primary:hover {
-    background: linear-gradient(135deg, var(--color-accent-strong), #fbbf24);
-    transform: translateY(-1px);
-    box-shadow: 0 12px 30px rgba(245, 158, 11, 0.32);
-  }
-  .btn-primary:active {
-    transform: translateY(0);
-    box-shadow: 0 6px 16px rgba(245, 158, 11, 0.24);
-  }
-
-  .btn-secondary {
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-strong);
-    color: var(--color-text-primary);
-    font-weight: 600;
-  }
-  .btn-secondary:hover {
-    background: var(--color-surface-highlight);
-    border-color: var(--color-accent);
-  }
-
-  .edit-mode-live {
-    background: var(--color-accent-strong);
-    color: #111827;
-    border: none;
-    box-shadow: var(--shadow-strong);
-  }
-
-  .muted {
-    color: var(--color-text-muted);
-    font-size: 11px;
-  }
-
-  .row-active-btn {
-    border: 1px solid var(--color-border-strong);
-    background: #1f2937;
-    color: var(--color-text-primary);
-    padding: 6px 10px;
-    border-radius: var(--radius-pill);
-    font-weight: 700;
-    margin-top: 0;
-  }
-  .row-active-btn.active {
-    background: rgba(22, 163, 74, 0.2);
-    border-color: #16a34a;
-    color: #bbf7d0;
-    box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
-  }
-
-  .row-active-btn.inactive {
-    background: rgba(148, 163, 184, 0.15);
-    border-color: #475569;
-    color: #e2e8f0;
-  }
-
-  .field-department[disabled] {
-    background: #020617;
-    color: var(--color-text-muted);
-  }
-
-  /* תיבת אזהרה על פילטר */
-  #emp-filter-warning {
-    background: #78350f;
-    color: #ffedd5;
-    border: 1px solid #fbbf24;
-  }
-
-  /* כותרת פרטי העובד + סטטוס */
-  .employee-header {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: var(--radius-md);
-    padding: 8px 10px;
-    margin-bottom: 8px;
-  }
-
-  .status-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-    gap: 6px;
-  }
-
-  .status-pill {
-    display: inline-block;
-    min-width: 72px;
-    padding: 4px 12px;
-    border-radius: var(--radius-pill);
-    font-size: 11px;
-    text-align: center;
-    border: 1px solid transparent;
-    font-weight: 700;
-    background: rgba(148, 163, 184, 0.16);
-    color: #e2e8f0;
-    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  .status-pill.status-active {
-    background: rgba(22, 163, 74, 0.2);
-    color: #bbf7d0;
-    border-color: #16a34a;
-    box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
-  }
-
-  .status-pill.status-inactive {
-    background: rgba(148, 163, 184, 0.18);
-    color: #e2e8f0;
-    border-color: #475569;
-  }
-
-  .sidebar-layout {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    background: var(--color-page-bg);
-    border-radius: var(--radius-lg);
-    padding: 6px;
-  }
-
-  .tabs {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    position: sticky;
-    top: 8px;
-    align-self: flex-start;
-    min-width: 54px;
-  }
-
-  .tab-button {
-    width: 44px;
-    height: 44px;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border);
-    color: var(--color-text-primary);
-    border-radius: var(--radius-md);
-    font-weight: 700;
-    font-size: 11px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-  }
-
-  .tab-label {
-    display: block;
-    text-align: center;
-    line-height: 1.1;
-    width: 100%;
-    padding: 0 4px;
-    box-sizing: border-box;
-  }
-
-  .tab-button.active {
-    background: var(--color-accent-strong);
-    color: #111827;
-    box-shadow: var(--shadow-strong);
-    border-color: var(--color-accent-strong);
-    transform: translateY(-1px);
-  }
-
-  .tab-hidden {
-    display: none !important;
-  }
-
-  .content-area {
-    flex: 1;
-    min-width: 0;
-    max-width: 360px;
-    width: 100%;
-    padding: 4px 6px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .hidden {
-    display: none;
-  }
-
-  .pill-toggle {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  /* שדה חיפוש מעוצב כמו שאר השדות */
-  #search-input {
-    width: 100%;
-    box-sizing: border-box;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-strong);
-    color: var(--color-text-primary);
-    border-radius: var(--radius-sm);
-    padding: 8px 10px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-  }
-
-  #search-input:focus {
-    outline: none;
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px var(--color-focus);
-    background: var(--color-surface);
-  }
-
-  .tab-warning {
-    margin-top: 6px;
-    font-size: 11px;
-    color: #fca5a5;
-    line-height: 1.4;
-  }
-
-  /* חיווי פערי נתונים בפרטי עובד */
-  .mismatch-banner {
-    background: rgba(49, 46, 129, 0.6);
-    border: 1px solid #4338ca;
-    color: #e0e7ff;
-    padding: 10px;
-    border-radius: var(--radius-md);
-    margin-bottom: 10px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  }
-
-  .mismatch-banner-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .mismatch-banner-text {
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  .mismatch-banner-note {
-    margin-top: 4px;
-    font-size: 11px;
-    color: #c4d0ff;
-  }
-
-  .btn-quiet {
-    background: transparent;
-    color: #e0e7ff;
-    border: 1px solid #4338ca;
-    padding: 4px 10px;
-    border-radius: 999px;
-  }
-
-  .btn-quiet:hover {
-    background: #4338ca;
-  }
-
-  .field-mismatch input,
-  .field-mismatch select {
-    border-color: #f59e0b;
-    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
-  }
-
-  .mismatch-options {
-    margin-top: 4px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .mismatch-option-btn {
-    border: 1px solid #f59e0b;
-    background: rgba(245, 158, 11, 0.12);
-    color: #fcd34d;
-    padding: 4px 8px;
-    border-radius: 999px;
-    cursor: pointer;
-    font-size: 11px;
-  }
-
-  .mismatch-option-btn:hover {
-    background: rgba(245, 158, 11, 0.2);
-  }
-
-  /* --- Shifts tab --- */
-  .shifts-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .shifts-message {
-    font-size: 12px;
-    color: var(--color-text-muted);
-    min-height: 18px;
-  }
-  .shifts-message.error { color: #fca5a5; }
-
-  .shifts-filters {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid var(--color-border-strong);
-    padding: 8px;
-    border-radius: var(--radius-md);
-  }
-
-  .filters-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .filters-row input,
-  .filters-row select {
-    flex: 1;
-    min-width: 140px;
-  }
-
-  .quick-range {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .quick-range button {
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border-strong);
-    padding: 6px 10px;
-    border-radius: var(--radius-pill);
-    font-size: 11px;
-  }
-  .quick-range button:hover {
-    border-color: var(--color-accent);
-  }
-  .quick-range button.active {
-    background: rgba(34, 197, 94, 0.18);
-    border-color: #22c55e;
-    color: #bbf7d0;
-    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.32);
-  }
-
-  .label-with-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .inline-toggle {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .filter-toggle {
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-strong);
-    color: var(--color-text-primary);
-    padding: 8px 12px;
-    border-radius: var(--radius-pill);
-    font-weight: 700;
-    min-height: 36px;
-  }
-  .filter-toggle.active {
-    background: rgba(34, 197, 94, 0.18);
-    border-color: #22c55e;
-    color: #bbf7d0;
-    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.3);
-  }
-
-  .toggle-row {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    align-items: stretch;
-  }
-
-  .shifts-results {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 280px;
-    overflow-y: auto;
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    padding: 6px;
-    background: var(--color-surface);
-  }
-
-  .shift-row {
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    padding: 8px;
-    cursor: pointer;
-    transition: border-color 0.15s ease, background 0.15s ease;
-  }
-  .shift-row:hover { border-color: var(--color-accent); }
-  .shift-row.selected {
-    border-color: var(--color-accent-strong);
-    box-shadow: var(--shadow-soft);
-  }
-
-  .shift-row-top {
-    display: flex;
-    justify-content: space-between;
-    gap: 6px;
-    font-weight: 700;
-  }
-
-  .shift-row-bottom {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 4px;
-  }
-
-  .shift-badge {
-    background: var(--color-surface-highlight);
-    border: 1px solid var(--color-border-strong);
-    color: var(--color-text-primary);
-    border-radius: var(--radius-pill);
-    padding: 4px 8px;
-    font-size: 11px;
-  }
-  .shift-badge.status { background: rgba(99, 102, 241, 0.15); border-color: #6366f1; }
-  .shift-badge.warn { background: rgba(248, 113, 113, 0.15); border-color: #f87171; color: #fecaca; }
-  .shift-badge.manual { background: rgba(59, 130, 246, 0.12); border-color: #60a5fa; }
-
-  .shift-details {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    padding: 8px;
-    margin-top: 8px;
-  }
-
-  .shift-details-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 8px;
-  }
-
-  .bonus-chip-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .bonus-chip {
-    background: rgba(34, 197, 94, 0.12);
-    border: 1px solid #22c55e;
-    color: #bbf7d0;
-    padding: 4px 8px;
-    border-radius: var(--radius-pill);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-  }
-
-  .bonus-chip button {
-    background: transparent;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    padding: 2px 4px;
-  }
-
-  .bonus-add-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .bonus-add-row select {
-    min-width: 160px;
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-sm);
-    padding: 6px 8px;
-  }
-
-  .shifts-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin-top: 6px;
-  }
-
-  .shifts-empty {
-    color: var(--color-text-muted);
-    font-size: 12px;
-    padding: 6px 0;
-  }
-
-  /* --- Requests tab --- */
-  .requests-message {
-    font-size: 12px;
-    min-height: 18px;
-  }
-  .requests-message.error { color: #fca5a5; }
-
-  .requests-filters {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 6px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid var(--color-border-strong);
-    padding: 8px;
-    border-radius: var(--radius-md);
-  }
-
-  .requests-actions {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    align-items: center;
-    margin: 4px 0 8px;
-  }
-
-  .requests-results {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .request-card {
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    padding: 8px;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .request-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 4px;
-    font-weight: 700;
-  }
-
-  .request-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--color-text-muted);
-  }
-
-  .request-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--color-border);
-    background: var(--color-surface-2);
-    font-size: 11px;
-  }
-
-  .request-note {
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--color-text-primary);
-  }
-
-  .requests-empty {
-    color: var(--color-text-muted);
-    font-size: 12px;
-    padding: 6px 0;
-  }
-
-  .sidebar-topbar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 6px;
-    margin-bottom: 6px;
-  }
-
-  .sidebar-icon-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-border-strong);
-    color: var(--color-text-primary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .sidebar-icon-btn:hover {
-    background: var(--color-surface-highlight);
-    border-color: var(--color-accent);
-  }
-
-  .sidebar-icon-btn svg {
-    width: 15px;
-    height: 15px;
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .sidebar-icon-btn span {
-    font-size: 16px;
-    line-height: 1;
-  }
-</style>
-
+      :root {
+        --color-page-bg: #0b1224;
+        --color-surface: #0f172a;
+        --color-surface-2: #111827;
+        --color-text-primary: #f8fafc;
+        --color-text-muted: #cbd5e1;
+        --color-accent: #fcd34d;
+        --color-accent-strong: #f59e0b;
+        --color-border: #1f2937;
+        --color-border-strong: #334155;
+        --color-focus: rgba(252, 211, 77, 0.6);
+        --color-surface-highlight: rgba(252, 211, 77, 0.12);
+
+        --radius-lg: 16px;
+        --radius-md: 12px;
+        --radius-sm: 10px;
+        --radius-pill: 999px;
+
+        --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.18);
+        --shadow-strong: 0 20px 50px rgba(0, 0, 0, 0.35);
+      }
+
+      body {
+        font-family: var(--font-heebo, "Heebo"), "Segoe UI", Arial, sans-serif;
+        font-size: 13px;
+        direction: rtl;
+        margin: 8px;
+        background: var(--color-page-bg);
+        color: var(--color-text-primary);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.6;
+      }
+
+      .sidebar-layout {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        background: var(--color-page-bg);
+        border-radius: var(--radius-lg);
+        padding: 6px;
+      }
+
+      .content-area {
+        background: transparent;
+        border-radius: var(--radius-md);
+        padding: 6px 6px 10px;
+        overflow: auto;
+      }
+
+      .section {
+        margin-bottom: 8px;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: var(--radius-md);
+        padding: 8px;
+      }
+
+      .label {
+        font-size: 11px;
+        color: var(--color-text-muted);
+        margin-bottom: 4px;
+        display: block;
+      }
+
+      .section-title {
+        margin: 0 0 4px 0;
+        font-size: 15px;
+        font-weight: 800;
+        color: var(--color-text-primary);
+      }
+
+      #employee-section {
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: var(--radius-lg);
+        padding: 10px;
+      }
+
+      #global-message {
+        margin-bottom: 8px;
+        min-height: 16px;
+        font-size: 12px;
+        padding: 8px 10px;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        border: none;
+      }
+      #global-message.error {
+        color: #fca5a5;
+        background: transparent;
+      }
+      #global-message.info {
+        color: var(--color-accent-strong);
+        background: transparent;
+      }
+
+      #search-results {
+        border: 1px solid var(--color-border-strong);
+        max-height: 160px;
+        overflow-y: auto;
+        margin-top: 4px;
+        background: var(--color-surface);
+        border-radius: var(--radius-sm);
+      }
+      #search-results.hidden {
+        display: none;
+      }
+
+      #shifts-search-results {
+        border: 1px solid var(--color-border-strong);
+        max-height: 160px;
+        overflow-y: auto;
+        margin-top: 4px;
+        background: var(--color-surface);
+        border-radius: var(--radius-sm);
+      }
+      #shifts-search-results.hidden {
+        display: none;
+      }
+
+      #shifts-employee-search-results {
+        border: 1px solid var(--color-border-strong);
+        max-height: 160px;
+        overflow-y: auto;
+        margin-top: 4px;
+        background: var(--color-surface);
+        border-radius: var(--radius-sm);
+      }
+      #shifts-employee-search-results.hidden {
+        display: none;
+      }
+
+      .search-item {
+        padding: 6px 8px;
+        cursor: pointer;
+        color: var(--color-text-primary);
+      }
+      .search-item.small {
+        font-size: 11px;
+        color: var(--color-text-muted);
+      }
+      .search-item:hover {
+        background: #1f2937;
+      }
+
+      .field-row {
+        margin-bottom: 4px;
+      }
+
+      .field-row input[type="text"],
+      .field-row input[type="number"],
+      .field-row input[type="date"],
+      .field-row input[type="email"],
+      .field-row select {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease,
+          background 0.2s ease;
+      }
+
+      .field-row input::placeholder {
+        color: var(--color-text-muted);
+      }
+
+      .field-row input:focus,
+      .field-row select:focus {
+        outline: none;
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 2px var(--color-focus);
+        background: var(--color-surface);
+      }
+
+      .jobs-container {
+        margin-top: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .job-row {
+        border-radius: var(--radius-md);
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .job-row-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+
+      .job-row-header-title {
+        font-weight: bold;
+        color: var(--color-text-primary);
+      }
+
+      button {
+        font-family: inherit;
+        font-size: 12px;
+        padding: 8px 12px;
+        margin-top: 4px;
+        border-radius: var(--radius-pill);
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background 0.15s ease, box-shadow 0.15s ease,
+          transform 0.08s ease, border-color 0.15s ease;
+      }
+
+      button:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--color-focus);
+        border-color: var(--color-accent);
+      }
+
+      .btn-primary {
+        background: linear-gradient(
+          135deg,
+          var(--color-accent),
+          var(--color-accent-strong)
+        );
+        color: #111827;
+        border: 1px solid var(--color-accent-strong);
+        box-shadow: 0 10px 28px rgba(245, 158, 11, 0.26);
+        font-weight: 700;
+      }
+      .btn-primary:hover {
+        background: linear-gradient(
+          135deg,
+          var(--color-accent-strong),
+          #fbbf24
+        );
+        transform: translateY(-1px);
+        box-shadow: 0 12px 30px rgba(245, 158, 11, 0.32);
+      }
+      .btn-primary:active {
+        transform: translateY(0);
+        box-shadow: 0 6px 16px rgba(245, 158, 11, 0.24);
+      }
+
+      .btn-secondary {
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        font-weight: 600;
+      }
+      .btn-secondary:hover {
+        background: var(--color-surface-highlight);
+        border-color: var(--color-accent);
+      }
+
+      .edit-mode-live {
+        background: var(--color-accent-strong);
+        color: #111827;
+        border: none;
+        box-shadow: var(--shadow-strong);
+      }
+
+      .muted {
+        color: var(--color-text-muted);
+        font-size: 11px;
+      }
+
+      .row-active-btn {
+        border: 1px solid var(--color-border-strong);
+        background: #1f2937;
+        color: var(--color-text-primary);
+        padding: 6px 10px;
+        border-radius: var(--radius-pill);
+        font-weight: 700;
+        margin-top: 0;
+      }
+      .row-active-btn.active {
+        background: rgba(22, 163, 74, 0.2);
+        border-color: #16a34a;
+        color: #bbf7d0;
+        box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
+      }
+
+      .row-active-btn.inactive {
+        background: rgba(148, 163, 184, 0.15);
+        border-color: #475569;
+        color: #e2e8f0;
+      }
+
+      .field-department[disabled] {
+        background: #020617;
+        color: var(--color-text-muted);
+      }
+
+      /* תיבת אזהרה על פילטר */
+      #emp-filter-warning {
+        background: #78350f;
+        color: #ffedd5;
+        border: 1px solid #fbbf24;
+      }
+
+      /* כותרת פרטי העובד + סטטוס */
+      .employee-header {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: var(--radius-md);
+        padding: 8px 10px;
+        margin-bottom: 8px;
+      }
+
+      .status-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+        gap: 6px;
+      }
+
+      .status-pill {
+        display: inline-block;
+        min-width: 72px;
+        padding: 4px 12px;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        text-align: center;
+        border: 1px solid transparent;
+        font-weight: 700;
+        background: rgba(148, 163, 184, 0.16);
+        color: #e2e8f0;
+        transition: background 0.15s ease, border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+
+      .status-pill.status-active {
+        background: rgba(22, 163, 74, 0.2);
+        color: #bbf7d0;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
+      }
+
+      .status-pill.status-inactive {
+        background: rgba(148, 163, 184, 0.18);
+        color: #e2e8f0;
+        border-color: #475569;
+      }
+
+      .sidebar-layout {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        background: var(--color-page-bg);
+        border-radius: var(--radius-lg);
+        padding: 6px;
+      }
+
+      .tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        position: sticky;
+        top: 8px;
+        align-self: flex-start;
+        min-width: 54px;
+      }
+
+      .tab-button {
+        width: 44px;
+        height: 44px;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border);
+        color: var(--color-text-primary);
+        border-radius: var(--radius-md);
+        font-weight: 700;
+        font-size: 11px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .tab-label {
+        display: block;
+        text-align: center;
+        line-height: 1.1;
+        width: 100%;
+        padding: 0 4px;
+        box-sizing: border-box;
+      }
+
+      .tab-button.active {
+        background: var(--color-accent-strong);
+        color: #111827;
+        box-shadow: var(--shadow-strong);
+        border-color: var(--color-accent-strong);
+        transform: translateY(-1px);
+      }
+
+      .tab-hidden {
+        display: none !important;
+      }
+
+      .content-area {
+        flex: 1;
+        min-width: 0;
+        max-width: 360px;
+        width: 100%;
+        padding: 4px 6px 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .pill-toggle {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      /* שדה חיפוש מעוצב כמו שאר השדות */
+      #search-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease,
+          background 0.2s ease;
+      }
+
+      #search-input:focus {
+        outline: none;
+        border-color: var(--color-accent);
+        box-shadow: 0 0 0 2px var(--color-focus);
+        background: var(--color-surface);
+      }
+
+      .tab-warning {
+        margin-top: 6px;
+        font-size: 11px;
+        color: #fca5a5;
+        line-height: 1.4;
+      }
+
+      /* חיווי פערי נתונים בפרטי עובד */
+      .mismatch-banner {
+        background: rgba(49, 46, 129, 0.6);
+        border: 1px solid #4338ca;
+        color: #e0e7ff;
+        padding: 10px;
+        border-radius: var(--radius-md);
+        margin-bottom: 10px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      }
+
+      .mismatch-banner-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .mismatch-banner-text {
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .mismatch-banner-note {
+        margin-top: 4px;
+        font-size: 11px;
+        color: #c4d0ff;
+      }
+
+      .btn-quiet {
+        background: transparent;
+        color: #e0e7ff;
+        border: 1px solid #4338ca;
+        padding: 4px 10px;
+        border-radius: 999px;
+      }
+
+      .btn-quiet:hover {
+        background: #4338ca;
+      }
+
+      .field-mismatch input,
+      .field-mismatch select {
+        border-color: #f59e0b;
+        box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
+      }
+
+      .mismatch-options {
+        margin-top: 4px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .mismatch-option-btn {
+        border: 1px solid #f59e0b;
+        background: rgba(245, 158, 11, 0.12);
+        color: #fcd34d;
+        padding: 4px 8px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-size: 11px;
+      }
+
+      .mismatch-option-btn:hover {
+        background: rgba(245, 158, 11, 0.2);
+      }
+
+      /* --- Shifts tab --- */
+      .shifts-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .shifts-message {
+        font-size: 12px;
+        color: var(--color-text-muted);
+        min-height: 18px;
+      }
+      .shifts-message.error {
+        color: #fca5a5;
+      }
+
+      .shifts-filters {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--color-border-strong);
+        padding: 8px;
+        border-radius: var(--radius-md);
+      }
+
+      .filters-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .filters-row input,
+      .filters-row select {
+        flex: 1;
+        min-width: 140px;
+      }
+
+      .quick-range {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .quick-range button {
+        background: var(--color-surface-2);
+        color: var(--color-text-primary);
+        border: 1px solid var(--color-border-strong);
+        padding: 6px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+      }
+      .quick-range button:hover {
+        border-color: var(--color-accent);
+      }
+      .quick-range button.active {
+        background: rgba(34, 197, 94, 0.18);
+        border-color: #22c55e;
+        color: #bbf7d0;
+        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.32);
+      }
+
+      .label-with-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .inline-toggle {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .filter-toggle {
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        padding: 8px 12px;
+        border-radius: var(--radius-pill);
+        font-weight: 700;
+        min-height: 36px;
+      }
+      .filter-toggle.active {
+        background: rgba(34, 197, 94, 0.18);
+        border-color: #22c55e;
+        color: #bbf7d0;
+        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.3);
+      }
+
+      .toggle-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: stretch;
+      }
+
+      .shifts-results {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 280px;
+        overflow-y: auto;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        padding: 6px;
+        background: var(--color-surface);
+      }
+
+      .shift-row {
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        padding: 8px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }
+      .shift-row:hover {
+        border-color: var(--color-accent);
+      }
+      .shift-row.selected {
+        border-color: var(--color-accent-strong);
+        box-shadow: var(--shadow-soft);
+      }
+
+      .shift-row-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        font-weight: 700;
+      }
+
+      .shift-row-bottom {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 4px;
+      }
+
+      .shift-badge {
+        background: var(--color-surface-highlight);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        border-radius: var(--radius-pill);
+        padding: 4px 8px;
+        font-size: 11px;
+      }
+      .shift-badge.status {
+        background: rgba(99, 102, 241, 0.15);
+        border-color: #6366f1;
+      }
+      .shift-badge.warn {
+        background: rgba(248, 113, 113, 0.15);
+        border-color: #f87171;
+        color: #fecaca;
+      }
+      .shift-badge.manual {
+        background: rgba(59, 130, 246, 0.12);
+        border-color: #60a5fa;
+      }
+
+      .shift-details {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        padding: 8px;
+        margin-top: 8px;
+      }
+
+      .shift-details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px;
+      }
+
+      .bonus-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .bonus-chip {
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid #22c55e;
+        color: #bbf7d0;
+        padding: 4px 8px;
+        border-radius: var(--radius-pill);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+      }
+
+      .bonus-chip button {
+        background: transparent;
+        border: none;
+        color: inherit;
+        cursor: pointer;
+        padding: 2px 4px;
+      }
+
+      .bonus-add-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .bonus-add-row select {
+        min-width: 160px;
+        background: var(--color-surface-2);
+        color: var(--color-text-primary);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        padding: 6px 8px;
+      }
+
+      .shifts-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 6px;
+      }
+
+      .shifts-empty {
+        color: var(--color-text-muted);
+        font-size: 12px;
+        padding: 6px 0;
+      }
+
+      /* --- Requests tab --- */
+      .requests-message {
+        font-size: 12px;
+        min-height: 18px;
+      }
+      .requests-message.error {
+        color: #fca5a5;
+      }
+
+      .requests-filters {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 6px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid var(--color-border-strong);
+        padding: 8px;
+        border-radius: var(--radius-md);
+      }
+
+      .requests-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 4px 0 8px;
+      }
+
+      .requests-results {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .request-card {
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.03);
+      }
+
+      .request-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+        font-weight: 700;
+      }
+
+      .request-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--color-text-muted);
+      }
+
+      .request-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--color-border);
+        background: var(--color-surface-2);
+        font-size: 11px;
+      }
+
+      .request-note {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--color-text-primary);
+      }
+
+      .requests-empty {
+        color: var(--color-text-muted);
+        font-size: 12px;
+        padding: 6px 0;
+      }
+
+      .sidebar-topbar {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+        margin-bottom: 6px;
+      }
+
+      .sidebar-icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+
+      .sidebar-icon-btn:hover {
+        background: var(--color-surface-highlight);
+        border-color: var(--color-accent);
+      }
+
+      .sidebar-icon-btn svg {
+        width: 15px;
+        height: 15px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .sidebar-icon-btn span {
+        font-size: 16px;
+        line-height: 1;
+      }
+    </style>
   </head>
   <body>
     <div class="sidebar-topbar">
-      <button id="sidebar-refresh-btn" class="sidebar-icon-btn" type="button" title="רענן את הנתונים בסייד בר">
+      <button
+        id="sidebar-refresh-btn"
+        class="sidebar-icon-btn"
+        type="button"
+        title="רענן את הנתונים בסייד בר"
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M3 12a9 9 0 1 1 3 6.7"></path>
           <polyline points="3 6 3 12 9 12"></polyline>
@@ -859,16 +890,40 @@
 
     <div class="sidebar-layout">
       <div id="sidebar-tabs" class="tabs">
-        <button type="button" class="tab-button active" data-tab="employees" data-short="עובד" title="כרטיסי עובדים">
+        <button
+          type="button"
+          class="tab-button active"
+          data-tab="employees"
+          data-short="עובד"
+          title="כרטיסי עובדים"
+        >
           <span class="tab-label">עובד</span>
         </button>
-        <button type="button" class="tab-button" data-tab="requests" data-short="בקשות" title="בקשות עובדים">
+        <button
+          type="button"
+          class="tab-button"
+          data-tab="requests"
+          data-short="בקשות"
+          title="בקשות עובדים"
+        >
           <span class="tab-label">בקשות</span>
         </button>
-        <button type="button" class="tab-button" data-tab="shifts" data-short="משמרות" title="משמרות">
+        <button
+          type="button"
+          class="tab-button"
+          data-tab="shifts"
+          data-short="משמרות"
+          title="משמרות"
+        >
           <span class="tab-label">משמרות</span>
         </button>
-        <button type="button" class="tab-button" data-tab="settings" data-short="הגדרות" title="הגדרות סייד בר">
+        <button
+          type="button"
+          class="tab-button"
+          data-tab="settings"
+          data-short="הגדרות"
+          title="הגדרות סייד בר"
+        >
           <span class="tab-label">הגדרות</span>
         </button>
       </div>
@@ -884,33 +939,37 @@
           />
           <div id="search-results" class="hidden"></div>
           <div class="muted">
-            בחירת עובד מהרשימה תטען אותו לעריכה. אם אין התאמה, אפשר ליצור עובד חדש.
+            בחירת עובד מהרשימה תטען אותו לעריכה. אם אין התאמה, אפשר ליצור עובד
+            חדש.
           </div>
         </div>
 
-        <div class="section" id="manual-load-section" data-tab-section="employees" style="display: none">
-          <button
-            id="manual-load-btn"
-            class="btn-primary"
-            type="button"
-          >
+        <div
+          class="section"
+          id="manual-load-section"
+          data-tab-section="employees"
+          style="display: none"
+        >
+          <button id="manual-load-btn" class="btn-primary" type="button">
             טען את העובד מהשורה המסומנת בגליון
           </button>
           <div class="muted">
-            עמוד על שורה של עובד בגליון ואז לחץ כאן כדי לפתוח את הכרטיס שלו בסייד בר.
+            עמוד על שורה של עובד בגליון ואז לחץ כאן כדי לפתוח את הכרטיס שלו
+            בסייד בר.
           </div>
         </div>
 
-        <div id="employee-section" style="display: none" data-tab-section="employees">
+        <div
+          id="employee-section"
+          style="display: none"
+          data-tab-section="employees"
+        >
           <h2 class="section-title">כרטיס עובד</h2>
           <!-- כותרת פרטי עובד: סטטוס + שם -->
           <div class="section employee-header">
             <div class="status-row">
               <span class="label">סטטוס עובד</span>
-              <span
-                id="emp-status-pill"
-                class="status-pill status-inactive"
-              >
+              <span id="emp-status-pill" class="status-pill status-inactive">
                 לא פעיל
               </span>
             </div>
@@ -922,340 +981,450 @@
             </div>
           </div>
 
-      <!-- אזהרה על פערים בפרטי העובד -->
-      <div id="personal-mismatch-banner" class="mismatch-banner hidden">
-        <div class="mismatch-banner-top">
-          <div class="mismatch-banner-text">
-            קיים חוסר התאמה בפרטי העובד בשורות השונות - בחר בנכון מבינהם כדי לסדר את זה
+          <!-- אזהרה על פערים בפרטי העובד -->
+          <div id="personal-mismatch-banner" class="mismatch-banner hidden">
+            <div class="mismatch-banner-top">
+              <div class="mismatch-banner-text">
+                קיים חוסר התאמה בפרטי העובד בשורות השונות - בחר בנכון מבינהם כדי
+                לסדר את זה
+              </div>
+              <button type="button" id="mismatch-dismiss-btn" class="btn-quiet">
+                לא עכשיו
+              </button>
+            </div>
+            <div
+              id="mismatch-limit-note"
+              class="mismatch-banner-note hidden"
+            ></div>
           </div>
-          <button type="button" id="mismatch-dismiss-btn" class="btn-quiet">לא עכשיו</button>
-        </div>
-        <div id="mismatch-limit-note" class="mismatch-banner-note hidden"></div>
-      </div>
 
-      <!-- אזהרת פילטר לשורה מוסתרת -->
-      <div
-        id="emp-filter-warning"
-        style="
-          display: none;
-          margin-bottom: 8px;
-          padding: 6px;
-          border-radius: 4px;
-          background: #fff3cd;
-          font-size: 12px;
-        "
-      >
-        <div style="margin-bottom: 4px">
-          השורה שאתה רוצה לערוך מוסתרת במסנן. זה לא מפריע לעריכה.
-          תרצה לבטל את הסינון כדי לראות את השורה?
-        </div>
-        <button type="button" id="emp-filter-warning-btn">
-          בטל תצוגת מסנן
-        </button>
-      </div>
-
-      <!-- פרטי עובד נוספים -->
-      <div class="section employee-fields">
-        <div class="field-group">
-          <div class="field-row">
-            <span class="label">טלפון</span>
-            <input id="emp-phone" type="text" placeholder="000-000-0000" />
-            <div class="mismatch-options" data-field="phone"></div>
+          <!-- אזהרת פילטר לשורה מוסתרת -->
+          <div
+            id="emp-filter-warning"
+            style="
+              display: none;
+              margin-bottom: 8px;
+              padding: 6px;
+              border-radius: 4px;
+              background: #fff3cd;
+              font-size: 12px;
+            "
+          >
+            <div style="margin-bottom: 4px">
+              השורה שאתה רוצה לערוך מוסתרת במסנן. זה לא מפריע לעריכה. תרצה לבטל
+              את הסינון כדי לראות את השורה?
+            </div>
+            <button type="button" id="emp-filter-warning-btn">
+              בטל תצוגת מסנן
+            </button>
           </div>
-          <div class="field-row">
-            <span class="label">מייל</span>
-            <input id="emp-email" type="email" />
-            <div class="mismatch-options" data-field="email"></div>
-          </div>
-          <div class="field-row">
-            <span class="label">עלות החזרי נסיעות יומי</span>
-            <input id="emp-travel" type="number" step="0.01" />
-            <div class="mismatch-options" data-field="travelCost"></div>
-          </div>
-        </div>
 
-        <hr class="field-separator" />
-
-        <div class="field-group">
-          <div class="field-row">
-            <span class="label">תז</span>
-            <input id="emp-idnum" type="text" />
-            <div class="mismatch-options" data-field="idNumber"></div>
-          </div>
-          <div class="field-row">
-            <span class="label">מין</span>
-            <input id="emp-gender" type="text" />
-            <div class="mismatch-options" data-field="gender"></div>
-          </div>
-          <div class="field-row">
-            <span class="label">ת. לידה</span>
-            <input id="emp-birthdate" type="text" placeholder="dd/mm/yyyy" />
-            <div class="mismatch-options" data-field="birthdate"></div>
-          </div>
-          <div class="field-row">
-            <span class="label">מידת חולצה</span>
-            <input id="emp-shirt-size" type="text" />
-            <div class="mismatch-options" data-field="shirtSize"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="section jobs-container">
-        <span class="label">סוגי עבודה לעובד</span>
-        <div id="jobs-list"></div>
-        <button class="btn-secondary" type="button" onclick="addJobRow(null)">
-          הוסף סוג עבודה
-        </button>
-        <div class="muted">
-          לכל שורה ניתן לבחור אם היא פעילה. לפחות שורה פעילה אחת = עובד פעיל.
-        </div>
-      </div>
-
-      <div class="section">
-        <button class="btn-primary" type="button" onclick="onSaveClick()">
-          שמור שינויים
-        </button>
-      </div>
-    </div>
-
-    <div class="section tab-hidden" data-tab-section="requests">
-      <div class="shifts-header">
-        <h2 class="section-title">בקשות עובדים</h2>
-        <div id="requests-message" class="requests-message"></div>
-      </div>
-
-      <div class="requests-filters">
-        <div class="filters-row">
-          <div class="field-row" style="flex: 1">
-            <span class="label">חיפוש חופשי</span>
-            <input id="requests-search-term" type="text" placeholder="שם / ID בקשה / ID משמרת" />
-          </div>
-          <div class="field-row" style="flex: 1">
-            <span class="label">סטטוס בקשה (רב בחירה)</span>
-            <select id="requests-status-select" multiple size="4"></select>
-            <div class="muted">ברירת מחדל: מציג רק בקשות פתוחות. לסגורות – סמנו "כל הסטטוסים".</div>
-          </div>
-        </div>
-
-        <div class="filters-row">
-          <div class="field-row" style="flex: 1">
-            <span class="label">מתאריך</span>
-            <input id="requests-date-from" type="date" />
-          </div>
-          <div class="field-row" style="flex: 1">
-            <span class="label">עד תאריך</span>
-            <input id="requests-date-to" type="date" />
-          </div>
-        </div>
-
-        <div class="pill-toggle">
-          <label><input type="checkbox" id="requests-include-closed" /> כל הסטטוסים (כולל סגורות)</label>
-        </div>
-      </div>
-
-      <div class="requests-actions">
-        <button id="requests-search-btn" class="btn-primary" type="button">חיפוש</button>
-        <button id="requests-clear-btn" class="btn-secondary" type="button">ניקוי</button>
-      </div>
-
-      <div class="requests-results" id="requests-results"></div>
-    </div>
-
-    <div class="section tab-hidden" data-tab-section="shifts">
-      <div class="shifts-header">
-        <h2 class="section-title">משמרות</h2>
-        <div id="shifts-message" class="shifts-message"></div>
-      </div>
-
-      <div class="shifts-filters">
-        <div class="filters-row">
-          <button id="shifts-load-active-btn" class="btn-secondary" type="button">בחר משמרת מגיליון המשמרות</button>
-        </div>
-
-        <div class="filters-row">
-          <div class="field-row" style="flex: 1">
-            <span class="label">חיפוש חופשי</span>
-            <input id="shifts-search-term" type="text" placeholder="שם / מייל / ID משמרת" />
-            <div id="shifts-search-results" class="hidden"></div>
-          </div>
-        </div>
-
-        <div class="filters-row">
-          <div class="field-row" style="flex: 1">
-            <div class="label-with-actions">
-              <span class="label">עובד/ת</span>
-              <div class="inline-toggle">
-                <button type="button" id="shifts-emp-mode-all" class="filter-toggle active" data-mode="all">כל העובדים</button>
-                <button type="button" id="shifts-emp-mode-search" class="filter-toggle" data-mode="search">חפש עובד</button>
+          <!-- פרטי עובד נוספים -->
+          <div class="section employee-fields">
+            <div class="field-group">
+              <div class="field-row">
+                <span class="label">טלפון</span>
+                <input id="emp-phone" type="text" placeholder="000-000-0000" />
+                <div class="mismatch-options" data-field="phone"></div>
+              </div>
+              <div class="field-row">
+                <span class="label">מייל</span>
+                <input id="emp-email" type="email" />
+                <div class="mismatch-options" data-field="email"></div>
+              </div>
+              <div class="field-row">
+                <span class="label">עלות החזרי נסיעות יומי</span>
+                <input id="emp-travel" type="number" step="0.01" />
+                <div class="mismatch-options" data-field="travelCost"></div>
               </div>
             </div>
-            <div id="shifts-employee-select-wrapper">
-              <select id="shifts-employee-select">
-                <option value="">-- כל העובדים --</option>
-              </select>
-            </div>
-            <div id="shifts-employee-search-wrapper" class="hidden">
-              <input id="shifts-employee-search" type="text" placeholder="התחל להקליד שם עובד" autocomplete="off" />
-              <div id="shifts-employee-search-results" class="hidden"></div>
-            </div>
-          </div>
-        </div>
 
-        <div class="filters-row">
-          <div class="field-row" style="flex: 1">
-            <span class="label">מתאריך</span>
-            <input id="shifts-date-from" type="date" />
-          </div>
-          <div class="field-row" style="flex: 1">
-            <span class="label">עד תאריך</span>
-            <input id="shifts-date-to" type="date" />
-          </div>
-        </div>
+            <hr class="field-separator" />
 
-        <div class="quick-range" id="shifts-quick-range">
-          <button type="button" data-range="month">חודש נוכחי</button>
-          <button type="button" data-range="prevMonth">חודש קודם</button>
-          <button type="button" data-range="week">שבוע נוכחי</button>
-          <button type="button" data-range="today">היום</button>
-          <button type="button" data-range="yesterday">אתמול</button>
-        </div>
-
-        <div class="filters-row">
-          <div class="field-row" style="flex: 1">
-            <span class="label">מסננים נוספים</span>
-            <div class="toggle-row">
-              <button type="button" class="filter-toggle" id="shifts-toggle-issues">רק בעייתיות</button>
-              <button type="button" class="filter-toggle" id="shifts-toggle-bonuses">רק עם בונוסים</button>
-              <button type="button" class="filter-toggle" id="shifts-toggle-manual">רק עם שינוי ידני</button>
+            <div class="field-group">
+              <div class="field-row">
+                <span class="label">תז</span>
+                <input id="emp-idnum" type="text" />
+                <div class="mismatch-options" data-field="idNumber"></div>
+              </div>
+              <div class="field-row">
+                <span class="label">מין</span>
+                <input id="emp-gender" type="text" />
+                <div class="mismatch-options" data-field="gender"></div>
+              </div>
+              <div class="field-row">
+                <span class="label">ת. לידה</span>
+                <input
+                  id="emp-birthdate"
+                  type="text"
+                  placeholder="dd/mm/yyyy"
+                />
+                <div class="mismatch-options" data-field="birthdate"></div>
+              </div>
+              <div class="field-row">
+                <span class="label">מידת חולצה</span>
+                <input id="emp-shirt-size" type="text" />
+                <div class="mismatch-options" data-field="shirtSize"></div>
+              </div>
             </div>
           </div>
+
+          <div class="section jobs-container">
+            <span class="label">סוגי עבודה לעובד</span>
+            <div id="jobs-list"></div>
+            <button
+              class="btn-secondary"
+              type="button"
+              onclick="addJobRow(null)"
+            >
+              הוסף סוג עבודה
+            </button>
+            <div class="muted">
+              לכל שורה ניתן לבחור אם היא פעילה. לפחות שורה פעילה אחת = עובד
+              פעיל.
+            </div>
+          </div>
+
+          <div class="section">
+            <button class="btn-primary" type="button" onclick="onSaveClick()">
+              שמור שינויים
+            </button>
+          </div>
+        </div>
+
+        <div class="section tab-hidden" data-tab-section="requests">
+          <div class="shifts-header">
+            <h2 class="section-title">בקשות עובדים</h2>
+            <div id="requests-message" class="requests-message"></div>
+          </div>
+
+          <div class="requests-filters">
+            <div class="filters-row">
+              <div class="field-row" style="flex: 1">
+                <span class="label">חיפוש חופשי</span>
+                <input
+                  id="requests-search-term"
+                  type="text"
+                  placeholder="שם / ID בקשה / ID משמרת"
+                />
+              </div>
+              <div class="field-row" style="flex: 1">
+                <span class="label">סטטוס בקשה (רב בחירה)</span>
+                <select id="requests-status-select" multiple size="4"></select>
+                <div class="muted">
+                  ברירת מחדל: מציג רק בקשות פתוחות. לסגורות – סמנו "כל
+                  הסטטוסים".
+                </div>
+              </div>
+            </div>
+
+            <div class="filters-row">
+              <div class="field-row" style="flex: 1">
+                <span class="label">מתאריך</span>
+                <input id="requests-date-from" type="date" />
+              </div>
+              <div class="field-row" style="flex: 1">
+                <span class="label">עד תאריך</span>
+                <input id="requests-date-to" type="date" />
+              </div>
+            </div>
+
+            <div class="pill-toggle">
+              <label
+                ><input type="checkbox" id="requests-include-closed" /> כל
+                הסטטוסים (כולל סגורות)</label
+              >
+            </div>
+          </div>
+
+          <div class="requests-actions">
+            <button id="requests-search-btn" class="btn-primary" type="button">
+              חיפוש
+            </button>
+            <button id="requests-clear-btn" class="btn-secondary" type="button">
+              ניקוי
+            </button>
+          </div>
+
+          <div class="requests-results" id="requests-results"></div>
+        </div>
+
+        <div class="section tab-hidden" data-tab-section="shifts">
+          <div class="shifts-header">
+            <h2 class="section-title">משמרות</h2>
+            <div id="shifts-message" class="shifts-message"></div>
+          </div>
+
+          <div class="shifts-filters">
+            <div class="filters-row">
+              <button
+                id="shifts-load-active-btn"
+                class="btn-secondary"
+                type="button"
+              >
+                בחר משמרת מגיליון המשמרות
+              </button>
+            </div>
+
+            <div class="filters-row">
+              <div class="field-row" style="flex: 1">
+                <span class="label">חיפוש חופשי</span>
+                <input
+                  id="shifts-search-term"
+                  type="text"
+                  placeholder="שם / מייל / ID משמרת"
+                />
+                <div id="shifts-search-results" class="hidden"></div>
+              </div>
+            </div>
+
+            <div class="filters-row">
+              <div class="field-row" style="flex: 1">
+                <div class="label-with-actions">
+                  <span class="label">עובד/ת</span>
+                  <div class="inline-toggle">
+                    <button
+                      type="button"
+                      id="shifts-emp-mode-all"
+                      class="filter-toggle active"
+                      data-mode="all"
+                    >
+                      כל העובדים
+                    </button>
+                    <button
+                      type="button"
+                      id="shifts-emp-mode-search"
+                      class="filter-toggle"
+                      data-mode="search"
+                    >
+                      חפש עובד
+                    </button>
+                  </div>
+                </div>
+                <div id="shifts-employee-select-wrapper">
+                  <select id="shifts-employee-select">
+                    <option value="">-- כל העובדים --</option>
+                  </select>
+                </div>
+                <div id="shifts-employee-search-wrapper" class="hidden">
+                  <input
+                    id="shifts-employee-search"
+                    type="text"
+                    placeholder="התחל להקליד שם עובד"
+                    autocomplete="off"
+                  />
+                  <div id="shifts-employee-search-results" class="hidden"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="filters-row">
+              <div class="field-row" style="flex: 1">
+                <span class="label">מתאריך</span>
+                <input id="shifts-date-from" type="date" />
+              </div>
+              <div class="field-row" style="flex: 1">
+                <span class="label">עד תאריך</span>
+                <input id="shifts-date-to" type="date" />
+              </div>
+            </div>
+
+            <div class="quick-range" id="shifts-quick-range">
+              <button type="button" data-range="month">חודש נוכחי</button>
+              <button type="button" data-range="prevMonth">חודש קודם</button>
+              <button type="button" data-range="week">שבוע נוכחי</button>
+              <button type="button" data-range="today">היום</button>
+              <button type="button" data-range="yesterday">אתמול</button>
+            </div>
+
+            <div class="filters-row">
+              <div class="field-row" style="flex: 1">
+                <span class="label">מסננים נוספים</span>
+                <div class="toggle-row">
+                  <button
+                    type="button"
+                    class="filter-toggle"
+                    id="shifts-toggle-issues"
+                  >
+                    רק בעייתיות
+                  </button>
+                  <button
+                    type="button"
+                    class="filter-toggle"
+                    id="shifts-toggle-bonuses"
+                  >
+                    רק עם בונוסים
+                  </button>
+                  <button
+                    type="button"
+                    class="filter-toggle"
+                    id="shifts-toggle-manual"
+                  >
+                    רק עם שינוי ידני
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="shifts-actions">
+            <button id="shifts-search-btn" class="btn-primary" type="button">
+              חיפוש
+            </button>
+            <button id="shifts-clear-btn" class="btn-secondary" type="button">
+              ניקוי
+            </button>
+          </div>
+
+          <div class="shifts-results" id="shifts-results"></div>
+          <div class="shifts-actions">
+            <button
+              id="shifts-load-more-btn"
+              class="btn-secondary hidden"
+              type="button"
+            >
+              טען עוד
+            </button>
+          </div>
+
+          <div id="shift-details" class="shift-details hidden">
+            <div class="shifts-header">
+              <h3 class="section-title">פרטי משמרת</h3>
+              <div id="shift-details-status" class="shift-row-bottom"></div>
+            </div>
+
+            <div
+              id="shift-details-summary"
+              class="muted"
+              style="margin-bottom: 6px"
+            ></div>
+
+            <div class="shift-details-grid">
+              <div class="field-row">
+                <span class="label">תאריך</span>
+                <input id="shift-date" type="date" />
+              </div>
+              <div class="field-row">
+                <span class="label">שעת התחלה</span>
+                <input id="shift-start-time" type="time" />
+              </div>
+              <div class="field-row">
+                <span class="label">שעת סיום</span>
+                <input id="shift-end-time" type="time" />
+              </div>
+              <div class="field-row">
+                <span class="label">סטטוס</span>
+                <select id="shift-status"></select>
+              </div>
+              <div class="field-row">
+                <span class="label">סוג עבודה</span>
+                <input id="shift-work-type" type="text" />
+              </div>
+              <div class="field-row">
+                <span class="label">ID סוג עבודה</span>
+                <input id="shift-work-type-id" type="text" />
+              </div>
+              <div class="field-row">
+                <span class="label">מחלקה</span>
+                <input id="shift-department" type="text" />
+              </div>
+              <div class="field-row">
+                <span class="label">יחידות</span>
+                <input id="shift-units" type="text" disabled />
+              </div>
+            </div>
+
+            <div class="section" style="margin-top: 8px">
+              <span class="label">בונוסים</span>
+              <div id="shift-bonus-chips" class="bonus-chip-row"></div>
+              <div class="bonus-add-row">
+                <select id="shift-bonus-picker"></select>
+                <button
+                  id="shift-add-bonus-btn"
+                  class="btn-secondary"
+                  type="button"
+                >
+                  הוסף בונוס
+                </button>
+              </div>
+            </div>
+
+            <div class="section" style="margin-top: 8px">
+              <span class="label">הערת מנהל</span>
+              <textarea
+                id="shift-manual-note"
+                rows="2"
+                style="
+                  width: 100%;
+                  background: var(--color-surface-2);
+                  border: 1px solid var(--color-border-strong);
+                  color: var(--color-text-primary);
+                  border-radius: var(--radius-sm);
+                  padding: 8px;
+                "
+              ></textarea>
+            </div>
+
+            <div class="shifts-actions">
+              <button id="shift-save-btn" class="btn-primary" type="button">
+                שמור עריכת משמרת
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section tab-hidden" data-tab-section="settings">
+          <div class="section" id="edit-mode-section">
+            <span class="label">מצב עריכה</span>
+            <button id="edit-mode-toggle" type="button" class="btn-secondary">
+              מצב: שמירה ידנית
+            </button>
+            <div class="muted" id="edit-mode-explainer">
+              במצב "עריכה בזמן אמת" כל שינוי בשדות נשמר אוטומטית לגיליון (עם
+              השהייה קצרה כדי שלא יהיו יותר מדי שמירות).
+            </div>
+          </div>
+
+          <div class="section" id="auto-load-section">
+            <span class="label">מצב טעינת עובד</span>
+            <div class="pill-toggle">
+              <button id="auto-load-auto-btn" type="button" class="btn-primary">
+                טעינת עובד אוטומטית
+              </button>
+              <button
+                id="auto-load-manual-btn"
+                type="button"
+                class="btn-secondary"
+              >
+                טעינת עובד ידנית (כפתור)
+              </button>
+            </div>
+            <div id="auto-load-warning" class="tab-warning">
+              אזהרה: טעינת עובד אוטומטית מפעילה בדיקות רקע תכופות בגליון ויכולה
+              להאט את העבודה בסייד־בר. השתמש במצב הזה רק כשחשוב לך שהכרטיס של
+              העובד יתחלף לבד כשאתה מחליף שורה.
+            </div>
+          </div>
         </div>
       </div>
-
-      <div class="shifts-actions">
-        <button id="shifts-search-btn" class="btn-primary" type="button">חיפוש</button>
-        <button id="shifts-clear-btn" class="btn-secondary" type="button">ניקוי</button>
-      </div>
-
-      <div class="shifts-results" id="shifts-results"></div>
-      <div class="shifts-actions">
-        <button id="shifts-load-more-btn" class="btn-secondary hidden" type="button">טען עוד</button>
-      </div>
-
-      <div id="shift-details" class="shift-details hidden">
-        <div class="shifts-header">
-          <h3 class="section-title">פרטי משמרת</h3>
-          <div id="shift-details-status" class="shift-row-bottom"></div>
-        </div>
-
-        <div id="shift-details-summary" class="muted" style="margin-bottom: 6px"></div>
-
-        <div class="shift-details-grid">
-          <div class="field-row">
-            <span class="label">תאריך</span>
-            <input id="shift-date" type="date" />
-          </div>
-          <div class="field-row">
-            <span class="label">שעת התחלה</span>
-            <input id="shift-start-time" type="time" />
-          </div>
-          <div class="field-row">
-            <span class="label">שעת סיום</span>
-            <input id="shift-end-time" type="time" />
-          </div>
-          <div class="field-row">
-            <span class="label">סטטוס</span>
-            <select id="shift-status"></select>
-          </div>
-          <div class="field-row">
-            <span class="label">סוג עבודה</span>
-            <input id="shift-work-type" type="text" />
-          </div>
-          <div class="field-row">
-            <span class="label">ID סוג עבודה</span>
-            <input id="shift-work-type-id" type="text" />
-          </div>
-          <div class="field-row">
-            <span class="label">מחלקה</span>
-            <input id="shift-department" type="text" />
-          </div>
-          <div class="field-row">
-            <span class="label">יחידות</span>
-            <input id="shift-units" type="text" disabled />
-          </div>
-        </div>
-
-        <div class="section" style="margin-top: 8px">
-          <span class="label">בונוסים</span>
-          <div id="shift-bonus-chips" class="bonus-chip-row"></div>
-          <div class="bonus-add-row">
-            <select id="shift-bonus-picker"></select>
-            <button id="shift-add-bonus-btn" class="btn-secondary" type="button">הוסף בונוס</button>
-          </div>
-        </div>
-
-        <div class="section" style="margin-top: 8px">
-          <span class="label">הערת מנהל</span>
-          <textarea
-            id="shift-manual-note"
-            rows="2"
-            style="width: 100%; background: var(--color-surface-2); border: 1px solid var(--color-border-strong); color: var(--color-text-primary); border-radius: var(--radius-sm); padding: 8px;"
-          ></textarea>
-        </div>
-
-        <div class="shifts-actions">
-          <button id="shift-save-btn" class="btn-primary" type="button">שמור עריכת משמרת</button>
-        </div>
-      </div>
+      <!-- content-area -->
     </div>
-
-    <div class="section tab-hidden" data-tab-section="settings">
-      <div class="section" id="edit-mode-section">
-        <span class="label">מצב עריכה</span>
-        <button id="edit-mode-toggle" type="button" class="btn-secondary">
-          מצב: שמירה ידנית
-        </button>
-        <div class="muted" id="edit-mode-explainer">
-          במצב "עריכה בזמן אמת" כל שינוי בשדות נשמר אוטומטית לגיליון
-          (עם השהייה קצרה כדי שלא יהיו יותר מדי שמירות).
-        </div>
-      </div>
-
-      <div class="section" id="auto-load-section">
-        <span class="label">מצב טעינת עובד</span>
-        <div class="pill-toggle">
-          <button id="auto-load-auto-btn" type="button" class="btn-primary">
-            טעינת עובד אוטומטית
-          </button>
-          <button id="auto-load-manual-btn" type="button" class="btn-secondary">
-            טעינת עובד ידנית (כפתור)
-          </button>
-        </div>
-        <div id="auto-load-warning" class="tab-warning">
-          אזהרה: טעינת עובד אוטומטית מפעילה בדיקות רקע תכופות בגליון
-          ויכולה להאט את העבודה בסייד־בר. השתמש במצב הזה רק כשחשוב לך
-          שהכרטיס של העובד יתחלף לבד כשאתה מחליף שורה.
-        </div>
-      </div>
-    </div>
-
-      </div> <!-- content-area -->
-    </div> <!-- sidebar-layout -->
+    <!-- sidebar-layout -->
 
     <script>
       // מוזרק מהשרת
-      var _INITIAL_EMPLOYEE_ID_RAW = '<?= initialEmployeeId ?>';
+      var _INITIAL_EMPLOYEE_ID_RAW = "<?= initialEmployeeId ?>";
       var INITIAL_EMPLOYEE_ID =
         _INITIAL_EMPLOYEE_ID_RAW &&
-        _INITIAL_EMPLOYEE_ID_RAW !== 'undefined' &&
-        _INITIAL_EMPLOYEE_ID_RAW !== 'null'
+        _INITIAL_EMPLOYEE_ID_RAW !== "undefined" &&
+        _INITIAL_EMPLOYEE_ID_RAW !== "null"
           ? _INITIAL_EMPLOYEE_ID_RAW
-          : '';
+          : "";
 
       var bootstrap = null;
       var employees = [];
       var selectedEmployeeId = null;
-      var activeTab = 'employees';
+      var activeTab = "employees";
       var currentEmployee = null;
       var mismatchDismissed = false;
       var MAX_MISMATCH_ROWS = 6;
@@ -1267,25 +1436,33 @@
       var paymentByName = {};
       var selectionPollTimer = null;
       var selectionPollBusy = false;
-      var autoLoadMode = 'auto';
+      var autoLoadMode = "auto";
 
       // מצב עריכה: 'manual' (שמירה ידנית) או 'live' (שמירה בזמן אמת)
-      var editMode = 'manual';
+      var editMode = "manual";
       var liveSaveTimer = null;
 
       // Shifts tab state
       var shifts = [];
-      var shiftsState = { filters: { limit: 50, offset: 0 }, hasMore: false, loading: false };
+      var shiftsState = {
+        filters: { limit: 50, offset: 0 },
+        hasMore: false,
+        loading: false,
+      };
       var selectedShift = null;
       var bonusCatalog = [];
       var shiftStatuses = [];
-      var shiftsEmployeeMode = 'all';
-      var shiftsEmployeeSearchSelection = { id: '', name: '' };
+      var shiftsEmployeeMode = "all";
+      var shiftsEmployeeSearchSelection = { id: "", name: "" };
       var shiftsQuickRangeSnapshot = null;
 
       // Requests tab state
       var requests = [];
-      var requestsState = { filters: { limit: 50, offset: 0 }, hasMore: false, loading: false };
+      var requestsState = {
+        filters: { limit: 50, offset: 0 },
+        hasMore: false,
+        loading: false,
+      };
       var requestStatuses = [];
 
       function $(id) {
@@ -1293,15 +1470,20 @@
       }
 
       function setGlobalMessage(text, isError) {
-        var el = $('global-message');
-        el.textContent = text || '';
-        el.className = '';
+        var el = $("global-message");
+        el.textContent = text || "";
+        el.className = "";
         if (!text) return;
-        el.className = isError ? 'error' : 'info';
+        el.className = isError ? "error" : "info";
       }
 
       function closeSidebar() {
-        if (google && google.script && google.script.host && google.script.host.close) {
+        if (
+          google &&
+          google.script &&
+          google.script.host &&
+          google.script.host.close
+        ) {
           google.script.host.close();
           return;
         }
@@ -1309,11 +1491,16 @@
       }
 
       function reloadSidebar() {
-        setGlobalMessage('פותח סייד בר חדש...', false);
+        setGlobalMessage("פותח סייד בר חדש...", false);
         google.script.run
           .withSuccessHandler(function () {
             try {
-              if (google && google.script && google.script.host && google.script.host.close) {
+              if (
+                google &&
+                google.script &&
+                google.script.host &&
+                google.script.host.close
+              ) {
                 google.script.host.close();
                 return;
               }
@@ -1322,79 +1509,130 @@
             }
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בפתיחת סייד בר חדש: ' + err, true);
+            setGlobalMessage("שגיאה בפתיחת סייד בר חדש: " + err, true);
           })
           .EMP_reloadSidebar();
       }
 
       function formatPhoneForDisplay(val) {
-        var digits = (val || '').replace(/\D+/g, '');
+        var digits = (val || "").replace(/\D+/g, "");
         // אם חסרה ספרה מובילה (9 ספרות) נוסיף 0 בהתחלה לתצוגה
-        if (digits.length === 9) digits = '0' + digits;
+        if (digits.length === 9) digits = "0" + digits;
         if (digits.length === 10) {
-          return digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+          return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
         }
-        return val || '';
+        return val || "";
       }
 
       function formatIdForDisplay(val) {
-        var digits = (val || '').replace(/\D+/g, '');
+        var digits = (val || "").replace(/\D+/g, "");
         if (digits.length === 9) {
-          return digits.replace(/(\d)(\d{7})(\d)/, '$1-$2-$3');
+          return digits.replace(/(\d)(\d{7})(\d)/, "$1-$2-$3");
         }
-        return val || '';
+        return val || "";
       }
 
       function formatPhoneForSave(val) {
-        var digits = (val || '').replace(/\D+/g, '');
-        if (digits.length === 9) digits = '0' + digits;
+        var digits = (val || "").replace(/\D+/g, "");
+        if (digits.length === 9) digits = "0" + digits;
         if (digits.length === 10) {
-          return digits.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+          return digits.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
         }
-        return (val || '').trim();
+        return (val || "").trim();
       }
 
       function toDateInputValue(val) {
         // Display consistently as DD/MM/YYYY even if the source is ISO or Date
-        if (!val) return '';
-        if (Object.prototype.toString.call(val) === '[object Date]' && !isNaN(val.getTime())) {
+        if (!val) return "";
+        if (
+          Object.prototype.toString.call(val) === "[object Date]" &&
+          !isNaN(val.getTime())
+        ) {
           var dIso = val;
-          var dd = ('0' + dIso.getDate()).slice(-2);
-          var mm = ('0' + (dIso.getMonth() + 1)).slice(-2);
+          var dd = ("0" + dIso.getDate()).slice(-2);
+          var mm = ("0" + (dIso.getMonth() + 1)).slice(-2);
           var yyyy = dIso.getFullYear();
-          return dd + '/' + mm + '/' + yyyy;
+          return dd + "/" + mm + "/" + yyyy;
         }
         var str = String(val).trim();
 
         // נסה לפרסר כמחרוזת תאריך JS מלאה עם timezone
         var dParsed = new Date(str);
         if (!isNaN(dParsed.getTime())) {
-          var ddp = ('0' + dParsed.getDate()).slice(-2);
-          var mmp = ('0' + (dParsed.getMonth() + 1)).slice(-2);
+          var ddp = ("0" + dParsed.getDate()).slice(-2);
+          var mmp = ("0" + (dParsed.getMonth() + 1)).slice(-2);
           var yyyyp = dParsed.getFullYear();
-          return ddp + '/' + mmp + '/' + yyyyp;
+          return ddp + "/" + mmp + "/" + yyyyp;
         }
 
         var mIso = str.match(/^(\d{4})[\/.\-](\d{2})[\/.\-](\d{2})$/);
         if (mIso) {
-          return mIso[3] + '/' + mIso[2] + '/' + mIso[1];
+          return mIso[3] + "/" + mIso[2] + "/" + mIso[1];
         }
         var mSlash = str.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})$/);
         if (mSlash) {
-          return mSlash[1] + '/' + mSlash[2] + '/' + mSlash[3];
+          return mSlash[1] + "/" + mSlash[2] + "/" + mSlash[3];
         }
         return str;
       }
 
       var PERSONAL_FIELDS = [
-        { key: 'name', label: 'שם מלא', inputId: 'emp-name', rowKey: 'fullName', empKey: 'name' },
-        { key: 'phone', label: 'טלפון', inputId: 'emp-phone', rowKey: 'phone', empKey: 'phone' },
-        { key: 'email', label: 'מייל', inputId: 'emp-email', rowKey: 'email', empKey: 'email' },
-        { key: 'travelCost', label: 'עלות החזרי נסיעות יומי', inputId: 'emp-travel', rowKey: 'travelCost', empKey: 'travelCost' },
-        { key: 'idNumber', label: 'תז', inputId: 'emp-idnum', rowKey: 'idNumber', empKey: 'idNumber' },
-        { key: 'gender', label: 'מין', inputId: 'emp-gender', rowKey: 'gender', empKey: 'gender' },
-        { key: 'birthdate', label: 'ת. לידה', inputId: 'emp-birthdate', rowKey: 'birthdate', empKey: 'birthdate' },
-        { key: 'shirtSize', label: 'מידת חולצה', inputId: 'emp-shirt-size', rowKey: 'shirtSize', empKey: 'shirtSize' }
+        {
+          key: "name",
+          label: "שם מלא",
+          inputId: "emp-name",
+          rowKey: "fullName",
+          empKey: "name",
+        },
+        {
+          key: "phone",
+          label: "טלפון",
+          inputId: "emp-phone",
+          rowKey: "phone",
+          empKey: "phone",
+        },
+        {
+          key: "email",
+          label: "מייל",
+          inputId: "emp-email",
+          rowKey: "email",
+          empKey: "email",
+        },
+        {
+          key: "travelCost",
+          label: "עלות החזרי נסיעות יומי",
+          inputId: "emp-travel",
+          rowKey: "travelCost",
+          empKey: "travelCost",
+        },
+        {
+          key: "idNumber",
+          label: "תז",
+          inputId: "emp-idnum",
+          rowKey: "idNumber",
+          empKey: "idNumber",
+        },
+        {
+          key: "gender",
+          label: "מין",
+          inputId: "emp-gender",
+          rowKey: "gender",
+          empKey: "gender",
+        },
+        {
+          key: "birthdate",
+          label: "ת. לידה",
+          inputId: "emp-birthdate",
+          rowKey: "birthdate",
+          empKey: "birthdate",
+        },
+        {
+          key: "shirtSize",
+          label: "מידת חולצה",
+          inputId: "emp-shirt-size",
+          rowKey: "shirtSize",
+          empKey: "shirtSize",
+        },
       ];
 
       function cloneEmployee(emp) {
@@ -1406,24 +1644,24 @@
       }
 
       function formatMismatchDisplay(fieldKey, val) {
-        if (val === null || val === undefined || val === '') return 'ריק';
-        if (fieldKey === 'phone') return formatPhoneForDisplay(String(val));
-        if (fieldKey === 'birthdate') return toDateInputValue(val);
-        if (fieldKey === 'idNumber') return formatIdForDisplay(String(val));
+        if (val === null || val === undefined || val === "") return "ריק";
+        if (fieldKey === "phone") return formatPhoneForDisplay(String(val));
+        if (fieldKey === "birthdate") return toDateInputValue(val);
+        if (fieldKey === "idNumber") return formatIdForDisplay(String(val));
         return String(val);
       }
 
       function clearMismatchUI() {
-        var containers = document.querySelectorAll('.mismatch-options');
+        var containers = document.querySelectorAll(".mismatch-options");
         for (var i = 0; i < containers.length; i++) {
-          containers[i].innerHTML = '';
-          var rowEl = containers[i].closest('.field-row');
-          if (rowEl) rowEl.classList.remove('field-mismatch');
+          containers[i].innerHTML = "";
+          var rowEl = containers[i].closest(".field-row");
+          if (rowEl) rowEl.classList.remove("field-mismatch");
         }
-        var banner = $('personal-mismatch-banner');
-        if (banner) banner.classList.add('hidden');
-        var note = $('mismatch-limit-note');
-        if (note) note.classList.add('hidden');
+        var banner = $("personal-mismatch-banner");
+        if (banner) banner.classList.add("hidden");
+        var note = $("mismatch-limit-note");
+        if (note) note.classList.add("hidden");
       }
 
       function computeMismatchData(emp) {
@@ -1436,17 +1674,33 @@
           var seen = {};
           var list = [];
           function addVal(v) {
-            var key = v === null || v === undefined ? '' : String(v);
+            // Normalize by field so that the same logical value (e.g. Date vs string) is not duplicated
+            var key;
+            if (v === null || v === undefined || v === "") {
+              key = "";
+            } else if (cfg.key === "birthdate") {
+              // Dates can arrive either as Date objects or as strings; normalize to a consistent dd/mm/yyyy key
+              key = toDateInputValue(v) || "";
+            } else if (cfg.key === "phone") {
+              key = formatPhoneForSave(String(v));
+            } else if (cfg.key === "idNumber") {
+              key = String(v).trim();
+            } else {
+              key = String(v).trim();
+            }
             if (seen.hasOwnProperty(key)) return;
             seen[key] = true;
-            list.push({ raw: v === undefined ? '' : v, display: formatMismatchDisplay(cfg.key, v) });
+            list.push({
+              raw: v === undefined ? "" : v,
+              display: formatMismatchDisplay(cfg.key, v),
+            });
           }
 
           for (var i = 0; i < rows.length; i++) {
             var r = rows[i];
             var p = r && r.personal ? r.personal : {};
             var v = p[cfg.rowKey];
-            if (v === undefined && cfg.key === 'name') {
+            if (v === undefined && cfg.key === "name") {
               v = p.fullName || emp.name;
             }
             addVal(v);
@@ -1464,8 +1718,8 @@
       function renderMismatchUI(emp) {
         clearMismatchUI();
         if (mismatchDismissed) return;
-        var banner = $('personal-mismatch-banner');
-        var limitNote = $('mismatch-limit-note');
+        var banner = $("personal-mismatch-banner");
+        var limitNote = $("mismatch-limit-note");
         var data = computeMismatchData(emp || {});
         var hasMismatch = false;
 
@@ -1475,23 +1729,23 @@
             '.mismatch-options[data-field="' + cfg.key + '"]'
           );
           if (!container) return;
-          var rowEl = container.closest('.field-row');
+          var rowEl = container.closest(".field-row");
           if (values.length <= 1) {
-            container.innerHTML = '';
-            if (rowEl) rowEl.classList.remove('field-mismatch');
+            container.innerHTML = "";
+            if (rowEl) rowEl.classList.remove("field-mismatch");
             return;
           }
 
           hasMismatch = true;
-          if (rowEl) rowEl.classList.add('field-mismatch');
-          container.innerHTML = '';
+          if (rowEl) rowEl.classList.add("field-mismatch");
+          container.innerHTML = "";
           for (var i = 0; i < values.length; i++) {
             (function (valObj) {
-              var btn = document.createElement('button');
-              btn.type = 'button';
-              btn.className = 'mismatch-option-btn';
-              btn.textContent = valObj.display || 'ריק';
-              btn.addEventListener('click', function () {
+              var btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "mismatch-option-btn";
+              btn.textContent = valObj.display || "ריק";
+              btn.addEventListener("click", function () {
                 onMismatchOptionSelect(cfg, valObj.raw);
               });
               container.appendChild(btn);
@@ -1500,13 +1754,13 @@
         });
 
         if (banner) {
-          banner.classList.toggle('hidden', !hasMismatch);
+          banner.classList.toggle("hidden", !hasMismatch);
         }
         if (limitNote) {
           limitNote.textContent = data.limitHit
-            ? 'מציג עד ' + MAX_MISMATCH_ROWS + ' שורות להשוואה'
-            : '';
-          limitNote.classList.toggle('hidden', !hasMismatch || !data.limitHit);
+            ? "מציג עד " + MAX_MISMATCH_ROWS + " שורות להשוואה"
+            : "";
+          limitNote.classList.toggle("hidden", !hasMismatch || !data.limitHit);
         }
       }
 
@@ -1515,25 +1769,26 @@
         var el = $(cfg.inputId);
         if (!el) return;
         var valForInput = value;
-        if (cfg.key === 'phone') {
-          valForInput = formatPhoneForDisplay(String(value || ''));
-        } else if (cfg.key === 'birthdate') {
-          valForInput = toDateInputValue(value || '');
-        } else if (cfg.key === 'idNumber') {
-          valForInput = formatIdForDisplay(String(value || ''));
+        if (cfg.key === "phone") {
+          valForInput = formatPhoneForDisplay(String(value || ""));
+        } else if (cfg.key === "birthdate") {
+          valForInput = toDateInputValue(value || "");
+        } else if (cfg.key === "idNumber") {
+          valForInput = formatIdForDisplay(String(value || ""));
         }
-        el.value = valForInput === undefined ? '' : valForInput;
+        el.value = valForInput === undefined ? "" : valForInput;
       }
 
       function updateEmployeeAfterChoice(cfg, value) {
         if (!cfg || !currentEmployee) return;
-        var storeVal = value === undefined ? '' : value;
+        var storeVal = value === undefined ? "" : value;
         currentEmployee[cfg.empKey || cfg.key] = storeVal;
         if (currentEmployee.rows) {
           for (var i = 0; i < currentEmployee.rows.length; i++) {
-            if (!currentEmployee.rows[i].personal) currentEmployee.rows[i].personal = {};
+            if (!currentEmployee.rows[i].personal)
+              currentEmployee.rows[i].personal = {};
             currentEmployee.rows[i].personal[cfg.rowKey] = storeVal;
-            if (cfg.key === 'name') {
+            if (cfg.key === "name") {
               currentEmployee.rows[i].personal.fullName = storeVal;
             }
           }
@@ -1544,20 +1799,20 @@
       function onMismatchOptionSelect(cfg, value) {
         if (!cfg || !selectedEmployeeId) return;
         applyValueToInput(cfg, value);
-        setGlobalMessage('מעדכן ' + cfg.label + ' בכל השורות...', false);
+        setGlobalMessage("מעדכן " + cfg.label + " בכל השורות...", false);
 
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.ok) {
-              setGlobalMessage((res && res.error) || 'שגיאה בעדכון השדה', true);
+              setGlobalMessage((res && res.error) || "שגיאה בעדכון השדה", true);
               return;
             }
             updateEmployeeAfterChoice(cfg, value);
             renderMismatchUI(currentEmployee);
-            setGlobalMessage('הערך עודכן בכל השורות של העובד', false);
+            setGlobalMessage("הערך עודכן בכל השורות של העובד", false);
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בעדכון השדה: ' + err, true);
+            setGlobalMessage("שגיאה בעדכון השדה: " + err, true);
           })
           .EMP_applyPersonalFieldChoice(selectedEmployeeId, cfg.key, value);
       }
@@ -1568,9 +1823,9 @@
       }
 
       function setFilterWarningVisible(visible) {
-        var box = $('emp-filter-warning');
+        var box = $("emp-filter-warning");
         if (!box) return;
-        box.style.display = visible ? 'block' : 'none';
+        box.style.display = visible ? "block" : "none";
       }
 
       function rebuildLookups() {
@@ -1615,27 +1870,27 @@
       }
 
       function setEditMode(mode) {
-        editMode = mode === 'live' ? 'live' : 'manual';
-        var btn = $('edit-mode-toggle');
+        editMode = mode === "live" ? "live" : "manual";
+        var btn = $("edit-mode-toggle");
         if (!btn) return;
 
-        if (editMode === 'live') {
-          btn.textContent = 'מצב: עריכה בזמן אמת';
-          btn.classList.remove('btn-secondary');
-          btn.classList.add('btn-primary', 'edit-mode-live');
+        if (editMode === "live") {
+          btn.textContent = "מצב: עריכה בזמן אמת";
+          btn.classList.remove("btn-secondary");
+          btn.classList.add("btn-primary", "edit-mode-live");
         } else {
-          btn.textContent = 'מצב: שמירה ידנית';
-          btn.classList.remove('btn-primary', 'edit-mode-live');
-          btn.classList.add('btn-secondary');
+          btn.textContent = "מצב: שמירה ידנית";
+          btn.classList.remove("btn-primary", "edit-mode-live");
+          btn.classList.add("btn-secondary");
         }
       }
 
       function toggleEditMode() {
-        setEditMode(editMode === 'live' ? 'manual' : 'live');
+        setEditMode(editMode === "live" ? "manual" : "live");
       }
 
       function scheduleLiveSave() {
-        if (editMode !== 'live') return;
+        if (editMode !== "live") return;
         if (liveSaveTimer) {
           clearTimeout(liveSaveTimer);
         }
@@ -1647,10 +1902,12 @@
 
       function attachLiveEditHandlers(rowEl) {
         var selectors =
-          '.field-job-type, .field-amount, .field-payment, .field-notes, .field-row-active';
+          ".field-job-type, .field-amount, .field-payment, .field-notes, .field-row-active";
         var fields = rowEl.querySelectorAll(selectors);
         for (var i = 0; i < fields.length; i++) {
-          var evt = fields[i].classList.contains('field-row-active') ? 'click' : 'change';
+          var evt = fields[i].classList.contains("field-row-active")
+            ? "click"
+            : "change";
           fields[i].addEventListener(evt, function () {
             scheduleLiveSave();
           });
@@ -1660,19 +1917,19 @@
       // live handlers גם לשדות פרטי העובד (שם, טלפון, מייל וכו')
       function attachTopLevelLiveHandlers() {
         var ids = [
-          'emp-name',
-          'emp-gender',
-          'emp-idnum',
-          'emp-phone',
-          'emp-birthdate',
-          'emp-email',
-          'emp-shirt-size',
-          'emp-travel'
+          "emp-name",
+          "emp-gender",
+          "emp-idnum",
+          "emp-phone",
+          "emp-birthdate",
+          "emp-email",
+          "emp-shirt-size",
+          "emp-travel",
         ];
         ids.forEach(function (id) {
           var el = $(id);
           if (el) {
-            el.addEventListener('change', scheduleLiveSave);
+            el.addEventListener("change", scheduleLiveSave);
           }
         });
       }
@@ -1680,40 +1937,39 @@
       // איסוף הפיילוד מהטופס – משותף לשמירה ידנית ולשמירה חיה
       function collectPayloadOrNull() {
         if (!selectedEmployeeId) {
-          setGlobalMessage('לא נבחר עובד לעריכה', true);
+          setGlobalMessage("לא נבחר עובד לעריכה", true);
           return null;
         }
-        var name = ($('emp-name').value || '').trim();
+        var name = ($("emp-name").value || "").trim();
         if (!name) {
-          setGlobalMessage('שם העובד לא יכול להיות ריק', true);
+          setGlobalMessage("שם העובד לא יכול להיות ריק", true);
           return null;
         }
 
-        var gender = ($('emp-gender').value || '').trim();
-        var idNumber = ($('emp-idnum').value || '').trim();
-        var phone = formatPhoneForSave(($('emp-phone').value || '').trim());
-        var birthdate = toDateInputValue(($('emp-birthdate').value || '').trim());
-        var email = ($('emp-email').value || '').trim();
-        var shirtSize = ($('emp-shirt-size').value || '').trim();
-        var travelCost = ($('emp-travel').value || '').trim();
+        var gender = ($("emp-gender").value || "").trim();
+        var idNumber = ($("emp-idnum").value || "").trim();
+        var phone = formatPhoneForSave(($("emp-phone").value || "").trim());
+        var birthdate = toDateInputValue(
+          ($("emp-birthdate").value || "").trim()
+        );
+        var email = ($("emp-email").value || "").trim();
+        var shirtSize = ($("emp-shirt-size").value || "").trim();
+        var travelCost = ($("emp-travel").value || "").trim();
 
-        var jobEls = document.querySelectorAll('.job-row');
+        var jobEls = document.querySelectorAll(".job-row");
         var rowsPayload = [];
         for (var i = 0; i < jobEls.length; i++) {
           var el = jobEls[i];
-          var jobType =
-            (el.querySelector('.field-job-type').value || '').trim();
-          var dept =
-            (el.querySelector('.field-department').value || '').trim();
-          var amount =
-            (el.querySelector('.field-amount').value || '').trim();
-          var payment =
-            (el.querySelector('.field-payment').value || '').trim();
-          var notes =
-            (el.querySelector('.field-notes').value || '').trim();
-          var rowActiveBtn = el.querySelector('.field-row-active');
+          var jobType = (
+            el.querySelector(".field-job-type").value || ""
+          ).trim();
+          var dept = (el.querySelector(".field-department").value || "").trim();
+          var amount = (el.querySelector(".field-amount").value || "").trim();
+          var payment = (el.querySelector(".field-payment").value || "").trim();
+          var notes = (el.querySelector(".field-notes").value || "").trim();
+          var rowActiveBtn = el.querySelector(".field-row-active");
           var rowActive = rowActiveBtn
-            ? rowActiveBtn.getAttribute('data-active') === 'true'
+            ? rowActiveBtn.getAttribute("data-active") === "true"
             : false;
 
           // דילוג על שורה ריקה לגמרי
@@ -1722,18 +1978,18 @@
           }
 
           rowsPayload.push({
-            rowIndex: el.getAttribute('data-row-index') || null,
+            rowIndex: el.getAttribute("data-row-index") || null,
             rowActive: rowActive,
             jobType: jobType,
             department: dept,
             amount: amount,
             paymentMode: payment,
-            notes: notes
+            notes: notes,
           });
         }
 
         if (rowsPayload.length === 0) {
-          setGlobalMessage('לפחות סוג עבודה אחד חייב להיות מוגדר', true);
+          setGlobalMessage("לפחות סוג עבודה אחד חייב להיות מוגדר", true);
           return null;
         }
 
@@ -1747,7 +2003,7 @@
           email: email,
           shirtSize: shirtSize,
           travelCost: travelCost,
-          rows: rowsPayload
+          rows: rowsPayload,
         };
       }
 
@@ -1759,8 +2015,7 @@
           .withSuccessHandler(function (res) {
             if (!res || !res.ok) {
               setGlobalMessage(
-                (res && res.error) ||
-                  'שגיאה בשמירה (מצב עריכה בזמן אמת)',
+                (res && res.error) || "שגיאה בשמירה (מצב עריכה בזמן אמת)",
                 true
               );
               return;
@@ -1768,37 +2023,37 @@
             // בכוונה לא מציג "השינויים נשמרו" בכל שינוי קטן
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage(
-              'שגיאה בשמירה (מצב עריכה בזמן אמת): ' + err,
-              true
-            );
+            setGlobalMessage("שגיאה בשמירה (מצב עריכה בזמן אמת): " + err, true);
           })
           .EMP_saveEmployeePayload(payload);
       }
 
       function init() {
-        setGlobalMessage('טוען נתוני עובדים...', false);
+        setGlobalMessage("טוען נתוני עובדים...", false);
 
-        var refreshBtn = $('sidebar-refresh-btn');
+        var refreshBtn = $("sidebar-refresh-btn");
         if (refreshBtn) {
-          refreshBtn.addEventListener('click', reloadSidebar);
+          refreshBtn.addEventListener("click", reloadSidebar);
         }
 
         google.script.run
           .withSuccessHandler(function (res) {
             try {
-              console.log('[EMP_DEBUG] sidebar bootstrap result:', JSON.stringify(res));
+              console.log(
+                "[EMP_DEBUG] sidebar bootstrap result:",
+                JSON.stringify(res)
+              );
             } catch (e) {
               // ignore log errors
             }
 
             if (!res) {
-              setGlobalMessage('שגיאה בטעינת נתונים (אובייקט ריק מהשרת)', true);
+              setGlobalMessage("שגיאה בטעינת נתונים (אובייקט ריק מהשרת)", true);
               return;
             }
 
             if (res.error) {
-              setGlobalMessage(res.error || 'שגיאה בטעינת נתונים', true);
+              setGlobalMessage(res.error || "שגיאה בטעינת נתונים", true);
               return;
             }
 
@@ -1808,7 +2063,7 @@
             payments = res.payments || [];
 
             rebuildLookups();
-            setGlobalMessage('', false);
+            setGlobalMessage("", false);
 
             initShiftsTab();
 
@@ -1819,56 +2074,56 @@
             }
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בטעינת הנתונים: ' + err, true);
+            setGlobalMessage("שגיאה בטעינת הנתונים: " + err, true);
           })
           .EMP_getSidebarBootstrap();
 
-        $('search-input').addEventListener('input', onSearchInputChange);
-        $('search-input').addEventListener('keydown', onSearchKeyDown);
-        $('search-results').addEventListener('click', onSearchResultsClick);
+        $("search-input").addEventListener("input", onSearchInputChange);
+        $("search-input").addEventListener("keydown", onSearchKeyDown);
+        $("search-results").addEventListener("click", onSearchResultsClick);
 
-        var tabButtons = document.querySelectorAll('.tab-button');
+        var tabButtons = document.querySelectorAll(".tab-button");
         for (var t = 0; t < tabButtons.length; t++) {
-          tabButtons[t].addEventListener('click', function (e) {
-            var tab = e.currentTarget.getAttribute('data-tab');
+          tabButtons[t].addEventListener("click", function (e) {
+            var tab = e.currentTarget.getAttribute("data-tab");
             setActiveTab(tab);
           });
         }
 
-        var warnBtn = $('emp-filter-warning-btn');
+        var warnBtn = $("emp-filter-warning-btn");
         if (warnBtn) {
-          warnBtn.addEventListener('click', onRevealFilterClick);
+          warnBtn.addEventListener("click", onRevealFilterClick);
         }
 
-        var mismatchDismissBtn = $('mismatch-dismiss-btn');
+        var mismatchDismissBtn = $("mismatch-dismiss-btn");
         if (mismatchDismissBtn) {
-          mismatchDismissBtn.addEventListener('click', dismissMismatchBanner);
+          mismatchDismissBtn.addEventListener("click", dismissMismatchBanner);
         }
 
-        var modeBtn = $('edit-mode-toggle');
+        var modeBtn = $("edit-mode-toggle");
         if (modeBtn) {
-          modeBtn.addEventListener('click', toggleEditMode);
+          modeBtn.addEventListener("click", toggleEditMode);
         }
-        var manualLoadBtn = $('manual-load-btn');
+        var manualLoadBtn = $("manual-load-btn");
         if (manualLoadBtn) {
-          manualLoadBtn.addEventListener('click', onManualLoadClick);
+          manualLoadBtn.addEventListener("click", onManualLoadClick);
         }
-        var autoModeBtn = $('auto-load-auto-btn');
+        var autoModeBtn = $("auto-load-auto-btn");
         if (autoModeBtn) {
-          autoModeBtn.addEventListener('click', function () {
-            setAutoLoadMode('auto');
+          autoModeBtn.addEventListener("click", function () {
+            setAutoLoadMode("auto");
           });
         }
-        var manualModeBtn = $('auto-load-manual-btn');
+        var manualModeBtn = $("auto-load-manual-btn");
         if (manualModeBtn) {
-          manualModeBtn.addEventListener('click', function () {
-            setAutoLoadMode('manual');
+          manualModeBtn.addEventListener("click", function () {
+            setAutoLoadMode("manual");
           });
         }
         // ברירת מחדל – שמירה ידנית
-        setEditMode('manual');
-        setActiveTab('employees');
-        setAutoLoadMode('manual');
+        setEditMode("manual");
+        setActiveTab("employees");
+        setAutoLoadMode("manual");
 
         attachTopLevelLiveHandlers();
       }
@@ -1876,10 +2131,10 @@
       function startSelectionPolling() {
         if (!google || !google.script || !google.script.run) return;
         if (selectionPollTimer) return;
-        if (autoLoadMode !== 'auto') return;
+        if (autoLoadMode !== "auto") return;
 
         function poll() {
-          if (autoLoadMode !== 'auto') return;
+          if (autoLoadMode !== "auto") return;
           if (selectionPollBusy) return;
           selectionPollBusy = true;
           google.script.run
@@ -1916,70 +2171,76 @@
       }
 
       function syncManualLoadVisibility() {
-        var manualSection = $('manual-load-section');
+        var manualSection = $("manual-load-section");
         if (manualSection) {
           manualSection.style.display =
-            activeTab === 'employees' && autoLoadMode === 'manual' ? 'block' : 'none';
+            activeTab === "employees" && autoLoadMode === "manual"
+              ? "block"
+              : "none";
         }
       }
 
       function setActiveTab(tabName) {
-        activeTab = tabName || 'employees';
-        var buttons = document.querySelectorAll('.tab-button');
+        activeTab = tabName || "employees";
+        var buttons = document.querySelectorAll(".tab-button");
         for (var i = 0; i < buttons.length; i++) {
-          var btnTab = buttons[i].getAttribute('data-tab');
+          var btnTab = buttons[i].getAttribute("data-tab");
           if (btnTab === activeTab) {
-            buttons[i].classList.add('active');
+            buttons[i].classList.add("active");
           } else {
-            buttons[i].classList.remove('active');
+            buttons[i].classList.remove("active");
           }
         }
 
-        var sections = document.querySelectorAll('[data-tab-section]');
+        var sections = document.querySelectorAll("[data-tab-section]");
         for (var s = 0; s < sections.length; s++) {
-          var sectionTab = sections[s].getAttribute('data-tab-section');
+          var sectionTab = sections[s].getAttribute("data-tab-section");
           if (sectionTab === activeTab) {
-            sections[s].classList.remove('tab-hidden');
+            sections[s].classList.remove("tab-hidden");
           } else {
-            sections[s].classList.add('tab-hidden');
+            sections[s].classList.add("tab-hidden");
           }
         }
 
         syncManualLoadVisibility();
 
-        if (activeTab === 'requests' && requests.length === 0 && !requestsState.loading) {
+        if (
+          activeTab === "requests" &&
+          requests.length === 0 &&
+          !requestsState.loading
+        ) {
           fetchRequests(true);
         }
       }
 
       function setAutoLoadMode(mode) {
-        autoLoadMode = mode === 'manual' ? 'manual' : 'auto';
+        autoLoadMode = mode === "manual" ? "manual" : "auto";
 
-        var autoBtn = $('auto-load-auto-btn');
-        var manualBtn = $('auto-load-manual-btn');
-        var warning = $('auto-load-warning');
+        var autoBtn = $("auto-load-auto-btn");
+        var manualBtn = $("auto-load-manual-btn");
+        var warning = $("auto-load-warning");
 
         if (autoBtn && manualBtn) {
-          if (autoLoadMode === 'auto') {
-            autoBtn.classList.add('btn-primary');
-            autoBtn.classList.remove('btn-secondary');
-            manualBtn.classList.add('btn-secondary');
-            manualBtn.classList.remove('btn-primary');
+          if (autoLoadMode === "auto") {
+            autoBtn.classList.add("btn-primary");
+            autoBtn.classList.remove("btn-secondary");
+            manualBtn.classList.add("btn-secondary");
+            manualBtn.classList.remove("btn-primary");
           } else {
-            autoBtn.classList.add('btn-secondary');
-            autoBtn.classList.remove('btn-primary');
-            manualBtn.classList.add('btn-primary');
-            manualBtn.classList.remove('btn-secondary');
+            autoBtn.classList.add("btn-secondary");
+            autoBtn.classList.remove("btn-primary");
+            manualBtn.classList.add("btn-primary");
+            manualBtn.classList.remove("btn-secondary");
           }
         }
 
         if (warning) {
-          warning.style.display = autoLoadMode === 'auto' ? 'block' : 'none';
+          warning.style.display = autoLoadMode === "auto" ? "block" : "none";
         }
 
         syncManualLoadVisibility();
 
-        if (autoLoadMode === 'auto') {
+        if (autoLoadMode === "auto") {
           startSelectionPolling();
         } else {
           stopSelectionPolling();
@@ -1988,7 +2249,7 @@
 
       function loadFromSheetSelection() {
         if (!google || !google.script || !google.script.run) {
-          setGlobalMessage('לא ניתן לטעון את העובד מהבחירה בגיליון.', true);
+          setGlobalMessage("לא ניתן לטעון את העובד מהבחירה בגיליון.", true);
           return;
         }
 
@@ -1997,11 +2258,11 @@
             if (res && res.ok && res.employeeId) {
               loadEmployee(res.employeeId);
             } else {
-              setGlobalMessage('לא נמצאה בחירה פעילה בגיליון.', true);
+              setGlobalMessage("לא נמצאה בחירה פעילה בגיליון.", true);
             }
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בטעינת עובד מהבחירה: ' + err, true);
+            setGlobalMessage("שגיאה בטעינת עובד מהבחירה: " + err, true);
           })
           .EMP_getSelectedEmployeeId();
       }
@@ -2011,25 +2272,25 @@
       }
 
       function onSearchInputChange(e) {
-        var term = (e.target.value || '').trim();
-        var resultsEl = $('search-results');
+        var term = (e.target.value || "").trim();
+        var resultsEl = $("search-results");
         if (!term) {
-          resultsEl.classList.add('hidden');
-          resultsEl.innerHTML = '';
+          resultsEl.classList.add("hidden");
+          resultsEl.innerHTML = "";
           return;
         }
 
         var lower = term.toLowerCase();
         var matches = [];
         for (var i = 0; i < employees.length; i++) {
-          var n = employees[i].name || '';
+          var n = employees[i].name || "";
           if (n.toLowerCase().indexOf(lower) !== -1) {
             matches.push(employees[i]);
           }
           if (matches.length >= 10) break;
         }
 
-        var html = '';
+        var html = "";
         if (matches.length > 0) {
           for (var j = 0; j < matches.length; j++) {
             var emp = matches[j];
@@ -2041,26 +2302,26 @@
             if (!emp.anyActive) {
               html += ' <span class="muted">(לא פעיל)</span>';
             }
-            html += '</div>';
+            html += "</div>";
           }
         } else {
           html +=
             '<div class="search-item small" data-type="new">' +
             'אין התאמה. לחץ כדי ליצור עובד חדש בשם: "' +
-            term.replace(/"/g, '&quot;') +
+            term.replace(/"/g, "&quot;") +
             '"' +
-            '</div>';
+            "</div>";
         }
 
         resultsEl.innerHTML = html;
-        resultsEl.classList.remove('hidden');
+        resultsEl.classList.remove("hidden");
       }
 
       function onSearchKeyDown(e) {
-        if (e.key === 'Enter') {
-          var resEl = $('search-results');
-          if (resEl && !resEl.classList.contains('hidden')) {
-            var first = resEl.querySelector('.search-item');
+        if (e.key === "Enter") {
+          var resEl = $("search-results");
+          if (resEl && !resEl.classList.contains("hidden")) {
+            var first = resEl.querySelector(".search-item");
             if (first) {
               first.click();
             }
@@ -2069,29 +2330,29 @@
           return;
         }
 
-        if (e.key === 'Escape') {
-          var box = $('search-results');
+        if (e.key === "Escape") {
+          var box = $("search-results");
           if (box) {
-            box.classList.add('hidden');
-            box.innerHTML = '';
+            box.classList.add("hidden");
+            box.innerHTML = "";
           }
         }
       }
 
       function onSearchResultsClick(e) {
         var el = e.target;
-        while (el && !el.classList.contains('search-item')) {
+        while (el && !el.classList.contains("search-item")) {
           el = el.parentElement;
         }
         if (!el) return;
 
-        var type = el.getAttribute('data-type');
-        if (type === 'emp') {
-          var id = el.getAttribute('data-id');
-          $('search-results').classList.add('hidden');
+        var type = el.getAttribute("data-type");
+        if (type === "emp") {
+          var id = el.getAttribute("data-id");
+          $("search-results").classList.add("hidden");
           onSearchEmployeeClick(id);
-        } else if (type === 'new') {
-          $('search-results').classList.add('hidden');
+        } else if (type === "new") {
+          $("search-results").classList.add("hidden");
           onCreateEmployeeFromSearch();
         }
       }
@@ -2102,15 +2363,15 @@
       }
 
       function onCreateEmployeeFromSearch() {
-        var term = ($('search-input').value || '').trim();
+        var term = ($("search-input").value || "").trim();
         if (!term) return;
-        setGlobalMessage('יוצר עובד חדש...', false);
+        setGlobalMessage("יוצר עובד חדש...", false);
 
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.ok) {
               setGlobalMessage(
-                (res && res.error) || 'שגיאה ביצירת עובד חדש',
+                (res && res.error) || "שגיאה ביצירת עובד חדש",
                 true
               );
               return;
@@ -2119,10 +2380,10 @@
             selectedEmployeeId = emp.id;
             addOrUpdateEmployeeInList(emp);
             renderEmployee(emp);
-            setGlobalMessage('נוצר עובד חדש', false);
+            setGlobalMessage("נוצר עובד חדש", false);
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה ביצירת עובד חדש: ' + err, true);
+            setGlobalMessage("שגיאה ביצירת עובד חדש: " + err, true);
           })
           .EMP_createEmployeeByName(term);
       }
@@ -2142,28 +2403,28 @@
       }
 
       function loadEmployee(id) {
-        setGlobalMessage('טוען עובד...', false);
+        setGlobalMessage("טוען עובד...", false);
         google.script.run
           .withSuccessHandler(function (res) {
             try {
-              console.log('[EMP_DEBUG] loadEmployee result for id', id, res);
+              console.log("[EMP_DEBUG] loadEmployee result for id", id, res);
             } catch (_e) {}
 
             if (!res) {
-              setGlobalMessage('שגיאה בטעינת עובד: תגובה ריקה מהשרת', true);
+              setGlobalMessage("שגיאה בטעינת עובד: תגובה ריקה מהשרת", true);
               return;
             }
             if (res.error) {
-              setGlobalMessage('שגיאה בטעינת עובד: ' + res.error, true);
+              setGlobalMessage("שגיאה בטעינת עובד: " + res.error, true);
               return;
             }
             var emp = res.employee;
             selectedEmployeeId = emp.id;
             renderEmployee(emp);
-            setGlobalMessage('', false);
+            setGlobalMessage("", false);
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בטעינת עובד: ' + err, true);
+            setGlobalMessage("שגיאה בטעינת עובד: " + err, true);
           })
           .EMP_getEmployeeById(id);
       }
@@ -2171,44 +2432,38 @@
       function renderEmployee(emp) {
         mismatchDismissed = false;
         currentEmployee = emp;
-        $('employee-section').style.display = 'block';
-        $('emp-name').value = emp.name || '';
+        $("employee-section").style.display = "block";
+        $("emp-name").value = emp.name || "";
 
         // סטטוס עובד בראש הסקשן
-        var statusPill = $('emp-status-pill');
+        var statusPill = $("emp-status-pill");
         if (statusPill) {
           var isActive = !!emp.anyActive;
-          statusPill.textContent = isActive ? 'פעיל' : 'לא פעיל';
-          statusPill.classList.toggle('status-active', isActive);
-          statusPill.classList.toggle('status-inactive', !isActive);
+          statusPill.textContent = isActive ? "פעיל" : "לא פעיל";
+          statusPill.classList.toggle("status-active", isActive);
+          statusPill.classList.toggle("status-inactive", !isActive);
         }
 
         // פרטי עובד (אם השרת יספק אותם)
-        var gender =
-          emp.gender || emp.sex || '';
-        var idNumber =
-          emp.idNumber || emp.teudatZehut || '';
-        var phone =
-          emp.phone || '';
-        var birthdate =
-          emp.birthdate || '';
-        var email =
-          emp.email || '';
-        var shirtSize =
-          emp.shirtSize || '';
-        var travelCost =
-          emp.travelCost || '';
+        var gender = emp.gender || emp.sex || "";
+        var idNumber = emp.idNumber || emp.teudatZehut || "";
+        var phone = emp.phone || "";
+        var birthdate = emp.birthdate || "";
+        var email = emp.email || "";
+        var shirtSize = emp.shirtSize || "";
+        var travelCost = emp.travelCost || "";
 
-        if ($('emp-gender')) $('emp-gender').value = gender;
-        if ($('emp-idnum')) $('emp-idnum').value = formatIdForDisplay(idNumber);
-        if ($('emp-phone')) $('emp-phone').value = formatPhoneForDisplay(phone);
-        if ($('emp-birthdate')) $('emp-birthdate').value = toDateInputValue(birthdate);
-        if ($('emp-email')) $('emp-email').value = email;
-        if ($('emp-shirt-size')) $('emp-shirt-size').value = shirtSize;
-        if ($('emp-travel')) $('emp-travel').value = travelCost;
+        if ($("emp-gender")) $("emp-gender").value = gender;
+        if ($("emp-idnum")) $("emp-idnum").value = formatIdForDisplay(idNumber);
+        if ($("emp-phone")) $("emp-phone").value = formatPhoneForDisplay(phone);
+        if ($("emp-birthdate"))
+          $("emp-birthdate").value = toDateInputValue(birthdate);
+        if ($("emp-email")) $("emp-email").value = email;
+        if ($("emp-shirt-size")) $("emp-shirt-size").value = shirtSize;
+        if ($("emp-travel")) $("emp-travel").value = travelCost;
 
-        var jobsList = $('jobs-list');
-        jobsList.innerHTML = '';
+        var jobsList = $("jobs-list");
+        jobsList.innerHTML = "";
 
         var rows = emp.rows || [];
         if (rows.length === 0) {
@@ -2224,33 +2479,32 @@
       }
 
       function jobRowTemplate(data) {
-        var rid = data && data.rowIndex ? String(data.rowIndex) : '';
+        var rid = data && data.rowIndex ? String(data.rowIndex) : "";
         var active = data && data.rowActive ? true : false;
-        var title = (data && data.jobType) || 'סוג עבודה חדש';
-        var amount = (data && data.amount) || '';
-        var notes = (data && data.notes) || '';
+        var title = (data && data.jobType) || "סוג עבודה חדש";
+        var amount = (data && data.amount) || "";
+        var notes = (data && data.notes) || "";
         // department & payment ימולאו בפועל בפונקציה initJobRow
-        var html = '';
+        var html = "";
         html += '<div class="job-row" data-row-index="' + rid + '">';
         html += '  <div class="job-row-header">';
-        html +=
-          '    <span class="job-row-header-title">' + title + '</span>';
+        html += '    <span class="job-row-header-title">' + title + "</span>";
         html +=
           '    <button type="button" class="row-active-btn field-row-active ' +
-          (active ? 'active' : 'inactive') +
-          '" data-active="' + (active ? 'true' : 'false') + '"></button>';
-        html += '  </div>';
+          (active ? "active" : "inactive") +
+          '" data-active="' +
+          (active ? "true" : "false") +
+          '"></button>';
+        html += "  </div>";
 
         html +=
           '  <div class="field-row"><span class="label">סוג העבודה</span>';
         html += '    <select class="field-job-type"></select>';
-        html += '  </div>';
+        html += "  </div>";
 
-        html +=
-          '  <div class="field-row"><span class="label">מחלקה</span>';
-        html +=
-          '    <input type="text" class="field-department" disabled />';
-        html += '  </div>';
+        html += '  <div class="field-row"><span class="label">מחלקה</span>';
+        html += '    <input type="text" class="field-department" disabled />';
+        html += "  </div>";
 
         html +=
           '  <div class="field-row"><span class="label">סכום (ש&quot;ח)</span>';
@@ -2258,47 +2512,44 @@
           '    <input type="number" class="field-amount" value="' +
           amount +
           '">';
-        html += '  </div>';
+        html += "  </div>";
 
         html +=
           '  <div class="field-row"><span class="label">אופן תשלום</span>';
         html += '    <select class="field-payment"></select>';
-        html += '  </div>';
+        html += "  </div>";
 
+        html += '  <div class="field-row"><span class="label">הערות</span>';
         html +=
-          '  <div class="field-row"><span class="label">הערות</span>';
-        html +=
-          '    <input type="text" class="field-notes" value="' +
-          notes +
-          '">';
-        html += '  </div>';
-        html += '</div>';
+          '    <input type="text" class="field-notes" value="' + notes + '">';
+        html += "  </div>";
+        html += "</div>";
         return html;
       }
 
       function initJobRow(rowEl, data) {
         data = data || {};
-        var jobSelect = rowEl.querySelector('.field-job-type');
-        var paySelect = rowEl.querySelector('.field-payment');
-        var deptInput = rowEl.querySelector('.field-department');
-        var headerTitle = rowEl.querySelector('.job-row-header-title');
+        var jobSelect = rowEl.querySelector(".field-job-type");
+        var paySelect = rowEl.querySelector(".field-payment");
+        var deptInput = rowEl.querySelector(".field-department");
+        var headerTitle = rowEl.querySelector(".job-row-header-title");
 
-        var currentJobName = (data.jobType || '').trim();
-        var currentDept = (data.department || '').trim();
-        var currentPayName = (data.paymentMode || '').trim();
+        var currentJobName = (data.jobType || "").trim();
+        var currentDept = (data.department || "").trim();
+        var currentPayName = (data.paymentMode || "").trim();
 
         // ---- מילוי select של סוג עבודה ----
-        jobSelect.innerHTML = '';
-        var optEmptyJob = document.createElement('option');
-        optEmptyJob.value = '';
-        optEmptyJob.textContent = '-- בחר סוג עבודה --';
+        jobSelect.innerHTML = "";
+        var optEmptyJob = document.createElement("option");
+        optEmptyJob.value = "";
+        optEmptyJob.textContent = "-- בחר סוג עבודה --";
         jobSelect.appendChild(optEmptyJob);
 
         var jobFound = false;
         for (var i = 0; i < jobs.length; i++) {
           var j = jobs[i];
           if (!j || !j.name) continue;
-          var opt = document.createElement('option');
+          var opt = document.createElement("option");
           opt.value = j.name;
           opt.textContent = j.name;
           if (currentJobName && j.name === currentJobName) {
@@ -2310,26 +2561,25 @@
 
         // אם יש ערך קיים שלא קיים ברשימה – נוסיף אותו כאופציה נפרדת
         if (currentJobName && !jobFound) {
-          var optCustom = document.createElement('option');
+          var optCustom = document.createElement("option");
           optCustom.value = currentJobName;
-          optCustom.textContent =
-            currentJobName + ' (לא בטבלת אופציות)';
+          optCustom.textContent = currentJobName + " (לא בטבלת אופציות)";
           optCustom.selected = true;
           jobSelect.insertBefore(optCustom, jobSelect.children[1] || null);
         }
 
         // ---- מילוי select של אופן תשלום ----
-        paySelect.innerHTML = '';
-        var optEmptyPay = document.createElement('option');
-        optEmptyPay.value = '';
-        optEmptyPay.textContent = '-- בחר אופן תשלום --';
+        paySelect.innerHTML = "";
+        var optEmptyPay = document.createElement("option");
+        optEmptyPay.value = "";
+        optEmptyPay.textContent = "-- בחר אופן תשלום --";
         paySelect.appendChild(optEmptyPay);
 
         var payFound = false;
         for (var k = 0; k < payments.length; k++) {
           var p = payments[k];
           if (!p || !p.name) continue;
-          var optP = document.createElement('option');
+          var optP = document.createElement("option");
           optP.value = p.name;
           optP.textContent = p.name;
           if (currentPayName && p.name === currentPayName) {
@@ -2340,51 +2590,53 @@
         }
 
         if (currentPayName && !payFound) {
-          var optCustomPay = document.createElement('option');
+          var optCustomPay = document.createElement("option");
           optCustomPay.value = currentPayName;
-          optCustomPay.textContent =
-            currentPayName + ' (לא בטבלת אופציות)';
+          optCustomPay.textContent = currentPayName + " (לא בטבלת אופציות)";
           optCustomPay.selected = true;
           paySelect.insertBefore(optCustomPay, paySelect.children[1] || null);
         }
 
         // ---- מחלקה – נגזרת מסוג העבודה ----
         function updateDeptAndTitle() {
-          var jName = (jobSelect.value || '').trim();
+          var jName = (jobSelect.value || "").trim();
           if (jName && jobByName[jName]) {
-            deptInput.value = jobByName[jName].department || '';
+            deptInput.value = jobByName[jName].department || "";
           } else {
             // אם יש מחלקה קיימת בשורה מהטבלה – נשאיר אותה כFallback
-            deptInput.value = currentDept || '';
+            deptInput.value = currentDept || "";
           }
-          headerTitle.textContent = jName || 'סוג עבודה חדש';
+          headerTitle.textContent = jName || "סוג עבודה חדש";
         }
 
-        jobSelect.addEventListener('change', function () {
+        jobSelect.addEventListener("change", function () {
           updateDeptAndTitle();
           scheduleLiveSave();
         });
 
         // toggle active button text/state
-        var activeBtn = rowEl.querySelector('.field-row-active');
+        var activeBtn = rowEl.querySelector(".field-row-active");
         function syncActiveButton() {
-          var isActive = activeBtn.getAttribute('data-active') === 'true';
-          activeBtn.classList.toggle('active', isActive);
-          activeBtn.classList.toggle('inactive', !isActive);
-          activeBtn.textContent = isActive ? 'פעיל' : 'לא פעיל';
+          var isActive = activeBtn.getAttribute("data-active") === "true";
+          activeBtn.classList.toggle("active", isActive);
+          activeBtn.classList.toggle("inactive", !isActive);
+          activeBtn.textContent = isActive ? "פעיל" : "לא פעיל";
         }
         if (activeBtn) {
           var initialActive = false;
           if (data && data.rowActive === true) {
             initialActive = true;
           } else {
-            initialActive = activeBtn.getAttribute('data-active') === 'true';
+            initialActive = activeBtn.getAttribute("data-active") === "true";
           }
-          activeBtn.setAttribute('data-active', initialActive ? 'true' : 'false');
+          activeBtn.setAttribute(
+            "data-active",
+            initialActive ? "true" : "false"
+          );
           syncActiveButton();
-          activeBtn.addEventListener('click', function () {
-            var now = activeBtn.getAttribute('data-active') === 'true';
-            activeBtn.setAttribute('data-active', now ? 'false' : 'true');
+          activeBtn.addEventListener("click", function () {
+            var now = activeBtn.getAttribute("data-active") === "true";
+            activeBtn.setAttribute("data-active", now ? "false" : "true");
             syncActiveButton();
             scheduleLiveSave();
           });
@@ -2395,8 +2647,8 @@
       }
 
       function addJobRow(data) {
-        var jobsList = $('jobs-list');
-        jobsList.insertAdjacentHTML('beforeend', jobRowTemplate(data));
+        var jobsList = $("jobs-list");
+        jobsList.insertAdjacentHTML("beforeend", jobRowTemplate(data));
         var rowEl = jobsList.lastElementChild;
         initJobRow(rowEl, data || {});
         attachLiveEditHandlers(rowEl);
@@ -2406,20 +2658,17 @@
         var payload = collectPayloadOrNull();
         if (!payload) return;
 
-        setGlobalMessage('שומר שינויים...', false);
+        setGlobalMessage("שומר שינויים...", false);
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.ok) {
-              setGlobalMessage(
-                (res && res.error) || 'שגיאה בשמירה',
-                true
-              );
+              setGlobalMessage((res && res.error) || "שגיאה בשמירה", true);
               return;
             }
-            setGlobalMessage('השינויים נשמרו', false);
+            setGlobalMessage("השינויים נשמרו", false);
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בשמירה: ' + err, true);
+            setGlobalMessage("שגיאה בשמירה: " + err, true);
           })
           .EMP_saveEmployeePayload(payload);
       }
@@ -2428,47 +2677,44 @@
         google.script.run
           .withSuccessHandler(function (res) {
             if (res && res.changed) {
-              setGlobalMessage(
-                'הוסר סינון בגליון "פרטי עובדים".',
-                false
-              );
+              setGlobalMessage('הוסר סינון בגליון "פרטי עובדים".', false);
               setFilterWarningVisible(false);
             } else {
-              setGlobalMessage('לא היה סינון פעיל.', false);
+              setGlobalMessage("לא היה סינון פעיל.", false);
             }
           })
           .withFailureHandler(function (err) {
-            setGlobalMessage('שגיאה בטיפול בסינון: ' + err, true);
+            setGlobalMessage("שגיאה בטיפול בסינון: " + err, true);
           })
           .EMP_revealAllRowsIfFiltered();
       }
 
       // ----- Shifts tab helpers -----
       function setShiftsMessage(text, isError) {
-        var el = $('shifts-message');
+        var el = $("shifts-message");
         if (!el) return;
-        el.textContent = text || '';
-        el.className = 'shifts-message' + (isError ? ' error' : '');
+        el.textContent = text || "";
+        el.className = "shifts-message" + (isError ? " error" : "");
       }
 
       function setRequestsMessage(text, isError) {
-        var el = $('requests-message');
+        var el = $("requests-message");
         if (!el) return;
-        el.textContent = text || '';
-        el.className = 'requests-message' + (isError ? ' error' : '');
+        el.textContent = text || "";
+        el.className = "requests-message" + (isError ? " error" : "");
       }
 
       function hideShiftSearchResults() {
-        var box = $('shifts-search-results');
+        var box = $("shifts-search-results");
         if (!box) return;
-        box.classList.add('hidden');
-        box.innerHTML = '';
+        box.classList.add("hidden");
+        box.innerHTML = "";
       }
 
       function renderShiftSearchResults(term) {
-        var box = $('shifts-search-results');
+        var box = $("shifts-search-results");
         if (!box) return;
-        var q = (term || '').trim().toLowerCase();
+        var q = (term || "").trim().toLowerCase();
         if (!q) {
           hideShiftSearchResults();
           return;
@@ -2478,11 +2724,15 @@
         for (var i = 0; i < shifts.length; i++) {
           var s = shifts[i];
           var blob = (
-            (s.shiftId || '') + ' ' +
-            (s.employeeName || '') + ' ' +
-            (s.employeeId || '') + ' ' +
-            (s.workType || '') + ' ' +
-            (s.department || '')
+            (s.shiftId || "") +
+            " " +
+            (s.employeeName || "") +
+            " " +
+            (s.employeeId || "") +
+            " " +
+            (s.workType || "") +
+            " " +
+            (s.department || "")
           ).toLowerCase();
           if (blob.indexOf(q) !== -1) {
             matches.push(s);
@@ -2490,34 +2740,40 @@
           if (matches.length >= 10) break;
         }
 
-        var html = '';
+        var html = "";
         if (!matches.length) {
-          html += '<div class="search-item small">אין תוצאות כרגע. נסה חיפוש או טען בחירה מהגיליון.</div>';
+          html +=
+            '<div class="search-item small">אין תוצאות כרגע. נסה חיפוש או טען בחירה מהגיליון.</div>';
         } else {
           for (var j = 0; j < matches.length; j++) {
             var m = matches[j];
-            html += '<div class="search-item" data-type="shift" data-id="' + (m.shiftId || '') + '">';
-            html += (m.employeeName || 'ללא שם') + (m.employeeId ? ' (ID ' + m.employeeId + ')' : '');
-            if (m.shiftId) html += ' • #' + m.shiftId;
-            if (m.date) html += ' • ' + m.date;
-            html += '</div>';
+            html +=
+              '<div class="search-item" data-type="shift" data-id="' +
+              (m.shiftId || "") +
+              '">';
+            html +=
+              (m.employeeName || "ללא שם") +
+              (m.employeeId ? " (ID " + m.employeeId + ")" : "");
+            if (m.shiftId) html += " • #" + m.shiftId;
+            if (m.date) html += " • " + m.date;
+            html += "</div>";
           }
         }
 
         box.innerHTML = html;
-        box.classList.remove('hidden');
+        box.classList.remove("hidden");
       }
 
       function onShiftsSearchResultsClick(e) {
         var el = e.target;
-        while (el && !el.classList.contains('search-item')) {
+        while (el && !el.classList.contains("search-item")) {
           el = el.parentElement;
         }
         if (!el) return;
 
-        var type = el.getAttribute('data-type');
-        if (type === 'shift') {
-          var id = el.getAttribute('data-id');
+        var type = el.getAttribute("data-type");
+        if (type === "shift") {
+          var id = el.getAttribute("data-id");
           hideShiftSearchResults();
           if (id) {
             if (!onShiftRowClick(id)) {
@@ -2528,14 +2784,14 @@
       }
 
       function onShiftsSearchInputChange(e) {
-        renderShiftSearchResults((e && e.target && e.target.value) || '');
+        renderShiftSearchResults((e && e.target && e.target.value) || "");
       }
 
       function onShiftsSearchKeyDown(e) {
-        if (e.key === 'Enter') {
-          var box = $('shifts-search-results');
-          if (box && !box.classList.contains('hidden')) {
-            var first = box.querySelector('.search-item');
+        if (e.key === "Enter") {
+          var box = $("shifts-search-results");
+          if (box && !box.classList.contains("hidden")) {
+            var first = box.querySelector(".search-item");
             if (first) {
               first.click();
               e.preventDefault();
@@ -2544,60 +2800,71 @@
           }
         }
 
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           hideShiftSearchResults();
         }
       }
 
       function toggleFilterButton(btn, forceActive) {
         if (!btn) return;
-        var nextActive = typeof forceActive === 'boolean' ? forceActive : !btn.classList.contains('active');
-        btn.classList.toggle('active', nextActive);
-        btn.setAttribute('aria-pressed', nextActive);
+        var nextActive =
+          typeof forceActive === "boolean"
+            ? forceActive
+            : !btn.classList.contains("active");
+        btn.classList.toggle("active", nextActive);
+        btn.setAttribute("aria-pressed", nextActive);
       }
 
       function isFilterButtonActive(id) {
         var btn = $(id);
-        return !!(btn && btn.classList.contains('active'));
+        return !!(btn && btn.classList.contains("active"));
       }
 
       function setEmployeeMode(mode) {
-        shiftsEmployeeMode = mode === 'search' ? 'search' : 'all';
-        var btnAll = $('shifts-emp-mode-all');
-        var btnSearch = $('shifts-emp-mode-search');
-        if (btnAll) toggleFilterButton(btnAll, shiftsEmployeeMode === 'all');
-        if (btnSearch) toggleFilterButton(btnSearch, shiftsEmployeeMode === 'search');
+        shiftsEmployeeMode = mode === "search" ? "search" : "all";
+        var btnAll = $("shifts-emp-mode-all");
+        var btnSearch = $("shifts-emp-mode-search");
+        if (btnAll) toggleFilterButton(btnAll, shiftsEmployeeMode === "all");
+        if (btnSearch)
+          toggleFilterButton(btnSearch, shiftsEmployeeMode === "search");
 
-        var selectWrap = $('shifts-employee-select-wrapper');
-        var searchWrap = $('shifts-employee-search-wrapper');
-        if (selectWrap) selectWrap.classList.toggle('hidden', shiftsEmployeeMode !== 'all');
-        if (searchWrap) searchWrap.classList.toggle('hidden', shiftsEmployeeMode !== 'search');
+        var selectWrap = $("shifts-employee-select-wrapper");
+        var searchWrap = $("shifts-employee-search-wrapper");
+        if (selectWrap)
+          selectWrap.classList.toggle("hidden", shiftsEmployeeMode !== "all");
+        if (searchWrap)
+          searchWrap.classList.toggle(
+            "hidden",
+            shiftsEmployeeMode !== "search"
+          );
 
-        if (shiftsEmployeeMode === 'all') {
-          shiftsEmployeeSearchSelection = { id: '', name: '' };
-          if ($('shifts-employee-search')) $('shifts-employee-search').value = '';
+        if (shiftsEmployeeMode === "all") {
+          shiftsEmployeeSearchSelection = { id: "", name: "" };
+          if ($("shifts-employee-search"))
+            $("shifts-employee-search").value = "";
           hideEmployeeSearchResults();
         } else {
-          if ($('shifts-employee-select')) $('shifts-employee-select').value = '';
+          if ($("shifts-employee-select"))
+            $("shifts-employee-select").value = "";
         }
       }
 
       function hideEmployeeSearchResults() {
-        var box = $('shifts-employee-search-results');
+        var box = $("shifts-employee-search-results");
         if (box) {
-          box.classList.add('hidden');
-          box.innerHTML = '';
+          box.classList.add("hidden");
+          box.innerHTML = "";
         }
       }
 
       function renderEmployeeSearchResults(term) {
-        var box = $('shifts-employee-search-results');
-        var input = $('shifts-employee-search');
+        var box = $("shifts-employee-search-results");
+        var input = $("shifts-employee-search");
         if (!box || !input) return;
-        var q = (term || '').trim().toLowerCase();
+        var q = (term || "").trim().toLowerCase();
         if (!q) {
           hideEmployeeSearchResults();
-          shiftsEmployeeSearchSelection = { id: '', name: '' };
+          shiftsEmployeeSearchSelection = { id: "", name: "" };
           return;
         }
 
@@ -2605,49 +2872,60 @@
         for (var i = 0; i < employees.length; i++) {
           var emp = employees[i];
           if (!emp || !emp.name) continue;
-          var hay = (emp.name + ' ' + (emp.email || '') + ' ' + (emp.id || '')).toLowerCase();
+          var hay = (
+            emp.name +
+            " " +
+            (emp.email || "") +
+            " " +
+            (emp.id || "")
+          ).toLowerCase();
           if (hay.indexOf(q) !== -1) matches.push(emp);
           if (matches.length >= 10) break;
         }
 
-        var html = '';
+        var html = "";
         if (!matches.length) {
-          html += '<div class="search-item small">אין תוצאות. נסה להקליד עוד תווים.</div>';
+          html +=
+            '<div class="search-item small">אין תוצאות. נסה להקליד עוד תווים.</div>';
         } else {
           for (var j = 0; j < matches.length; j++) {
             var m = matches[j];
-            html += '<div class="search-item" data-type="emp" data-id="' + (m.id || '') + '">';
-            html += (m.name || 'ללא שם');
-            if (m.email) html += ' • ' + m.email;
-            if (m.id) html += ' • ID ' + m.id;
-            html += '</div>';
+            html +=
+              '<div class="search-item" data-type="emp" data-id="' +
+              (m.id || "") +
+              '">';
+            html += m.name || "ללא שם";
+            if (m.email) html += " • " + m.email;
+            if (m.id) html += " • ID " + m.id;
+            html += "</div>";
           }
         }
 
         box.innerHTML = html;
-        box.classList.remove('hidden');
+        box.classList.remove("hidden");
       }
 
       function onEmployeeSearchResultsClick(e) {
         var el = e.target;
-        while (el && !el.classList.contains('search-item')) {
+        while (el && !el.classList.contains("search-item")) {
           el = el.parentElement;
         }
         if (!el) return;
-        var type = el.getAttribute('data-type');
-        if (type !== 'emp') return;
-        var id = el.getAttribute('data-id') || '';
-        var text = el.textContent || '';
+        var type = el.getAttribute("data-type");
+        if (type !== "emp") return;
+        var id = el.getAttribute("data-id") || "";
+        var text = el.textContent || "";
         shiftsEmployeeSearchSelection = { id: id, name: text };
-        if ($('shifts-employee-search')) $('shifts-employee-search').value = text;
+        if ($("shifts-employee-search"))
+          $("shifts-employee-search").value = text;
         hideEmployeeSearchResults();
       }
 
       function onEmployeeSearchKeyDown(e) {
-        if (e.key === 'Enter') {
-          var box = $('shifts-employee-search-results');
-          if (box && !box.classList.contains('hidden')) {
-            var first = box.querySelector('.search-item');
+        if (e.key === "Enter") {
+          var box = $("shifts-employee-search-results");
+          if (box && !box.classList.contains("hidden")) {
+            var first = box.querySelector(".search-item");
             if (first) {
               first.click();
               e.preventDefault();
@@ -2655,7 +2933,7 @@
             }
           }
         }
-        if (e.key === 'Escape') {
+        if (e.key === "Escape") {
           hideEmployeeSearchResults();
         }
       }
@@ -2677,34 +2955,37 @@
 
       function loadShiftById(shiftId) {
         if (!shiftId) return;
-        setShiftsMessage('טוען משמרת #' + shiftId + '...', false);
+        setShiftsMessage("טוען משמרת #" + shiftId + "...", false);
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.ok || !res.shift) {
-              setShiftsMessage((res && res.error) || 'המשמרת לא נמצאה', true);
+              setShiftsMessage((res && res.error) || "המשמרת לא נמצאה", true);
               return;
             }
             selectedShift = res.shift;
             upsertShiftInList(res.shift);
             renderShiftDetails(res.shift);
             renderShiftsResults();
-            var input = $('shifts-search-term');
+            var input = $("shifts-search-term");
             if (input) input.value = res.shift.shiftId || input.value;
-            renderShiftSearchResults(input ? input.value : '');
-            setShiftsMessage('', false);
+            renderShiftSearchResults(input ? input.value : "");
+            setShiftsMessage("", false);
           })
           .withFailureHandler(function (err) {
-            setShiftsMessage('שגיאה בטעינת משמרת: ' + err, true);
+            setShiftsMessage("שגיאה בטעינת משמרת: " + err, true);
           })
           .SHIFTS_get(shiftId);
       }
 
       function loadShiftFromSheetSelection() {
-        setShiftsMessage('בודק בחירה פעילה בגיליון...', false);
+        setShiftsMessage("בודק בחירה פעילה בגיליון...", false);
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.ok) {
-              setShiftsMessage((res && res.error) || 'שגיאה בקריאה מהגיליון', true);
+              setShiftsMessage(
+                (res && res.error) || "שגיאה בקריאה מהגיליון",
+                true
+              );
               return;
             }
             if (res.shiftId) {
@@ -2712,19 +2993,19 @@
               return;
             }
 
-            var nameCandidate = res.employeeName || res.email || '';
-            var empId = res.employeeId || '';
-            var searchInput = $('shifts-search-term');
+            var nameCandidate = res.employeeName || res.email || "";
+            var empId = res.employeeId || "";
+            var searchInput = $("shifts-search-term");
             if (searchInput && nameCandidate) searchInput.value = nameCandidate;
             if (empId) {
-              setEmployeeMode('all');
-              if ($('shifts-employee-select')) {
-                $('shifts-employee-select').value = empId;
+              setEmployeeMode("all");
+              if ($("shifts-employee-select")) {
+                $("shifts-employee-select").value = empId;
               }
             } else if (nameCandidate) {
-              setEmployeeMode('search');
-              if ($('shifts-employee-search')) {
-                $('shifts-employee-search').value = nameCandidate;
+              setEmployeeMode("search");
+              if ($("shifts-employee-search")) {
+                $("shifts-employee-search").value = nameCandidate;
                 renderEmployeeSearchResults(nameCandidate);
               }
             }
@@ -2735,47 +3016,47 @@
               return;
             }
 
-            setShiftsMessage('לא נמצאה משמרת או עובד בשורה הפעילה.', true);
+            setShiftsMessage("לא נמצאה משמרת או עובד בשורה הפעילה.", true);
           })
           .withFailureHandler(function (err) {
-            setShiftsMessage('שגיאה בקריאה מהגיליון: ' + err, true);
+            setShiftsMessage("שגיאה בקריאה מהגיליון: " + err, true);
           })
           .SHIFTS_getSelectedRef();
       }
 
       function formatDateForInput(val) {
-        if (!val) return '';
+        if (!val) return "";
         var d = new Date(val);
         if (!isNaN(d.getTime())) {
           var y = d.getFullYear();
-          var m = ('0' + (d.getMonth() + 1)).slice(-2);
-          var dd = ('0' + d.getDate()).slice(-2);
-          return y + '-' + m + '-' + dd;
+          var m = ("0" + (d.getMonth() + 1)).slice(-2);
+          var dd = ("0" + d.getDate()).slice(-2);
+          return y + "-" + m + "-" + dd;
         }
         var s = String(val).trim();
         var mIso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (mIso) return s;
         var mDmy = s.match(/^(\d{2})[\/.](\d{2})[\/.](\d{4})$/);
-        if (mDmy) return mDmy[3] + '-' + mDmy[2] + '-' + mDmy[1];
-        return '';
+        if (mDmy) return mDmy[3] + "-" + mDmy[2] + "-" + mDmy[1];
+        return "";
       }
 
       function formatTimeForInput(val) {
-        if (!val) return '';
+        if (!val) return "";
         var d = new Date(val);
         if (!isNaN(d.getTime())) {
-          var h = ('0' + d.getHours()).slice(-2);
-          var m = ('0' + d.getMinutes()).slice(-2);
-          return h + ':' + m;
+          var h = ("0" + d.getHours()).slice(-2);
+          var m = ("0" + d.getMinutes()).slice(-2);
+          return h + ":" + m;
         }
         var s = String(val).trim();
         var mt = s.match(/^(\d{1,2}):(\d{2})/);
-        if (mt) return ('0' + mt[1]).slice(-2) + ':' + mt[2];
-        return '';
+        if (mt) return ("0" + mt[1]).slice(-2) + ":" + mt[2];
+        return "";
       }
 
       function populateEmployeesForShifts() {
-        var sel = $('shifts-employee-select');
+        var sel = $("shifts-employee-select");
         if (!sel || !employees) return;
         sel.innerHTML = '<option value="">-- כל העובדים --</option>';
         var added = {};
@@ -2784,33 +3065,38 @@
           if (!emp || !emp.id || !emp.name) continue;
           if (added[emp.id]) continue;
           added[emp.id] = true;
-          var opt = document.createElement('option');
+          var opt = document.createElement("option");
           opt.value = emp.id;
-          opt.textContent = emp.name + (emp.email ? ' (' + emp.email + ')' : '');
+          opt.textContent =
+            emp.name + (emp.email ? " (" + emp.email + ")" : "");
           sel.appendChild(opt);
         }
       }
 
       function populateStatusSelect(options) {
-        var sel = $('shifts-status-select');
-        var editSel = $('shift-status');
+        var sel = $("shifts-status-select");
+        var editSel = $("shift-status");
         var opts = options || [];
         if (!sel && !editSel) return;
 
         var seen = {};
         function appendOpt(selectEl, value) {
           if (!selectEl) return;
-          var opt = document.createElement('option');
+          var opt = document.createElement("option");
           opt.value = value;
-          opt.textContent = value || 'לא ידוע';
+          opt.textContent = value || "לא ידוע";
           selectEl.appendChild(opt);
         }
 
         if (sel) {
-          var prev = Array.prototype.slice.call(sel.selectedOptions || []).map(function (o) { return o.value; });
-          sel.innerHTML = '';
+          var prev = Array.prototype.slice
+            .call(sel.selectedOptions || [])
+            .map(function (o) {
+              return o.value;
+            });
+          sel.innerHTML = "";
           for (var i = 0; i < opts.length; i++) {
-            var val = opts[i] || '';
+            var val = opts[i] || "";
             if (seen[val]) continue;
             seen[val] = true;
             appendOpt(sel, val);
@@ -2825,11 +3111,11 @@
 
         if (editSel) {
           var current = editSel.value;
-          editSel.innerHTML = '';
-          appendOpt(editSel, '');
+          editSel.innerHTML = "";
+          appendOpt(editSel, "");
           var added = {};
           for (var j = 0; j < opts.length; j++) {
-            var v = opts[j] || '';
+            var v = opts[j] || "";
             if (added[v]) continue;
             added[v] = true;
             appendOpt(editSel, v);
@@ -2839,7 +3125,7 @@
       }
 
       function getSelectedStatuses() {
-        var sel = $('shifts-status-select');
+        var sel = $("shifts-status-select");
         if (!sel) return [];
         var out = [];
         for (var i = 0; i < sel.options.length; i++) {
@@ -2850,60 +3136,77 @@
 
       function setQuickRangeSnapshot(range, fromVal, toVal) {
         shiftsQuickRangeSnapshot = {
-          range: range || '',
-          from: fromVal || '',
-          to: toVal || ''
+          range: range || "",
+          from: fromVal || "",
+          to: toVal || "",
         };
         updateQuickRangeHighlight();
       }
 
       function updateQuickRangeHighlight() {
-        var buttons = document.querySelectorAll('#shifts-quick-range button');
-        var currentFrom = $('shifts-date-from') ? $('shifts-date-from').value : '';
-        var currentTo = $('shifts-date-to') ? $('shifts-date-to').value : '';
+        var buttons = document.querySelectorAll("#shifts-quick-range button");
+        var currentFrom = $("shifts-date-from")
+          ? $("shifts-date-from").value
+          : "";
+        var currentTo = $("shifts-date-to") ? $("shifts-date-to").value : "";
         var isSnapshotMatch =
           shiftsQuickRangeSnapshot &&
           shiftsQuickRangeSnapshot.from === currentFrom &&
           shiftsQuickRangeSnapshot.to === currentTo;
-        var activeRange = isSnapshotMatch ? shiftsQuickRangeSnapshot.range : '';
+        var activeRange = isSnapshotMatch ? shiftsQuickRangeSnapshot.range : "";
 
         for (var i = 0; i < buttons.length; i++) {
-          var btnRange = buttons[i].getAttribute('data-range');
+          var btnRange = buttons[i].getAttribute("data-range");
           var active = activeRange && btnRange === activeRange;
-          buttons[i].classList.toggle('active', active);
-          buttons[i].setAttribute('aria-pressed', active);
+          buttons[i].classList.toggle("active", active);
+          buttons[i].setAttribute("aria-pressed", active);
         }
       }
 
       function collectShiftFilters(resetOffset) {
         var filters = shiftsState.filters || { limit: 50, offset: 0 };
-        var term = ($('shifts-search-term') && $('shifts-search-term').value) || '';
+        var term =
+          ($("shifts-search-term") && $("shifts-search-term").value) || "";
         filters.search = term.trim();
 
-        filters.employeeId = '';
-        filters.employeeName = '';
-        filters.email = '';
-        if (shiftsEmployeeMode === 'all') {
-          filters.employeeId = ($('shifts-employee-select') && $('shifts-employee-select').value) || '';
+        filters.employeeId = "";
+        filters.employeeName = "";
+        filters.email = "";
+        if (shiftsEmployeeMode === "all") {
+          filters.employeeId =
+            ($("shifts-employee-select") &&
+              $("shifts-employee-select").value) ||
+            "";
         } else {
-          var empTerm = ($('shifts-employee-search') && $('shifts-employee-search').value) || '';
-          filters.employeeId = shiftsEmployeeSearchSelection.id || '';
+          var empTerm =
+            ($("shifts-employee-search") &&
+              $("shifts-employee-search").value) ||
+            "";
+          filters.employeeId = shiftsEmployeeSearchSelection.id || "";
           filters.employeeName = empTerm.trim();
-          if (empTerm && empTerm.indexOf('@') !== -1) {
+          if (empTerm && empTerm.indexOf("@") !== -1) {
             filters.email = empTerm.trim();
           }
         }
 
-        if (!filters.email && filters.search && filters.search.indexOf('@') !== -1) {
+        if (
+          !filters.email &&
+          filters.search &&
+          filters.search.indexOf("@") !== -1
+        ) {
           filters.email = filters.search.trim();
         }
 
-        filters.dateFrom = $('shifts-date-from') ? $('shifts-date-from').value : '';
-        filters.dateTo = $('shifts-date-to') ? $('shifts-date-to').value : '';
+        filters.dateFrom = $("shifts-date-from")
+          ? $("shifts-date-from").value
+          : "";
+        filters.dateTo = $("shifts-date-to") ? $("shifts-date-to").value : "";
         filters.statuses = [];
-        filters.onlyWithIssues = isFilterButtonActive('shifts-toggle-issues');
-        filters.onlyWithBonuses = isFilterButtonActive('shifts-toggle-bonuses');
-        filters.onlyManualChanges = isFilterButtonActive('shifts-toggle-manual');
+        filters.onlyWithIssues = isFilterButtonActive("shifts-toggle-issues");
+        filters.onlyWithBonuses = isFilterButtonActive("shifts-toggle-bonuses");
+        filters.onlyManualChanges = isFilterButtonActive(
+          "shifts-toggle-manual"
+        );
 
         if (resetOffset) filters.offset = 0;
         if (!filters.limit) filters.limit = 50;
@@ -2919,56 +3222,58 @@
         today.setHours(0, 0, 0, 0);
         to = new Date(today.getTime());
 
-        if (range === 'today') {
+        if (range === "today") {
           from = new Date(today.getTime());
-        } else if (range === 'yesterday') {
+        } else if (range === "yesterday") {
           from = new Date(today.getTime());
           from.setDate(from.getDate() - 1);
           to.setDate(to.getDate() - 1);
-        } else if (range === 'week') {
+        } else if (range === "week") {
           from = new Date(today.getTime());
           var day = from.getDay();
           var diff = day === 0 ? 6 : day - 1; // week starts Monday
           from.setDate(from.getDate() - diff);
-        } else if (range === 'month') {
+        } else if (range === "month") {
           from = new Date(today.getFullYear(), today.getMonth(), 1);
           to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        } else if (range === 'prevMonth') {
+        } else if (range === "prevMonth") {
           from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
           to = new Date(today.getFullYear(), today.getMonth(), 0);
         }
 
         if (from) {
-          if ($('shifts-date-from')) $('shifts-date-from').value = formatDateForInput(from);
-          if ($('shifts-date-to')) $('shifts-date-to').value = formatDateForInput(to);
+          if ($("shifts-date-from"))
+            $("shifts-date-from").value = formatDateForInput(from);
+          if ($("shifts-date-to"))
+            $("shifts-date-to").value = formatDateForInput(to);
         }
 
-        var fromVal = $('shifts-date-from') ? $('shifts-date-from').value : '';
-        var toVal = $('shifts-date-to') ? $('shifts-date-to').value : '';
+        var fromVal = $("shifts-date-from") ? $("shifts-date-from").value : "";
+        var toVal = $("shifts-date-to") ? $("shifts-date-to").value : "";
         setQuickRangeSnapshot(range, fromVal, toVal);
       }
 
       function resetShiftsFilters() {
-        if ($('shifts-search-term')) $('shifts-search-term').value = '';
-        if ($('shifts-employee-select')) $('shifts-employee-select').value = '';
-        if ($('shifts-employee-search')) $('shifts-employee-search').value = '';
-        shiftsEmployeeSearchSelection = { id: '', name: '' };
+        if ($("shifts-search-term")) $("shifts-search-term").value = "";
+        if ($("shifts-employee-select")) $("shifts-employee-select").value = "";
+        if ($("shifts-employee-search")) $("shifts-employee-search").value = "";
+        shiftsEmployeeSearchSelection = { id: "", name: "" };
         hideEmployeeSearchResults();
-        setEmployeeMode('all');
-        if ($('shifts-date-from')) $('shifts-date-from').value = '';
-        if ($('shifts-date-to')) $('shifts-date-to').value = '';
+        setEmployeeMode("all");
+        if ($("shifts-date-from")) $("shifts-date-from").value = "";
+        if ($("shifts-date-to")) $("shifts-date-to").value = "";
 
-        toggleFilterButton($('shifts-toggle-issues'), false);
-        toggleFilterButton($('shifts-toggle-bonuses'), false);
-        toggleFilterButton($('shifts-toggle-manual'), false);
+        toggleFilterButton($("shifts-toggle-issues"), false);
+        toggleFilterButton($("shifts-toggle-bonuses"), false);
+        toggleFilterButton($("shifts-toggle-manual"), false);
 
-        applyQuickRange('month');
+        applyQuickRange("month");
         shiftsState.filters = { limit: 50, offset: 0 };
       }
 
       // ----- Requests tab helpers -----
       function getSelectedRequestStatuses() {
-        var sel = $('requests-status-select');
+        var sel = $("requests-status-select");
         if (!sel) return [];
         var out = [];
         for (var i = 0; i < sel.options.length; i++) {
@@ -2978,32 +3283,44 @@
       }
 
       function populateRequestStatuses(options) {
-        var sel = $('requests-status-select');
+        var sel = $("requests-status-select");
         if (!sel) return;
-        var prev = Array.prototype.slice.call(sel.selectedOptions || []).map(function (o) { return o.value; });
-        sel.innerHTML = '';
+        var prev = Array.prototype.slice
+          .call(sel.selectedOptions || [])
+          .map(function (o) {
+            return o.value;
+          });
+        sel.innerHTML = "";
         var seen = {};
         (options || []).forEach(function (st) {
-          var key = st || '';
+          var key = st || "";
           if (seen[key]) return;
           seen[key] = true;
-          var opt = document.createElement('option');
+          var opt = document.createElement("option");
           opt.value = st;
-          opt.textContent = st || 'ללא סטטוס';
+          opt.textContent = st || "ללא סטטוס";
           sel.appendChild(opt);
         });
         for (var i = 0; i < sel.options.length; i++) {
-          if (prev.indexOf(sel.options[i].value) !== -1) sel.options[i].selected = true;
+          if (prev.indexOf(sel.options[i].value) !== -1)
+            sel.options[i].selected = true;
         }
       }
 
       function collectRequestFilters(resetOffset) {
         var filters = requestsState.filters || { limit: 50, offset: 0 };
-        filters.search = ($('requests-search-term') && $('requests-search-term').value) || '';
-        filters.dateFrom = $('requests-date-from') ? $('requests-date-from').value : '';
-        filters.dateTo = $('requests-date-to') ? $('requests-date-to').value : '';
+        filters.search =
+          ($("requests-search-term") && $("requests-search-term").value) || "";
+        filters.dateFrom = $("requests-date-from")
+          ? $("requests-date-from").value
+          : "";
+        filters.dateTo = $("requests-date-to")
+          ? $("requests-date-to").value
+          : "";
         filters.statuses = getSelectedRequestStatuses();
-        filters.includeClosed = $('requests-include-closed') ? $('requests-include-closed').checked : false;
+        filters.includeClosed = $("requests-include-closed")
+          ? $("requests-include-closed").checked
+          : false;
         if (resetOffset) filters.offset = 0;
         if (!filters.limit) filters.limit = 50;
         requestsState.filters = filters;
@@ -3011,49 +3328,65 @@
       }
 
       function resetRequestFilters() {
-        if ($('requests-search-term')) $('requests-search-term').value = '';
-        if ($('requests-date-from')) $('requests-date-from').value = '';
-        if ($('requests-date-to')) $('requests-date-to').value = '';
-        if ($('requests-include-closed')) $('requests-include-closed').checked = false;
-        if ($('requests-status-select')) {
-          for (var i = 0; i < $('requests-status-select').options.length; i++) {
-            $('requests-status-select').options[i].selected = false;
+        if ($("requests-search-term")) $("requests-search-term").value = "";
+        if ($("requests-date-from")) $("requests-date-from").value = "";
+        if ($("requests-date-to")) $("requests-date-to").value = "";
+        if ($("requests-include-closed"))
+          $("requests-include-closed").checked = false;
+        if ($("requests-status-select")) {
+          for (var i = 0; i < $("requests-status-select").options.length; i++) {
+            $("requests-status-select").options[i].selected = false;
           }
         }
         requestsState.filters = { limit: 50, offset: 0 };
       }
 
       function renderRequestsResults() {
-        var box = $('requests-results');
+        var box = $("requests-results");
         if (!box) return;
         if (!requests || !requests.length) {
           box.innerHTML = '<div class="requests-empty">לא נמצאו בקשות</div>';
           return;
         }
 
-        var html = '';
+        var html = "";
         for (var i = 0; i < requests.length; i++) {
           var r = requests[i];
           html += '<div class="request-card">';
           html += '<div class="request-card-header">';
-          html += '<span>' + (r.employeeName || 'עובד לא ידוע') + (r.employeeId ? ' (ID ' + r.employeeId + ')' : '') + '</span>';
-          html += '<span class="request-badge">' + (r.status || 'ללא סטטוס') + '</span>';
-          html += '</div>';
+          html +=
+            "<span>" +
+            (r.employeeName || "עובד לא ידוע") +
+            (r.employeeId ? " (ID " + r.employeeId + ")" : "") +
+            "</span>";
+          html +=
+            '<span class="request-badge">' +
+            (r.status || "ללא סטטוס") +
+            "</span>";
+          html += "</div>";
 
           html += '<div class="request-meta">';
-          if (r.requestId) html += '<span class="request-badge">ID בקשה: ' + r.requestId + '</span>';
-          if (r.shiftId) html += '<span class="request-badge">משמרת: ' + r.shiftId + '</span>';
-          if (r.timestampIso) html += '<span class="request-badge">' + r.timestampIso + '</span>';
-          if (r.direction) html += '<span class="request-badge">' + r.direction + '</span>';
-          if (r.jobName) html += '<span class="request-badge">' + r.jobName + '</span>';
-          if (r.department) html += '<span class="request-badge">' + r.department + '</span>';
-          html += '</div>';
+          if (r.requestId)
+            html +=
+              '<span class="request-badge">ID בקשה: ' + r.requestId + "</span>";
+          if (r.shiftId)
+            html +=
+              '<span class="request-badge">משמרת: ' + r.shiftId + "</span>";
+          if (r.timestampIso)
+            html += '<span class="request-badge">' + r.timestampIso + "</span>";
+          if (r.direction)
+            html += '<span class="request-badge">' + r.direction + "</span>";
+          if (r.jobName)
+            html += '<span class="request-badge">' + r.jobName + "</span>";
+          if (r.department)
+            html += '<span class="request-badge">' + r.department + "</span>";
+          html += "</div>";
 
           if (r.note) {
-            html += '<div class="request-note">' + r.note + '</div>';
+            html += '<div class="request-note">' + r.note + "</div>";
           }
 
-          html += '</div>';
+          html += "</div>";
         }
 
         box.innerHTML = html;
@@ -3068,13 +3401,16 @@
         }
 
         var filters = collectRequestFilters(reset);
-        setRequestsMessage('טוען בקשות...', false);
+        setRequestsMessage("טוען בקשות...", false);
 
         google.script.run
           .withSuccessHandler(function (res) {
             requestsState.loading = false;
             if (!res || !res.ok) {
-              setRequestsMessage((res && res.error) || 'שגיאה בטעינת בקשות', true);
+              setRequestsMessage(
+                (res && res.error) || "שגיאה בטעינת בקשות",
+                true
+              );
               return;
             }
 
@@ -3082,7 +3418,7 @@
               var seen = {};
               requestStatuses = [];
               for (var i = 0; i < res.statuses.length; i++) {
-                var st = res.statuses[i] || '';
+                var st = res.statuses[i] || "";
                 if (seen[st]) continue;
                 seen[st] = true;
                 requestStatuses.push(st);
@@ -3099,24 +3435,25 @@
             requestsState.hasMore = !!res.hasMore;
 
             if (!requests.length) {
-              setRequestsMessage('לא נמצאו בקשות', false);
+              setRequestsMessage("לא נמצאו בקשות", false);
             } else {
-              setRequestsMessage('', false);
+              setRequestsMessage("", false);
             }
 
             renderRequestsResults();
           })
           .withFailureHandler(function (err) {
             requestsState.loading = false;
-            setRequestsMessage('שגיאה בטעינת בקשות: ' + err, true);
+            setRequestsMessage("שגיאה בטעינת בקשות: " + err, true);
           })
           .REQ_listRequests(filters);
       }
 
       function renderShiftBadges(shift) {
-        var html = '';
+        var html = "";
         if (shift.status) {
-          html += '<span class="shift-badge status">' + shift.status + '</span>';
+          html +=
+            '<span class="shift-badge status">' + shift.status + "</span>";
         }
         if (shift.hasIssues) {
           html += '<span class="shift-badge warn">בעיה</span>';
@@ -3125,81 +3462,90 @@
           html += '<span class="shift-badge manual">תיקון ידני</span>';
         }
         if (shift.bonusIds && shift.bonusIds.length) {
-          html += '<span class="shift-badge">בונוסים: ' + shift.bonusIds.length + '</span>';
+          html +=
+            '<span class="shift-badge">בונוסים: ' +
+            shift.bonusIds.length +
+            "</span>";
         }
         return html;
       }
 
       function renderShiftsResults() {
-        var container = $('shifts-results');
+        var container = $("shifts-results");
         if (!container) return;
         if (!shifts || shifts.length === 0) {
-          container.innerHTML = '<div class="shifts-empty">לא נמצאו משמרות</div>';
+          container.innerHTML =
+            '<div class="shifts-empty">לא נמצאו משמרות</div>';
           renderShiftDetails(null);
         } else {
-          var html = '';
+          var html = "";
           for (var i = 0; i < shifts.length; i++) {
             var s = shifts[i];
             var selected = selectedShift && selectedShift.shiftId === s.shiftId;
-            html += '<div class="shift-row' + (selected ? ' selected' : '') + '" data-shift-id="' + (s.shiftId || '') + '">';
+            html +=
+              '<div class="shift-row' +
+              (selected ? " selected" : "") +
+              '" data-shift-id="' +
+              (s.shiftId || "") +
+              '">';
             html += '<div class="shift-row-top">';
-            html += '<span>' + (s.date || 'תאריך?') + '</span>';
-            html += '<span>' + (s.employeeName || '') + '</span>';
-            html += '</div>';
+            html += "<span>" + (s.date || "תאריך?") + "</span>";
+            html += "<span>" + (s.employeeName || "") + "</span>";
+            html += "</div>";
             html += '<div class="shift-row-bottom">';
-            var timeStr = '';
+            var timeStr = "";
             if (s.startTime || s.endTime) {
-              timeStr = (s.startTime || '?') + '–' + (s.endTime || '?');
+              timeStr = (s.startTime || "?") + "–" + (s.endTime || "?");
             } else if (s.direction) {
               timeStr = s.direction;
             }
             if (timeStr) {
-              html += '<span class="shift-badge">' + timeStr + '</span>';
+              html += '<span class="shift-badge">' + timeStr + "</span>";
             }
             html += renderShiftBadges(s);
-            html += '</div>';
-            html += '</div>';
+            html += "</div>";
+            html += "</div>";
           }
           container.innerHTML = html;
-          var rows = container.querySelectorAll('.shift-row');
+          var rows = container.querySelectorAll(".shift-row");
           for (var r = 0; r < rows.length; r++) {
-            rows[r].addEventListener('click', function (e) {
-              var id = e.currentTarget.getAttribute('data-shift-id');
+            rows[r].addEventListener("click", function (e) {
+              var id = e.currentTarget.getAttribute("data-shift-id");
               onShiftRowClick(id);
             });
           }
         }
 
-        var loadMoreBtn = $('shifts-load-more-btn');
+        var loadMoreBtn = $("shifts-load-more-btn");
         if (loadMoreBtn) {
-          loadMoreBtn.classList.toggle('hidden', !shiftsState.hasMore);
+          loadMoreBtn.classList.toggle("hidden", !shiftsState.hasMore);
         }
       }
 
       function renderBonusPicker() {
-        var picker = $('shift-bonus-picker');
+        var picker = $("shift-bonus-picker");
         if (!picker) return;
-        picker.innerHTML = '';
-        var optEmpty = document.createElement('option');
-        optEmpty.value = '';
-        optEmpty.textContent = '-- בחר בונוס --';
+        picker.innerHTML = "";
+        var optEmpty = document.createElement("option");
+        optEmpty.value = "";
+        optEmpty.textContent = "-- בחר בונוס --";
         picker.appendChild(optEmpty);
         for (var i = 0; i < bonusCatalog.length; i++) {
           var b = bonusCatalog[i];
           if (!b || !b.bonusId) continue;
-          var opt = document.createElement('option');
+          var opt = document.createElement("option");
           opt.value = b.bonusId;
           var label = b.name || b.bonusId;
-          if (b.amount) label += ' (' + b.amount + ')';
+          if (b.amount) label += " (" + b.amount + ")";
           opt.textContent = label;
           picker.appendChild(opt);
         }
       }
 
       function renderBonusChips(shift) {
-        var box = $('shift-bonus-chips');
+        var box = $("shift-bonus-chips");
         if (!box) return;
-        box.innerHTML = '';
+        box.innerHTML = "";
         if (!shift || !shift.bonusIds || shift.bonusIds.length === 0) {
           box.innerHTML = '<div class="shifts-empty">אין בונוסים למשמרת</div>';
           return;
@@ -3207,20 +3553,21 @@
 
         function labelForBonus(id) {
           for (var i = 0; i < bonusCatalog.length; i++) {
-            if (bonusCatalog[i].bonusId === id) return bonusCatalog[i].name || id;
+            if (bonusCatalog[i].bonusId === id)
+              return bonusCatalog[i].name || id;
           }
           return id;
         }
 
         for (var j = 0; j < shift.bonusIds.length; j++) {
           (function (bonusId) {
-            var chip = document.createElement('div');
-            chip.className = 'bonus-chip';
+            var chip = document.createElement("div");
+            chip.className = "bonus-chip";
             chip.textContent = labelForBonus(bonusId);
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.textContent = '×';
-            btn.addEventListener('click', function () {
+            var btn = document.createElement("button");
+            btn.type = "button";
+            btn.textContent = "×";
+            btn.addEventListener("click", function () {
               removeBonusFromShift(bonusId);
             });
             chip.appendChild(btn);
@@ -3230,43 +3577,50 @@
       }
 
       function renderShiftDetails(shift) {
-        var panel = $('shift-details');
+        var panel = $("shift-details");
         if (!panel) return;
 
         if (!shift) {
-          panel.classList.add('hidden');
+          panel.classList.add("hidden");
           selectedShift = null;
           return;
         }
 
         selectedShift = shift;
-        panel.classList.remove('hidden');
+        panel.classList.remove("hidden");
 
-        var summary = $('shift-details-summary');
+        var summary = $("shift-details-summary");
         if (summary) {
           summary.textContent =
-            (shift.employeeName || 'עובד לא ידוע') +
-            (shift.employeeId ? ' (ID ' + shift.employeeId + ')' : '') +
-            (shift.shiftId ? ' • ' + shift.shiftId : '');
+            (shift.employeeName || "עובד לא ידוע") +
+            (shift.employeeId ? " (ID " + shift.employeeId + ")" : "") +
+            (shift.shiftId ? " • " + shift.shiftId : "");
         }
 
-        var statusBox = $('shift-details-status');
+        var statusBox = $("shift-details-status");
         if (statusBox) {
           statusBox.innerHTML = renderShiftBadges(shift);
         }
 
-        if ($('shift-date')) $('shift-date').value = formatDateForInput(shift.date);
-        if ($('shift-start-time')) $('shift-start-time').value = formatTimeForInput(shift.startTime);
-        if ($('shift-end-time')) $('shift-end-time').value = formatTimeForInput(shift.endTime);
-        if ($('shift-status')) {
+        if ($("shift-date"))
+          $("shift-date").value = formatDateForInput(shift.date);
+        if ($("shift-start-time"))
+          $("shift-start-time").value = formatTimeForInput(shift.startTime);
+        if ($("shift-end-time"))
+          $("shift-end-time").value = formatTimeForInput(shift.endTime);
+        if ($("shift-status")) {
           populateStatusSelect(shiftStatuses);
-          $('shift-status').value = shift.status || '';
+          $("shift-status").value = shift.status || "";
         }
-        if ($('shift-work-type')) $('shift-work-type').value = shift.workType || '';
-        if ($('shift-work-type-id')) $('shift-work-type-id').value = shift.workTypeId || '';
-        if ($('shift-department')) $('shift-department').value = shift.department || '';
-        if ($('shift-units')) $('shift-units').value = shift.units || '';
-        if ($('shift-manual-note')) $('shift-manual-note').value = shift.manualNote || '';
+        if ($("shift-work-type"))
+          $("shift-work-type").value = shift.workType || "";
+        if ($("shift-work-type-id"))
+          $("shift-work-type-id").value = shift.workTypeId || "";
+        if ($("shift-department"))
+          $("shift-department").value = shift.department || "";
+        if ($("shift-units")) $("shift-units").value = shift.units || "";
+        if ($("shift-manual-note"))
+          $("shift-manual-note").value = shift.manualNote || "";
 
         renderBonusChips(shift);
         renderBonusPicker();
@@ -3291,7 +3645,7 @@
             return true;
           }
         }
-        setShiftsMessage('המשמרת לא נמצאה ברשימה (יתכן והוסרה)', true);
+        setShiftsMessage("המשמרת לא נמצאה ברשימה (יתכן והוסרה)", true);
         return false;
       }
 
@@ -3305,7 +3659,7 @@
             }
           })
           .withFailureHandler(function (err) {
-            setShiftsMessage('שגיאה בטעינת בונוסים: ' + err, true);
+            setShiftsMessage("שגיאה בטעינת בונוסים: " + err, true);
           })
           .BONUSES_listAll();
       }
@@ -3320,13 +3674,16 @@
         }
 
         var filters = collectShiftFilters(reset);
-        setShiftsMessage('טוען משמרות...', false);
+        setShiftsMessage("טוען משמרות...", false);
 
         google.script.run
           .withSuccessHandler(function (res) {
             shiftsState.loading = false;
             if (!res || !res.ok) {
-              setShiftsMessage((res && res.error) || 'שגיאה בטעינת משמרות', true);
+              setShiftsMessage(
+                (res && res.error) || "שגיאה בטעינת משמרות",
+                true
+              );
               return;
             }
 
@@ -3334,7 +3691,7 @@
               var uniq = {};
               shiftStatuses = [];
               for (var i = 0; i < res.statuses.length; i++) {
-                var st = res.statuses[i] || '';
+                var st = res.statuses[i] || "";
                 if (uniq[st]) continue;
                 uniq[st] = true;
                 shiftStatuses.push(st);
@@ -3350,38 +3707,43 @@
             shiftsState.hasMore = !!res.hasMore;
 
             if (!shifts.length) {
-              setShiftsMessage('לא נמצאו משמרות', false);
+              setShiftsMessage("לא נמצאו משמרות", false);
             } else {
-              setShiftsMessage('', false);
+              setShiftsMessage("", false);
             }
 
             renderShiftsResults();
-            renderShiftSearchResults($('shifts-search-term') ? $('shifts-search-term').value : '');
+            renderShiftSearchResults(
+              $("shifts-search-term") ? $("shifts-search-term").value : ""
+            );
           })
           .withFailureHandler(function (err) {
             shiftsState.loading = false;
-            setShiftsMessage('שגיאה בטעינת משמרות: ' + err, true);
+            setShiftsMessage("שגיאה בטעינת משמרות: " + err, true);
           })
           .SHIFTS_list(filters);
       }
 
       function addBonusToShift() {
         if (!selectedShift) return;
-        var picker = $('shift-bonus-picker');
+        var picker = $("shift-bonus-picker");
         if (!picker) return;
         var bonusId = picker.value;
         if (!bonusId) {
-          setShiftsMessage('בחר בונוס להוספה', true);
+          setShiftsMessage("בחר בונוס להוספה", true);
           return;
         }
-        if (selectedShift.bonusIds && selectedShift.bonusIds.indexOf(bonusId) !== -1) {
-          setShiftsMessage('הבונוס כבר קיים במשמרת', true);
+        if (
+          selectedShift.bonusIds &&
+          selectedShift.bonusIds.indexOf(bonusId) !== -1
+        ) {
+          setShiftsMessage("הבונוס כבר קיים במשמרת", true);
           return;
         }
 
-        var addBtn = $('shift-add-bonus-btn');
+        var addBtn = $("shift-add-bonus-btn");
         if (addBtn) addBtn.disabled = true;
-        setShiftsMessage('מוסיף בונוס...', false);
+        setShiftsMessage("מוסיף בונוס...", false);
 
         var nextIds = (selectedShift.bonusIds || []).concat([bonusId]);
 
@@ -3389,7 +3751,10 @@
           .withSuccessHandler(function (res) {
             if (addBtn) addBtn.disabled = false;
             if (!res || !res.ok) {
-              setShiftsMessage((res && res.error) || 'שגיאה בהוספת בונוס', true);
+              setShiftsMessage(
+                (res && res.error) || "שגיאה בהוספת בונוס",
+                true
+              );
               return;
             }
             selectedShift.bonusIds = res.bonusIds || nextIds;
@@ -3397,24 +3762,26 @@
             patchShiftInList(selectedShift);
             renderBonusChips(selectedShift);
             renderShiftsResults();
-            setShiftsMessage('הבונוס נוסף למשמרת', false);
+            setShiftsMessage("הבונוס נוסף למשמרת", false);
           })
           .withFailureHandler(function (err) {
             if (addBtn) addBtn.disabled = false;
-            setShiftsMessage('שגיאה בהוספת בונוס: ' + err, true);
+            setShiftsMessage("שגיאה בהוספת בונוס: " + err, true);
           })
           .SHIFTS_updateBonuses(selectedShift.shiftId, nextIds);
       }
 
       function removeBonusFromShift(bonusId) {
         if (!selectedShift || !bonusId) return;
-        var remaining = (selectedShift.bonusIds || []).filter(function (id) { return id !== bonusId; });
-        setShiftsMessage('מסיר בונוס...', false);
+        var remaining = (selectedShift.bonusIds || []).filter(function (id) {
+          return id !== bonusId;
+        });
+        setShiftsMessage("מסיר בונוס...", false);
 
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.ok) {
-              setShiftsMessage((res && res.error) || 'שגיאה בהסרת בונוס', true);
+              setShiftsMessage((res && res.error) || "שגיאה בהסרת בונוס", true);
               return;
             }
             selectedShift.bonusIds = res.bonusIds || remaining;
@@ -3422,10 +3789,10 @@
             patchShiftInList(selectedShift);
             renderBonusChips(selectedShift);
             renderShiftsResults();
-            setShiftsMessage('הבונוס הוסר', false);
+            setShiftsMessage("הבונוס הוסר", false);
           })
           .withFailureHandler(function (err) {
-            setShiftsMessage('שגיאה בהסרת בונוס: ' + err, true);
+            setShiftsMessage("שגיאה בהסרת בונוס: " + err, true);
           })
           .SHIFTS_updateBonuses(selectedShift.shiftId, remaining);
       }
@@ -3433,29 +3800,46 @@
       function collectShiftEditPayload() {
         if (!selectedShift) return null;
         var payload = { shiftId: selectedShift.shiftId };
-        var dateVal = $('shift-date') ? $('shift-date').value : '';
-        if (dateVal && dateVal !== formatDateForInput(selectedShift.date)) payload.date = dateVal;
+        var dateVal = $("shift-date") ? $("shift-date").value : "";
+        if (dateVal && dateVal !== formatDateForInput(selectedShift.date))
+          payload.date = dateVal;
 
-        var startVal = $('shift-start-time') ? $('shift-start-time').value : '';
-        if (startVal && startVal !== formatTimeForInput(selectedShift.startTime)) payload.startTime = startVal;
+        var startVal = $("shift-start-time") ? $("shift-start-time").value : "";
+        if (
+          startVal &&
+          startVal !== formatTimeForInput(selectedShift.startTime)
+        )
+          payload.startTime = startVal;
 
-        var endVal = $('shift-end-time') ? $('shift-end-time').value : '';
-        if (endVal && endVal !== formatTimeForInput(selectedShift.endTime)) payload.endTime = endVal;
+        var endVal = $("shift-end-time") ? $("shift-end-time").value : "";
+        if (endVal && endVal !== formatTimeForInput(selectedShift.endTime))
+          payload.endTime = endVal;
 
-        var statusVal = $('shift-status') ? $('shift-status').value : '';
-        if (statusVal !== (selectedShift.status || '')) payload.status = statusVal;
+        var statusVal = $("shift-status") ? $("shift-status").value : "";
+        if (statusVal !== (selectedShift.status || ""))
+          payload.status = statusVal;
 
-        var workTypeVal = $('shift-work-type') ? $('shift-work-type').value : '';
-        if (workTypeVal !== (selectedShift.workType || '')) payload.workType = workTypeVal;
+        var workTypeVal = $("shift-work-type")
+          ? $("shift-work-type").value
+          : "";
+        if (workTypeVal !== (selectedShift.workType || ""))
+          payload.workType = workTypeVal;
 
-        var workTypeIdVal = $('shift-work-type-id') ? $('shift-work-type-id').value : '';
-        if (workTypeIdVal !== (selectedShift.workTypeId || '')) payload.workTypeId = workTypeIdVal;
+        var workTypeIdVal = $("shift-work-type-id")
+          ? $("shift-work-type-id").value
+          : "";
+        if (workTypeIdVal !== (selectedShift.workTypeId || ""))
+          payload.workTypeId = workTypeIdVal;
 
-        var deptVal = $('shift-department') ? $('shift-department').value : '';
-        if (deptVal !== (selectedShift.department || '')) payload.department = deptVal;
+        var deptVal = $("shift-department") ? $("shift-department").value : "";
+        if (deptVal !== (selectedShift.department || ""))
+          payload.department = deptVal;
 
-        var noteVal = $('shift-manual-note') ? $('shift-manual-note').value : '';
-        if (noteVal !== (selectedShift.manualNote || '')) payload.manualNote = noteVal;
+        var noteVal = $("shift-manual-note")
+          ? $("shift-manual-note").value
+          : "";
+        if (noteVal !== (selectedShift.manualNote || ""))
+          payload.manualNote = noteVal;
 
         return payload;
       }
@@ -3467,20 +3851,23 @@
 
         var keys = Object.keys(payload);
         if (keys.length <= 1) {
-          setShiftsMessage('אין שינויים לשמור', false);
+          setShiftsMessage("אין שינויים לשמור", false);
           return;
         }
 
-        var saveBtn = $('shift-save-btn');
+        var saveBtn = $("shift-save-btn");
         if (saveBtn) saveBtn.disabled = true;
-        setShiftsMessage('שומר שינויים במשמרת...', false);
+        setShiftsMessage("שומר שינויים במשמרת...", false);
 
         // TODO: re-check this flow once the automatic shift-building script is finalized to ensure no conflict with computed fields.
         google.script.run
           .withSuccessHandler(function (res) {
             if (saveBtn) saveBtn.disabled = false;
             if (!res || !res.ok) {
-              setShiftsMessage((res && res.error) || 'שגיאה בשמירת משמרת', true);
+              setShiftsMessage(
+                (res && res.error) || "שגיאה בשמירת משמרת",
+                true
+              );
               return;
             }
 
@@ -3488,25 +3875,32 @@
               selectedShift = res.shift;
             } else {
               // fallback merge
-              if (payload.status !== undefined) selectedShift.status = payload.status;
+              if (payload.status !== undefined)
+                selectedShift.status = payload.status;
               if (payload.date !== undefined) selectedShift.date = payload.date;
-              if (payload.startTime !== undefined) selectedShift.startTime = payload.startTime;
-              if (payload.endTime !== undefined) selectedShift.endTime = payload.endTime;
-              if (payload.workType !== undefined) selectedShift.workType = payload.workType;
-              if (payload.workTypeId !== undefined) selectedShift.workTypeId = payload.workTypeId;
-              if (payload.department !== undefined) selectedShift.department = payload.department;
-              if (payload.manualNote !== undefined) selectedShift.manualNote = payload.manualNote;
+              if (payload.startTime !== undefined)
+                selectedShift.startTime = payload.startTime;
+              if (payload.endTime !== undefined)
+                selectedShift.endTime = payload.endTime;
+              if (payload.workType !== undefined)
+                selectedShift.workType = payload.workType;
+              if (payload.workTypeId !== undefined)
+                selectedShift.workTypeId = payload.workTypeId;
+              if (payload.department !== undefined)
+                selectedShift.department = payload.department;
+              if (payload.manualNote !== undefined)
+                selectedShift.manualNote = payload.manualNote;
               selectedShift.isManualEdited = true;
             }
 
             patchShiftInList(selectedShift);
             renderShiftDetails(selectedShift);
             renderShiftsResults();
-            setShiftsMessage('השינויים נשמרו', false);
+            setShiftsMessage("השינויים נשמרו", false);
           })
           .withFailureHandler(function (err) {
             if (saveBtn) saveBtn.disabled = false;
-            setShiftsMessage('שגיאה בשמירת משמרת: ' + err, true);
+            setShiftsMessage("שגיאה בשמירת משמרת: " + err, true);
           })
           .SHIFTS_updateShift(payload);
       }
@@ -3517,84 +3911,117 @@
         loadBonusCatalog();
         setEmployeeMode(shiftsEmployeeMode);
 
-        var searchBtn = $('shifts-search-btn');
-        if (searchBtn) searchBtn.addEventListener('click', function () { fetchShifts(true); });
-        var clearBtn = $('shifts-clear-btn');
-        if (clearBtn) clearBtn.addEventListener('click', function () { resetShiftsFilters(); fetchShifts(true); });
-        var loadMoreBtn = $('shifts-load-more-btn');
-        if (loadMoreBtn) loadMoreBtn.addEventListener('click', function () {
-          shiftsState.filters.offset = (shiftsState.filters.offset || 0) + (shiftsState.filters.limit || 50);
-          fetchShifts(false);
-        });
+        var searchBtn = $("shifts-search-btn");
+        if (searchBtn)
+          searchBtn.addEventListener("click", function () {
+            fetchShifts(true);
+          });
+        var clearBtn = $("shifts-clear-btn");
+        if (clearBtn)
+          clearBtn.addEventListener("click", function () {
+            resetShiftsFilters();
+            fetchShifts(true);
+          });
+        var loadMoreBtn = $("shifts-load-more-btn");
+        if (loadMoreBtn)
+          loadMoreBtn.addEventListener("click", function () {
+            shiftsState.filters.offset =
+              (shiftsState.filters.offset || 0) +
+              (shiftsState.filters.limit || 50);
+            fetchShifts(false);
+          });
 
-        var quick = document.querySelectorAll('#shifts-quick-range button');
+        var quick = document.querySelectorAll("#shifts-quick-range button");
         for (var i = 0; i < quick.length; i++) {
-          quick[i].addEventListener('click', function (e) {
-            var r = e.currentTarget.getAttribute('data-range');
+          quick[i].addEventListener("click", function (e) {
+            var r = e.currentTarget.getAttribute("data-range");
             applyQuickRange(r);
           });
         }
 
-        var dateFrom = $('shifts-date-from');
-        var dateTo = $('shifts-date-to');
-        if (dateFrom) dateFrom.addEventListener('change', updateQuickRangeHighlight);
-        if (dateTo) dateTo.addEventListener('change', updateQuickRangeHighlight);
+        var dateFrom = $("shifts-date-from");
+        var dateTo = $("shifts-date-to");
+        if (dateFrom)
+          dateFrom.addEventListener("change", updateQuickRangeHighlight);
+        if (dateTo)
+          dateTo.addEventListener("change", updateQuickRangeHighlight);
 
-        var empModeAll = $('shifts-emp-mode-all');
-        var empModeSearch = $('shifts-emp-mode-search');
-        if (empModeAll) empModeAll.addEventListener('click', function () { setEmployeeMode('all'); });
-        if (empModeSearch) empModeSearch.addEventListener('click', function () { setEmployeeMode('search'); });
+        var empModeAll = $("shifts-emp-mode-all");
+        var empModeSearch = $("shifts-emp-mode-search");
+        if (empModeAll)
+          empModeAll.addEventListener("click", function () {
+            setEmployeeMode("all");
+          });
+        if (empModeSearch)
+          empModeSearch.addEventListener("click", function () {
+            setEmployeeMode("search");
+          });
 
-        var empSearchInput = $('shifts-employee-search');
+        var empSearchInput = $("shifts-employee-search");
         if (empSearchInput) {
-          empSearchInput.addEventListener('input', function (e) { renderEmployeeSearchResults(e.target.value); });
-          empSearchInput.addEventListener('keydown', onEmployeeSearchKeyDown);
+          empSearchInput.addEventListener("input", function (e) {
+            renderEmployeeSearchResults(e.target.value);
+          });
+          empSearchInput.addEventListener("keydown", onEmployeeSearchKeyDown);
         }
-        var empSearchBox = $('shifts-employee-search-results');
+        var empSearchBox = $("shifts-employee-search-results");
         if (empSearchBox) {
-          empSearchBox.addEventListener('click', onEmployeeSearchResultsClick);
+          empSearchBox.addEventListener("click", onEmployeeSearchResultsClick);
         }
 
-        ['shifts-toggle-issues', 'shifts-toggle-bonuses', 'shifts-toggle-manual'].forEach(function (id) {
+        [
+          "shifts-toggle-issues",
+          "shifts-toggle-bonuses",
+          "shifts-toggle-manual",
+        ].forEach(function (id) {
           var btn = $(id);
           if (btn) {
-            btn.addEventListener('click', function () { toggleFilterButton(btn); });
+            btn.addEventListener("click", function () {
+              toggleFilterButton(btn);
+            });
           }
         });
 
-        var searchInput = $('shifts-search-term');
+        var searchInput = $("shifts-search-term");
         if (searchInput) {
-          searchInput.addEventListener('input', onShiftsSearchInputChange);
-          searchInput.addEventListener('keydown', onShiftsSearchKeyDown);
+          searchInput.addEventListener("input", onShiftsSearchInputChange);
+          searchInput.addEventListener("keydown", onShiftsSearchKeyDown);
         }
-        var searchBox = $('shifts-search-results');
+        var searchBox = $("shifts-search-results");
         if (searchBox) {
-          searchBox.addEventListener('click', onShiftsSearchResultsClick);
+          searchBox.addEventListener("click", onShiftsSearchResultsClick);
         }
 
-        var loadActiveBtn = $('shifts-load-active-btn');
+        var loadActiveBtn = $("shifts-load-active-btn");
         if (loadActiveBtn) {
-          loadActiveBtn.addEventListener('click', loadShiftFromSheetSelection);
+          loadActiveBtn.addEventListener("click", loadShiftFromSheetSelection);
         }
 
-        var addBonusBtn = $('shift-add-bonus-btn');
-        if (addBonusBtn) addBonusBtn.addEventListener('click', addBonusToShift);
+        var addBonusBtn = $("shift-add-bonus-btn");
+        if (addBonusBtn) addBonusBtn.addEventListener("click", addBonusToShift);
 
-        var saveBtn = $('shift-save-btn');
-        if (saveBtn) saveBtn.addEventListener('click', saveShiftEdit);
+        var saveBtn = $("shift-save-btn");
+        if (saveBtn) saveBtn.addEventListener("click", saveShiftEdit);
 
-        applyQuickRange('month');
+        applyQuickRange("month");
         updateQuickRangeHighlight();
 
         fetchShifts(true);
 
-        var reqSearchBtn = $('requests-search-btn');
-        if (reqSearchBtn) reqSearchBtn.addEventListener('click', function () { fetchRequests(true); });
-        var reqClearBtn = $('requests-clear-btn');
-        if (reqClearBtn) reqClearBtn.addEventListener('click', function () { resetRequestFilters(); fetchRequests(true); });
+        var reqSearchBtn = $("requests-search-btn");
+        if (reqSearchBtn)
+          reqSearchBtn.addEventListener("click", function () {
+            fetchRequests(true);
+          });
+        var reqClearBtn = $("requests-clear-btn");
+        if (reqClearBtn)
+          reqClearBtn.addEventListener("click", function () {
+            resetRequestFilters();
+            fetchRequests(true);
+          });
       }
 
-      window.addEventListener('load', init);
+      window.addEventListener("load", init);
     </script>
   </body>
 </html>

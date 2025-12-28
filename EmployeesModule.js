@@ -650,7 +650,102 @@ var EMP = EMP || {};
       }
     }
 
+    // אחרי שמירה: ממלאים שדות אישיים חסרים בשורות אחרות של אותו עובד ללא דריסה
+    fillMissingPersonalFieldsForEmployee_(sheet, employeeId, txId);
+
     return { ok: true, id: employeeId };
+  }
+
+  /** משלים שדות אישיים חסרים לשורות עובד ללא דריסה של ערכים קיימים */
+  function fillMissingPersonalFieldsForEmployee_(sheet, employeeId, txId) {
+    if (!sheet || !employeeId) return;
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) return;
+
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+
+    var fieldHeaderMap = {
+      name: "שם מלא",
+      gender: "מין",
+      idNumber: "תז",
+      phone: "טלפון",
+      birthdate: "ת. לידה",
+      email: "מייל",
+      shirtSize: "מידת חולצה",
+      travelCost: "עלות החזרי נסיעות יומי",
+    };
+
+    var colEmpId = colIndexByHeader_(headers, "ID עובד") || CONFIG.COL.ID;
+    if (!colEmpId) return;
+
+    var fieldCols = {};
+    Object.keys(fieldHeaderMap).forEach(function (k) {
+      var col = colIndexByHeader_(headers, fieldHeaderMap[k]);
+      if (col) fieldCols[k] = col;
+    });
+
+    var data = sheet
+      .getRange(CONFIG.HEADER_ROW + 1, 1, lastRow - CONFIG.HEADER_ROW, lastCol)
+      .getValues();
+
+    var valuesByField = {};
+    var rowsByField = {};
+
+    for (var r = 0; r < data.length; r++) {
+      var row = data[r];
+      var absRow = CONFIG.HEADER_ROW + 1 + r;
+      var eid = String(row[colEmpId - 1] || "").trim();
+      if (eid !== String(employeeId)) continue;
+
+      Object.keys(fieldCols).forEach(function (k) {
+        var col = fieldCols[k];
+        var val = row[col - 1];
+        if (val !== null && val !== undefined && String(val).trim()) {
+          if (valuesByField[k] === undefined) valuesByField[k] = val;
+        } else {
+          if (!rowsByField[k]) rowsByField[k] = [];
+          rowsByField[k].push({ absRow: absRow, col: col });
+        }
+      });
+    }
+
+    var updates = [];
+    Object.keys(rowsByField).forEach(function (k) {
+      if (valuesByField[k] === undefined) return;
+      var rows = rowsByField[k];
+      for (var i = 0; i < rows.length; i++) {
+        var target = rows[i];
+        updates.push({
+          row: target.absRow,
+          col: target.col,
+          value: valuesByField[k],
+          fieldKey: k,
+        });
+      }
+    });
+
+    if (!updates.length) return;
+
+    updates.forEach(function (u) {
+      var oldVal = sheet.getRange(u.row, u.col).getValue();
+      if (oldVal !== null && oldVal !== undefined && String(oldVal).trim()) {
+        return; // בטיחות כפולה – לא דורסים ערכים קיימים
+      }
+      logEmployeeChange_(
+        employeeId,
+        sheet.getName(),
+        u.row,
+        u.col,
+        oldVal,
+        u.value,
+        txId
+      );
+      sheet.getRange(u.row, u.col).setValue(u.value);
+    });
   }
 
   /** יישום בחירת ערך אחיד לשדה אישי בכל השורות של עובד */
