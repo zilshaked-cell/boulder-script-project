@@ -685,6 +685,22 @@ function listJobTypes_() {
     "אופני תשלום",
     "אופן תשלום",
   ]);
+  const payDefaultIdCol = getOptionalColumn_(headerMap, [
+    "ID אופן תשלום דיפולט",
+    "ID אופני תשלום דיפולט",
+    "ID דיפולט אופן תשלום",
+    "Default Pay Type ID",
+    "Default Payment ID",
+  ]);
+  const payDefaultNameCol = getOptionalColumn_(headerMap, [
+    "דיפולט אופן תשלום",
+    "אופן תשלום דיפולט",
+    "ברירת מחדל אופן תשלום",
+    "דיפולט",
+    "ברירת מחדל",
+    "Default Pay Type",
+    "Default Payment",
+  ]);
   const dataRange = sheet.getDataRange().getValues();
   logger.info("read-sheet", {
     sheetName: sheetName,
@@ -697,8 +713,14 @@ function listJobTypes_() {
     const name = stringValue(row[nameCol - 1]);
     const status = stringValue(row[statusCol - 1]);
     const payStatus = payStatusCol ? stringValue(row[payStatusCol - 1]) : "";
-    const payTypeId = payIdCol ? stringValue(row[payIdCol - 1]) : "";
-    const payTypeName = payNameCol ? stringValue(row[payNameCol - 1]) : "";
+    const payTypeIdRaw = payIdCol ? stringValue(row[payIdCol - 1]) : "";
+    const payTypeId =
+      payTypeIdRaw ||
+      (payDefaultIdCol ? stringValue(row[payDefaultIdCol - 1]) : "");
+    const payTypeNameRaw = payNameCol ? stringValue(row[payNameCol - 1]) : "";
+    const payTypeName =
+      payTypeNameRaw ||
+      (payDefaultNameCol ? stringValue(row[payDefaultNameCol - 1]) : "");
     if (!name) {
       blanks++;
       if (blanks >= 20) break;
