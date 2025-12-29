@@ -40,6 +40,69 @@ var EMP = EMP || {};
     return idx >= 0 ? idx + 1 : null;
   }
 
+  /**
+   * Returns column indices for core employee/job/pay fields or an error.
+   * Prefers live headers; falls back to CONFIG.COL when a header is not found.
+   * If any required column is missing, no indices are returned to avoid corrupt writes.
+   * @return {{ ok: true, cols: { employeeIdCol: number, jobTypeIdCol: number, jobTypeNameCol: number, departmentCol: number, payTypeIdCol: number, payTypeNameCol: number } } | { ok: false, error: string }}
+   * @private
+   */
+  function EMP_getEmployeeColumns_() {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return {
+        ok: false,
+        error: 'לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"',
+      };
+    }
+
+    var headerRow = CONFIG.HEADER_ROW;
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+
+    function resolve_(headerName, fallbackIdx) {
+      var idx = colIndexByHeader_(headers, headerName);
+      if (idx) return idx;
+      if (fallbackIdx && typeof fallbackIdx === "number") return fallbackIdx;
+      return null;
+    }
+
+    var employeeIdCol = resolve_("ID עובד", CONFIG.COL.ID);
+    var jobTypeIdCol = resolve_("ID סוגי עבודה", null);
+    var jobTypeNameCol = resolve_("סוג העבודה", CONFIG.COL.JOB_TYPE);
+    var departmentCol = resolve_("מחלקה", CONFIG.COL.DEPARTMENT);
+    var payTypeIdCol = resolve_("ID אופן תשלום", null);
+    var payTypeNameCol = resolve_("אופן תשלום", CONFIG.COL.PAYMENT_MODE);
+
+    var missing = [];
+    if (!employeeIdCol) missing.push("ID עובד");
+    if (!jobTypeNameCol) missing.push("סוג העבודה");
+    if (!departmentCol) missing.push("מחלקה");
+    if (!payTypeNameCol) missing.push("אופן תשלום");
+    // ID columns are required for safe writes; if absent we prefer to skip backfill rather than write to a wrong column.
+    if (!jobTypeIdCol) missing.push("ID סוגי עבודה");
+    if (!payTypeIdCol) missing.push("ID אופן תשלום");
+
+    if (missing.length) {
+      return {
+        ok: false,
+        error: "Missing required header(s): " + missing.join(", "),
+      };
+    }
+
+    return {
+      ok: true,
+      cols: {
+        employeeIdCol: employeeIdCol,
+        jobTypeIdCol: jobTypeIdCol,
+        jobTypeNameCol: jobTypeNameCol,
+        departmentCol: departmentCol,
+        payTypeIdCol: payTypeIdCol,
+        payTypeNameCol: payTypeNameCol,
+      },
+    };
+  }
+
   function getSpreadsheet_() {
     return SpreadsheetApp.getActive();
   }
@@ -1643,6 +1706,173 @@ function EMP_createEmployeeByName(name) {
   return EMP.createEmployeeByName(name);
 }
 
+function EMP_normalizeJobAndPayRow_(
+  sheet,
+  rows,
+  rowIndex,
+  sheetRow,
+  cols,
+  missingJobs,
+  missingPayments,
+  correctedText
+) {
+  var row = rows[rowIndex];
+
+  function norm_(v) {
+    if (v === null || v === undefined) return "";
+    return String(v).replace(/\s+/g, " ").trim();
+  }
+
+  function writeIfChanged_(colIdx, val) {
+    if (row[colIdx - 1] === val) return;
+    row[colIdx - 1] = val;
+    sheet.getRange(sheetRow, colIdx).setValue(val);
+    rowUpdated = true;
+  }
+
+  var rowUpdated = false;
+  var employeeId = norm_(row[cols.employeeIdCol - 1]);
+
+  // Job
+  var jobTypeId = norm_(row[cols.jobTypeIdCol - 1]);
+  var jobTypeName = norm_(row[cols.jobTypeNameCol - 1]);
+  var department = norm_(row[cols.departmentCol - 1]);
+
+  if (jobTypeId) {
+    var job =
+      (typeof OPT !== "undefined" && OPT.getJobById
+        ? OPT.getJobById(jobTypeId)
+        : null) || null;
+    if (job) {
+      var oldJobName = jobTypeName;
+      var oldDept = department;
+      if (jobTypeId !== job.id) writeIfChanged_(cols.jobTypeIdCol, job.id);
+      if (jobTypeName !== job.name)
+        writeIfChanged_(cols.jobTypeNameCol, job.name || "");
+      if (department !== job.department)
+        writeIfChanged_(cols.departmentCol, job.department || "");
+      if (
+        correctedText &&
+        (oldJobName !== job.name || oldDept !== job.department)
+      ) {
+        correctedText.push({
+          rowIndex: sheetRow,
+          field: "job",
+          from: { name: oldJobName, department: oldDept },
+          to: { name: job.name || "", department: job.department || "" },
+        });
+      }
+    } else {
+      // attempt repair by name/department if available
+      var job2 =
+        (typeof OPT !== "undefined" && OPT.getJobByNameAndDepartment
+          ? OPT.getJobByNameAndDepartment(jobTypeName, department)
+          : null) || null;
+      if (job2) {
+        if (jobTypeId !== job2.id)
+          writeIfChanged_(cols.jobTypeIdCol, job2.id || "");
+        if (jobTypeName !== job2.name)
+          writeIfChanged_(cols.jobTypeNameCol, job2.name || "");
+        if (department !== job2.department)
+          writeIfChanged_(cols.departmentCol, job2.department || "");
+      } else {
+        // clear invalid ID to avoid stale values
+        writeIfChanged_(cols.jobTypeIdCol, "");
+        missingJobs.push({
+          employeeId: employeeId,
+          rowIndex: sheetRow,
+          jobName: jobTypeName,
+          department: department,
+          reason: "invalid-id",
+        });
+      }
+    }
+  } else if (jobTypeName) {
+    var jobByName =
+      (typeof OPT !== "undefined" && OPT.getJobByNameAndDepartment
+        ? OPT.getJobByNameAndDepartment(jobTypeName, department)
+        : null) || null;
+    if (jobByName) {
+      writeIfChanged_(cols.jobTypeIdCol, jobByName.id || "");
+      if (jobTypeName !== jobByName.name)
+        writeIfChanged_(cols.jobTypeNameCol, jobByName.name || "");
+      if (department !== jobByName.department)
+        writeIfChanged_(cols.departmentCol, jobByName.department || "");
+    } else {
+      missingJobs.push({
+        employeeId: employeeId,
+        rowIndex: sheetRow,
+        jobName: jobTypeName,
+        department: department,
+        reason: "name-not-found",
+      });
+    }
+  }
+
+  // Payment
+  var payTypeId = norm_(row[cols.payTypeIdCol - 1]);
+  var payTypeName = norm_(row[cols.payTypeNameCol - 1]);
+
+  if (payTypeId) {
+    var pay =
+      (typeof OPT !== "undefined" && OPT.getPaymentById
+        ? OPT.getPaymentById(payTypeId)
+        : null) || null;
+    if (pay) {
+      var oldPayName = payTypeName;
+      if (payTypeId !== pay.id) writeIfChanged_(cols.payTypeIdCol, pay.id);
+      if (payTypeName !== pay.name)
+        writeIfChanged_(cols.payTypeNameCol, pay.name || "");
+      if (correctedText && oldPayName !== pay.name) {
+        correctedText.push({
+          rowIndex: sheetRow,
+          field: "pay",
+          from: oldPayName,
+          to: pay.name || "",
+        });
+      }
+    } else {
+      var pay2 =
+        (typeof OPT !== "undefined" && OPT.getPaymentByName
+          ? OPT.getPaymentByName(payTypeName)
+          : null) || null;
+      if (pay2) {
+        if (payTypeId !== pay2.id)
+          writeIfChanged_(cols.payTypeIdCol, pay2.id || "");
+        if (payTypeName !== pay2.name)
+          writeIfChanged_(cols.payTypeNameCol, pay2.name || "");
+      } else {
+        writeIfChanged_(cols.payTypeIdCol, "");
+        missingPayments.push({
+          employeeId: employeeId,
+          rowIndex: sheetRow,
+          payName: payTypeName,
+          reason: "invalid-id",
+        });
+      }
+    }
+  } else if (payTypeName) {
+    var payByName =
+      (typeof OPT !== "undefined" && OPT.getPaymentByName
+        ? OPT.getPaymentByName(payTypeName)
+        : null) || null;
+    if (payByName) {
+      writeIfChanged_(cols.payTypeIdCol, payByName.id || "");
+      if (payTypeName !== payByName.name)
+        writeIfChanged_(cols.payTypeNameCol, payByName.name || "");
+    } else {
+      missingPayments.push({
+        employeeId: employeeId,
+        rowIndex: sheetRow,
+        payName: payTypeName,
+        reason: "name-not-found",
+      });
+    }
+  }
+
+  return rowUpdated;
+}
+
 /**
  * סנכרון:
  * - J: "ID סוגי עבודה"
@@ -1651,21 +1881,36 @@ function EMP_createEmployeeByName(name) {
  * בכרטיסייה "פרטי עובדים"
  */
 function EMP_backfillJobAndPaymentIdsForAllEmployees() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName("פרטי עובדים");
+  var sheet = getEmployeesSheet_();
   if (!sheet) {
-    throw new Error('לא נמצאה כרטיסייה "פרטי עובדים"');
+    throw new Error('לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"');
   }
 
-  var HEADER_ROW = 1;
+  var colsResult = EMP_getEmployeeColumns_();
+  if (!colsResult.ok) {
+    var errMsg = "EMP_backfillJobAndPaymentIds: " + colsResult.error;
+    try {
+      Logger.log(errMsg);
+    } catch (_ignored) {}
+    try {
+      SpreadsheetApp.getActive().toast(
+        "EMP backfill skipped: " + colsResult.error,
+        "EMP_backfillJobAndPaymentIds",
+        7
+      );
+    } catch (_ignored2) {}
+    return {
+      ok: false,
+      updated: 0,
+      missingJobs: [],
+      missingPayments: [],
+      error: colsResult.error,
+    };
+  }
 
-  var COL_ID_EMP = 2; // B
-  var COL_FULL_NAME = 3; // C
-  var COL_JOB_TYPE_ID = 10; // J
-  var COL_JOB_TYPE = 11; // K
-  var COL_DEPARTMENT = 12; // L
-  var COL_PAY_ID = 15; // O
-  var COL_PAY_NAME = 16; // P
+  var cols = colsResult.cols;
+  var HEADER_ROW = CONFIG.HEADER_ROW;
+  var COL_FULL_NAME = CONFIG.COL.FULL_NAME;
 
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
@@ -1685,68 +1930,28 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
   var updated = 0;
   var missingJobs = [];
   var missingPayments = [];
+  var correctedText = [];
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
     var sheetRow = HEADER_ROW + 1 + i;
 
-    var empId = row[COL_ID_EMP - 1];
+    var empId = row[cols.employeeIdCol - 1];
     var fullName = row[COL_FULL_NAME - 1];
 
     if (!empId && !fullName) continue;
+    var rowUpdated = EMP_normalizeJobAndPayRow_(
+      sheet,
+      data,
+      i,
+      sheetRow,
+      cols,
+      missingJobs,
+      missingPayments,
+      correctedText
+    );
 
-    var jobName = row[COL_JOB_TYPE - 1];
-    var currentJobId = row[COL_JOB_TYPE_ID - 1];
-    var currentDept = row[COL_DEPARTMENT - 1];
-
-    var payName = row[COL_PAY_NAME - 1];
-    var currentPayId = row[COL_PAY_ID - 1];
-
-    var needUpdateRow = false;
-
-    if (jobName) {
-      var job = OPT.getJobByName(jobName);
-      if (job) {
-        var newJobId = job.id || "";
-        var newDept = job.department || "";
-
-        if (currentJobId !== newJobId) {
-          sheet.getRange(sheetRow, COL_JOB_TYPE_ID).setValue(newJobId);
-          needUpdateRow = true;
-        }
-        if (currentDept !== newDept) {
-          sheet.getRange(sheetRow, COL_DEPARTMENT).setValue(newDept);
-          needUpdateRow = true;
-        }
-      } else {
-        missingJobs.push({ row: sheetRow, jobName: jobName });
-        Logger.log(
-          'EMP_backfillJobAndPaymentIds: אין התאמה לסוג עבודה "%s" בשורה %s',
-          jobName,
-          sheetRow
-        );
-      }
-    }
-
-    if (payName) {
-      var pay = OPT.getPaymentByName(payName);
-      if (pay) {
-        var newPayId = pay.id || "";
-        if (currentPayId !== newPayId) {
-          sheet.getRange(sheetRow, COL_PAY_ID).setValue(newPayId);
-          needUpdateRow = true;
-        }
-      } else {
-        missingPayments.push({ row: sheetRow, payName: payName });
-        Logger.log(
-          'EMP_backfillJobAndPaymentIds: אין התאמה לאופן תשלום "%s" בשורה %s',
-          payName,
-          sheetRow
-        );
-      }
-    }
-
-    if (needUpdateRow) updated++;
+    if (rowUpdated) updated++;
   }
 
   var msg =
@@ -1767,5 +1972,105 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
     updated: updated,
     missingJobs: missingJobs,
     missingPayments: missingPayments,
+    correctedText: correctedText,
+  };
+}
+
+/**
+ * Backfills job/payment IDs for a single employeeId.
+ * @param {string} employeeId
+ * @return {{ ok: boolean, employeeId: string, updatedRows: number[], missingJobs: Object[], missingPayments: Object[], correctedText?: Object[], error?: string }}
+ * @private
+ */
+function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
+  var normalizedId = employeeId ? String(employeeId).trim() : "";
+  if (!normalizedId) {
+    return {
+      ok: false,
+      employeeId: normalizedId,
+      updatedRows: [],
+      missingJobs: [],
+      missingPayments: [],
+      correctedText: [],
+      error: "missing employeeId",
+    };
+  }
+
+  var sheet = getEmployeesSheet_();
+  if (!sheet) {
+    return {
+      ok: false,
+      employeeId: normalizedId,
+      updatedRows: [],
+      missingJobs: [],
+      missingPayments: [],
+      correctedText: [],
+      error: 'לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"',
+    };
+  }
+
+  var colsResult = EMP_getEmployeeColumns_();
+  if (!colsResult.ok) {
+    return {
+      ok: false,
+      employeeId: normalizedId,
+      updatedRows: [],
+      missingJobs: [],
+      missingPayments: [],
+      correctedText: [],
+      error: colsResult.error,
+    };
+  }
+
+  var cols = colsResult.cols;
+  var HEADER_ROW = CONFIG.HEADER_ROW;
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= HEADER_ROW) {
+    return {
+      ok: true,
+      employeeId: normalizedId,
+      updatedRows: [],
+      missingJobs: [],
+      missingPayments: [],
+      correctedText: [],
+    };
+  }
+
+  var data = sheet
+    .getRange(HEADER_ROW + 1, 1, lastRow - HEADER_ROW, lastCol)
+    .getValues();
+
+  var updatedRows = [];
+  var missingJobs = [];
+  var missingPayments = [];
+  var correctedText = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var rowEmpId = row[cols.employeeIdCol - 1];
+    if (String(rowEmpId || "").trim() !== normalizedId) continue;
+
+    var sheetRow = HEADER_ROW + 1 + i;
+    var rowUpdated = EMP_normalizeJobAndPayRow_(
+      sheet,
+      data,
+      i,
+      sheetRow,
+      cols,
+      missingJobs,
+      missingPayments,
+      correctedText
+    );
+    if (rowUpdated) updatedRows.push(sheetRow);
+  }
+
+  return {
+    ok: true,
+    employeeId: normalizedId,
+    updatedRows: updatedRows,
+    missingJobs: missingJobs,
+    missingPayments: missingPayments,
+    correctedText: correctedText,
   };
 }

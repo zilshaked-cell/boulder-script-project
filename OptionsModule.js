@@ -282,10 +282,48 @@ var OPT = OPT || {};
     return out;
   }
 
-  // ---------- API (מה שנקרא מתוך EMP / HTML) ----------
+  function getJobById_(id) {
+    var key = norm_(id);
+    if (!key) return null;
+    return buildCache_().jobsById[key] || null;
+  }
 
-  function getJobByName_(name) {
+  function getJobByNameAndDepartment_(name, department) {
+    var nameKey = normKey_(name);
+    var deptKey = normKey_(department);
+    if (!nameKey) return null;
+
+    // Prefer exact name + department match when department provided.
+    if (deptKey) {
+      var jobs = buildCache_().jobs;
+      for (var i = 0; i < jobs.length; i++) {
+        var j = jobs[i];
+        if (normKey_(j.name) === nameKey && normKey_(j.department) === deptKey) {
+          return j;
+        }
+      }
+    }
+
+    // Fallback to name-only match.
+    return buildCache_().jobsByName[nameKey] || null;
+  }
+
+  function getPaymentById_(id) {
+    var key = norm_(id);
+    if (!key) return null;
+    return buildCache_().paysById[key] || null;
+  }
+
+  function getPaymentByName_(name) {
     var key = normKey_(name);
+    if (!key) return null;
+    return buildCache_().paysByName[key] || null;
+  }
+  function getPaymentByName_(name) {
+    var key = normKey_(name);
+    if (!key) return null;
+    return buildCache_().paysByName[key] || null;
+  }
     if (!key) return null;
     return buildCache_().jobsByName[key] || null;
   }
@@ -367,6 +405,10 @@ var OPT = OPT || {};
   OPT.getJobByName = getJobByName_;
   OPT.getPaymentByName = getPaymentByName_;
   OPT.getAllJobs = getAllJobs_;
+  OPT.getJobById = getJobById_;
+  OPT.getJobByNameAndDepartment = getJobByNameAndDepartment_;
+  OPT.getPaymentById = getPaymentById_;
+  OPT.getPaymentByName = getPaymentByName_;
   OPT.getAllPayments = getAllPayments_;
   OPT.handleOpen = handleOpen_;
   OPT.handleEdit = handleEdit_;

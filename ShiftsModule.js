@@ -101,6 +101,8 @@ var BONUSES = BONUSES || {};
     },
   };
 
+  var RAW_WORK_LOG_SHEET_NAME = "דיווח שעות עבודה";
+
   // התאמת shiftId לפי סכימה ידועה
   if (CONFIG.SHEET_NAME === "דיווח שעות עבודה") {
     CONFIG.COLS.shiftId = {
@@ -114,6 +116,25 @@ var BONUSES = BONUSES || {};
     };
   }
 
+  var NORMALIZED_SHIFT_CORE_HEADERS = [
+    { field: "ShiftId", header: "ShiftId" },
+    { field: "EmployeeId", header: "EmployeeId" },
+    { field: "EmployeeName", header: "EmployeeName" },
+    { field: "JobTypeId", header: "JobTypeId" },
+    { field: "JobTypeName", header: "JobTypeName" },
+    { field: "Department", header: "Department" },
+    { field: "ShiftDate", header: "ShiftDate" },
+    { field: "StartTime", header: "StartTime" },
+    { field: "EndTime", header: "EndTime" },
+    { field: "StartDateTime", header: "StartDateTime" },
+    { field: "EndDateTime", header: "EndDateTime" },
+    { field: "SpanHours", header: "SpanHours" },
+    { field: "PayHours", header: "PayHours" },
+    { field: "Status", header: "Status" },
+    { field: "Note", header: "Note" },
+    { field: "SourceReportIds", header: "SourceReportIds" },
+  ];
+
   function ss_() {
     return SpreadsheetApp.getActiveSpreadsheet();
   }
@@ -123,6 +144,317 @@ var BONUSES = BONUSES || {};
     if (!sh)
       throw new Error('לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME + '"');
     return sh;
+  }
+
+  function getRawWorkLogSheet_() {
+    var sh = ss_().getSheetByName(RAW_WORK_LOG_SHEET_NAME);
+    if (!sh)
+      throw new Error(
+        'לא נמצאה כרטיסייה בשם "' + RAW_WORK_LOG_SHEET_NAME + '"'
+      );
+    return sh;
+  }
+
+  var REQUIRED_SHIFT_HEADERS = [
+    { key: "shiftId", header: "ShiftId" },
+    { key: "employeeId", header: "EmployeeId" },
+    { key: "employeeName", header: "EmployeeName" },
+    { key: "jobTypeId", header: "JobTypeId" },
+    { key: "jobTypeName", header: "JobTypeName" },
+    { key: "department", header: "Department" },
+    { key: "shiftDate", header: "ShiftDate" },
+    { key: "startTime", header: "StartTime" },
+    { key: "endTime", header: "EndTime" },
+    { key: "startDateTime", header: "StartDateTime" },
+    { key: "endDateTime", header: "EndDateTime" },
+    { key: "spanHours", header: "SpanHours" },
+    { key: "payHours", header: "PayHours" },
+    { key: "status", header: "Status" },
+    { key: "note", header: "Note" },
+    { key: "sourceReportIds", header: "SourceReportIds" },
+  ];
+
+  function formatNumericColumn_(sheet, colIndex) {
+    if (!colIndex) return;
+    sheet.getRange(1, colIndex, sheet.getMaxRows(), 1).setNumberFormat("0.00");
+  }
+
+  function ensureRequiredShiftHeaders_(sheet) {
+    var lastCol = sheet.getLastColumn();
+    if (lastCol < 1) lastCol = 1;
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+    var map = buildHeaderMap_(headers);
+
+    var missing = [];
+    REQUIRED_SHIFT_HEADERS.forEach(function (item) {
+      if (!map[norm_(item.header)]) missing.push(item.header);
+    });
+
+    if (missing.length) {
+      sheet
+        .getRange(CONFIG.HEADER_ROW, lastCol + 1, 1, missing.length)
+        .setValues([missing]);
+      headers = sheet
+        .getRange(CONFIG.HEADER_ROW, 1, 1, sheet.getLastColumn())
+        .getValues()[0];
+      map = buildHeaderMap_(headers);
+    }
+
+    formatNumericColumn_(sheet, map[norm_("SpanHours")]);
+    formatNumericColumn_(sheet, map[norm_("PayHours")]);
+
+    return map;
+  }
+
+  function getOrCreateShiftsSheet_() {
+    var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
+    if (!sh) {
+      sh = ss_().insertSheet(CONFIG.SHEET_NAME);
+      sh.getRange(
+        CONFIG.HEADER_ROW,
+        1,
+        1,
+        REQUIRED_SHIFT_HEADERS.length
+      ).setValues([
+        REQUIRED_SHIFT_HEADERS.map(function (h) {
+          return h.header;
+        }),
+      ]);
+      var mapNew = buildHeaderMap_(
+        REQUIRED_SHIFT_HEADERS.map(function (h) {
+          return h.header;
+        })
+      );
+      formatNumericColumn_(sh, mapNew[norm_("SpanHours")]);
+      formatNumericColumn_(sh, mapNew[norm_("PayHours")]);
+      return sh;
+    }
+
+    ensureRequiredShiftHeaders_(sh);
+    return sh;
+  }
+
+  function getShiftsHeaderMap_() {
+    var sh = getOrCreateShiftsSheet_();
+    var lastCol = sh.getLastColumn();
+    if (lastCol < 1) lastCol = 1;
+    var headers = sh.getRange(CONFIG.HEADER_ROW, 1, 1, lastCol).getValues()[0];
+    var map = buildHeaderMap_(headers);
+
+    var logical = {};
+    REQUIRED_SHIFT_HEADERS.forEach(function (item) {
+      logical[item.key] = map[norm_(item.header)] || null;
+    });
+
+    return logical;
+  }
+
+  function normalizeDirection_(raw) {
+    var d = normKey_(raw);
+    if (d === "in" || d === "כניסה" || d === "כניסה / יציאה") return "IN";
+    if (d === "out" || d === "יציאה") return "OUT";
+    return d ? d.toUpperCase() : "";
+  }
+
+  function buildWorkLogLayout_() {
+    var sheet = getRawWorkLogSheet_();
+    var lastCol = sheet.getLastColumn();
+    if (lastCol < 1) lastCol = 1;
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+    var map = buildHeaderMap_(headers);
+
+    return {
+      sheet: sheet,
+      headers: headers,
+      map: map,
+      cols: {
+        notes: map[norm_("notes")] || map[norm_("הערות")],
+        shiftId: map[norm_("ID דיווח")] || map[norm_("ID משמרת")],
+        timestamp: map[norm_("חותמת זמן")],
+        employeeId: map[norm_("ID עובד")] || map[norm_("מזהה עובד")],
+        employeeName: map[norm_("שם מלא")],
+        direction: map[norm_("כניסה / יציאה")],
+        fixDate: map[norm_("תיקון תאריך")],
+        fixTime: map[norm_("תיקון שעה")],
+        jobTypeId: map[norm_("ID סוג עבודה")] || map[norm_("ID סוגי עבודה")],
+        jobTypeName: map[norm_("סוג עבודה")] || map[norm_("סוגי עבודה")],
+        department: map[norm_("מחלקה")],
+        units: map[norm_("כמות היחידות")] || map[norm_("דיווח יחידות")],
+      },
+    };
+  }
+
+  function normalizeId_(val) {
+    return String(val || "").trim();
+  }
+
+  function toDateOnly_(val) {
+    var d = toDate_(val);
+    if (!d) return null;
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function addDays_(date, offset) {
+    if (!date) return null;
+    var d = new Date(date.getTime());
+    d.setDate(d.getDate() + offset);
+    return d;
+  }
+
+  function toWorkDateTime_(ts, fixDate, fixTime) {
+    var tsDate = toDate_(ts);
+    if (tsDate) return tsDate;
+    var dt = buildDateTime_(fixDate, fixTime);
+    return dt;
+  }
+
+  function readWorkLogsForEmployeeJobAndRange_(
+    employeeId,
+    jobTypeId,
+    fromIso,
+    toIso
+  ) {
+    var layout = buildWorkLogLayout_();
+    var sheet = layout.sheet;
+    var cols = layout.cols;
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) return [];
+    var data = sheet
+      .getRange(
+        CONFIG.HEADER_ROW + 1,
+        1,
+        lastRow - CONFIG.HEADER_ROW,
+        sheet.getLastColumn()
+      )
+      .getValues();
+    var out = [];
+
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+      var empIdVal = cols.employeeId ? norm_(row[cols.employeeId - 1]) : "";
+      if (!empIdVal || empIdVal !== norm_(employeeId)) continue;
+
+      var jobIdVal = cols.jobTypeId ? norm_(row[cols.jobTypeId - 1]) : "";
+      if (!jobIdVal || jobIdVal !== norm_(jobTypeId)) continue;
+
+      var workDateTime = toWorkDateTime_(
+        cols.timestamp ? row[cols.timestamp - 1] : "",
+        cols.fixDate ? row[cols.fixDate - 1] : "",
+        cols.fixTime ? row[cols.fixTime - 1] : ""
+      );
+      if (!workDateTime) continue;
+
+      var isoDate = toIsoDate_(workDateTime);
+      if (fromIso && isoDate && isoDate < fromIso) continue;
+      if (toIso && isoDate && isoDate > toIso) continue;
+
+      out.push({
+        reportId: cols.shiftId
+          ? String(row[cols.shiftId - 1] || "").trim()
+          : "",
+        employeeId: empIdVal,
+        employeeName: cols.employeeName
+          ? String(row[cols.employeeName - 1] || "").trim()
+          : "",
+        jobTypeId: jobIdVal,
+        jobTypeName: cols.jobTypeName
+          ? String(row[cols.jobTypeName - 1] || "").trim()
+          : "",
+        department: cols.department
+          ? String(row[cols.department - 1] || "").trim()
+          : "",
+        direction: normalizeDirection_(
+          cols.direction ? row[cols.direction - 1] : ""
+        ),
+        workDateTime: workDateTime,
+        workDateIso: isoDate,
+        notesKind: cols.notes ? String(row[cols.notes - 1] || "").trim() : "",
+        units: cols.units ? row[cols.units - 1] : "",
+      });
+    }
+
+    out.sort(function (a, b) {
+      if (
+        a.workDateTime &&
+        b.workDateTime &&
+        a.workDateTime.getTime() !== b.workDateTime.getTime()
+      )
+        return a.workDateTime.getTime() - b.workDateTime.getTime();
+      return String(a.reportId || "").localeCompare(String(b.reportId || ""));
+    });
+
+    return out;
+  }
+
+  function ensureSpanAndPayFormats_(sheet, headerMap) {
+    var spanCol = headerMap[norm_("SpanHours")];
+    var payCol = headerMap[norm_("PayHours")];
+    var rows = Math.max(1, sheet.getMaxRows() - CONFIG.HEADER_ROW);
+    if (spanCol)
+      sheet
+        .getRange(CONFIG.HEADER_ROW + 1, spanCol, rows, 1)
+        .setNumberFormat("0.00");
+    if (payCol)
+      sheet
+        .getRange(CONFIG.HEADER_ROW + 1, payCol, rows, 1)
+        .setNumberFormat("0.00");
+  }
+
+  function ensureNormalizedShiftHeaders_(sheet) {
+    var lastCol = Math.max(1, sheet.getLastColumn());
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+    var headerMap = buildHeaderMap_(headers);
+
+    var currentLast = lastCol;
+    NORMALIZED_SHIFT_CORE_HEADERS.forEach(function (col) {
+      var key = norm_(col.header);
+      if (!headerMap[key]) {
+        currentLast += 1;
+        sheet.getRange(CONFIG.HEADER_ROW, currentLast).setValue(col.header);
+        headerMap[key] = currentLast;
+      }
+    });
+
+    ensureSpanAndPayFormats_(sheet, headerMap);
+    return headerMap;
+  }
+
+  function getOrCreateShiftsSheet_() {
+    var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
+    if (!sh) {
+      sh = ss_().insertSheet(CONFIG.SHEET_NAME);
+      var headers = NORMALIZED_SHIFT_CORE_HEADERS.map(function (c) {
+        return c.header;
+      });
+      sh.getRange(CONFIG.HEADER_ROW, 1, 1, headers.length).setValues([headers]);
+      var headerMapNew = buildHeaderMap_(headers);
+      ensureSpanAndPayFormats_(sh, headerMapNew);
+      return sh;
+    }
+
+    ensureNormalizedShiftHeaders_(sh);
+    return sh;
+  }
+
+  function getShiftsHeaderMap_() {
+    var sh = getOrCreateShiftsSheet_();
+    var lastCol = Math.max(1, sh.getLastColumn());
+    var headers = sh.getRange(CONFIG.HEADER_ROW, 1, 1, lastCol).getValues()[0];
+    var mapByName = buildHeaderMap_(headers);
+    var logicalMap = {};
+
+    NORMALIZED_SHIFT_CORE_HEADERS.forEach(function (col) {
+      logicalMap[col.field] = mapByName[norm_(col.header)] || null;
+    });
+
+    return logicalMap;
   }
 
   function norm_(v) {
@@ -250,6 +582,45 @@ var BONUSES = BONUSES || {};
     return out;
   }
 
+  function toDate_(val) {
+    if (!val) return null;
+    if (Object.prototype.toString.call(val) === "[object Date]" && !isNaN(val))
+      return val;
+    var s = norm_(val);
+    if (!s) return null;
+    var d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+
+  function buildDateTime_(dateVal, timeStr) {
+    var d = toDate_(dateVal);
+    if (!d) return null;
+    var parts = norm_(timeStr || "").split(":");
+    if (parts.length >= 2) {
+      var hh = parseInt(parts[0], 10);
+      var mm = parseInt(parts[1], 10);
+      if (!isNaN(hh)) d.setHours(hh);
+      if (!isNaN(mm)) d.setMinutes(mm);
+      d.setSeconds(0);
+      d.setMilliseconds(0);
+    }
+    return d;
+  }
+
+  function computeHoursDiff_(startDate, endDate) {
+    if (!startDate || !endDate) return 0;
+    var ms = endDate.getTime() - startDate.getTime();
+    if (ms <= 0) return 0;
+    var hours = ms / (1000 * 60 * 60);
+    return Math.round(hours * 100) / 100;
+  }
+
+  function appendNote_(base, addition) {
+    if (!addition) return base || "";
+    if (!base) return addition;
+    return base + " | " + addition;
+  }
+
   function deriveDate_(row, layout) {
     var workDate = layout.workDate ? row[layout.workDate - 1] : "";
     var fixDate = layout.fixDate ? row[layout.fixDate - 1] : "";
@@ -326,6 +697,372 @@ var BONUSES = BONUSES || {};
     if (layout.notes) shift.notes = row[layout.notes - 1];
 
     return shift;
+  }
+
+  function buildShiftsForEmployeeJobAndDateRange(
+    employeeId,
+    jobTypeId,
+    fromDate,
+    toDate
+  ) {
+    var fromIso = toIsoDate_(fromDate || "");
+    var toIso = toIsoDate_(toDate || "");
+    var events = readWorkLogsForEmployeeJobAndRange_(
+      employeeId,
+      jobTypeId,
+      fromIso,
+      toIso
+    );
+
+    var shifts = [];
+    var openIn = null;
+
+    function pushShift_(opts) {
+      var startDt = opts.startDateTime;
+      var endDt = opts.endDateTime;
+      var spanHours = computeHoursDiff_(startDt, endDt);
+      var payHours = spanHours;
+      var note = opts.note || "";
+      var status = opts.status || "OK";
+
+      // Detect overlap later; keep basic shape here.
+      shifts.push({
+        shiftId: opts.shiftId || "",
+        employeeId: opts.employeeId || "",
+        employeeName: opts.employeeName || "",
+        jobTypeId: opts.jobTypeId || "",
+        jobTypeName: opts.jobTypeName || "",
+        department: opts.department || "",
+        shiftDate: startDt ? toIsoDate_(startDt) : "",
+        startTime: startDt ? toTimeStr_(startDt) : "",
+        endTime: endDt ? toTimeStr_(endDt) : "",
+        startDateTime: startDt,
+        endDateTime: endDt,
+        spanHours: spanHours,
+        payHours: payHours,
+        status: status,
+        note: note,
+        sourceReportIds: (opts.sourceReportIds || []).join(","),
+      });
+    }
+
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+
+      if (ev.direction === "IN") {
+        if (!openIn) {
+          openIn = ev;
+        } else {
+          // Second IN without closing the previous one.
+          pushShift_({
+            shiftId: ev.reportId || openIn.reportId || "",
+            employeeId: ev.employeeId,
+            employeeName: ev.employeeName,
+            jobTypeId: ev.jobTypeId,
+            jobTypeName: ev.jobTypeName,
+            department: ev.department,
+            startDateTime: openIn.workDateTime,
+            endDateTime: ev.workDateTime,
+            status: "MISSING_EXIT",
+            note: appendNote_(
+              "issue: second IN without matching OUT (missing exit)",
+              ""
+            ),
+            sourceReportIds: [openIn.reportId, ev.reportId],
+          });
+          openIn = ev;
+        }
+        continue;
+      }
+
+      if (ev.direction === "OUT") {
+        if (openIn) {
+          var endBeforeStart =
+            ev.workDateTime && openIn.workDateTime
+              ? ev.workDateTime.getTime() <= openIn.workDateTime.getTime()
+              : false;
+          pushShift_({
+            shiftId: openIn.reportId || ev.reportId || "",
+            employeeId: openIn.employeeId || ev.employeeId,
+            employeeName: openIn.employeeName || ev.employeeName,
+            jobTypeId: openIn.jobTypeId || ev.jobTypeId,
+            jobTypeName: openIn.jobTypeName || ev.jobTypeName,
+            department: openIn.department || ev.department,
+            startDateTime: openIn.workDateTime,
+            endDateTime: ev.workDateTime,
+            status: endBeforeStart ? "CONFLICT" : "OK",
+            note: endBeforeStart
+              ? appendNote_("issue: end time before or equal to start time", "")
+              : "",
+            sourceReportIds: [openIn.reportId, ev.reportId],
+          });
+          openIn = null;
+        } else {
+          // OUT without prior IN
+          pushShift_({
+            shiftId: ev.reportId || "",
+            employeeId: ev.employeeId,
+            employeeName: ev.employeeName,
+            jobTypeId: ev.jobTypeId,
+            jobTypeName: ev.jobTypeName,
+            department: ev.department,
+            startDateTime: ev.workDateTime,
+            endDateTime: ev.workDateTime,
+            status: "MISSING_ENTRY",
+            note: appendNote_(
+              "issue: OUT without matching IN (missing entry)",
+              ""
+            ),
+            sourceReportIds: [ev.reportId],
+          });
+        }
+      }
+    }
+
+    if (openIn) {
+      pushShift_({
+        shiftId: openIn.reportId || "",
+        employeeId: openIn.employeeId,
+        employeeName: openIn.employeeName,
+        jobTypeId: openIn.jobTypeId,
+        jobTypeName: openIn.jobTypeName,
+        department: openIn.department,
+        startDateTime: openIn.workDateTime,
+        endDateTime: openIn.workDateTime,
+        status: "MISSING_EXIT",
+        note: appendNote_(
+          "issue: shift still open at end of range (missing exit)",
+          ""
+        ),
+        sourceReportIds: [openIn.reportId],
+      });
+    }
+
+    // Detect overlaps among produced shifts for this employee+job
+    shifts.sort(function (a, b) {
+      if (a.startDateTime && b.startDateTime) {
+        if (a.startDateTime.getTime() !== b.startDateTime.getTime())
+          return a.startDateTime.getTime() - b.startDateTime.getTime();
+      }
+      return String(a.shiftId || "").localeCompare(String(b.shiftId || ""));
+    });
+
+    for (var j = 0; j < shifts.length; j++) {
+      var sA = shifts[j];
+      var endA = sA.endDateTime;
+      for (var k = j + 1; k < shifts.length; k++) {
+        var sB = shifts[k];
+        if (!sB.startDateTime || !endA) break;
+        if (sB.startDateTime.getTime() >= endA.getTime()) break;
+        // overlap if startB < endA and startA < endB
+        var overlap =
+          sB.startDateTime.getTime() < endA.getTime() &&
+          sA.startDateTime &&
+          sA.startDateTime.getTime() <
+            (sB.endDateTime || sB.startDateTime).getTime();
+        if (overlap) {
+          sA.status = sA.status === "OK" ? "CONFLICT" : sA.status;
+          sB.status = sB.status === "OK" ? "CONFLICT" : sB.status;
+          sA.note = appendNote_(
+            sA.note,
+            "issue: overlap with another shift for this employee/job"
+          );
+          sB.note = appendNote_(
+            sB.note,
+            "issue: overlap with another shift for this employee/job"
+          );
+        }
+      }
+    }
+
+    return shifts;
+  }
+
+  function upsertShiftsForEmployeeJobAndRange(
+    employeeId,
+    jobTypeId,
+    fromDate,
+    toDate
+  ) {
+    var empIdNorm = normalizeId_(employeeId);
+    var jobIdNorm = normalizeId_(jobTypeId);
+    var fromD = toDateOnly_(fromDate);
+    var toD = toDateOnly_(toDate);
+
+    var sheet = getOrCreateShiftsSheet_();
+    var headerMap = getShiftsHeaderMap_();
+    var headerRow = CONFIG.HEADER_ROW || 1;
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+
+    if (lastRow > headerRow) {
+      var data = sheet
+        .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
+        .getValues();
+      var rowsToDelete = [];
+      var empCol = headerMap.employeeId;
+      var jobCol = headerMap.jobTypeId;
+      var dateCol = headerMap.shiftDate;
+
+      for (var i = 0; i < data.length; i++) {
+        var row = data[i];
+        if (!empCol || !jobCol || !dateCol) break;
+        var rEmp = normalizeId_(row[empCol - 1]);
+        var rJob = normalizeId_(row[jobCol - 1]);
+        if (rEmp !== empIdNorm) continue;
+        if (rJob !== jobIdNorm) continue;
+
+        var rDate = toDateOnly_(row[dateCol - 1]);
+        if (!rDate) continue;
+        if (fromD && rDate.getTime() < fromD.getTime()) continue;
+        if (toD && rDate.getTime() > toD.getTime()) continue;
+
+        rowsToDelete.push(headerRow + 1 + i);
+      }
+
+      if (rowsToDelete.length) {
+        rowsToDelete.sort(function (a, b) {
+          return b - a;
+        });
+        for (var r = 0; r < rowsToDelete.length; r++) {
+          sheet.deleteRow(rowsToDelete[r]);
+        }
+      }
+    }
+
+    var shifts = buildShiftsForEmployeeJobAndDateRange(
+      employeeId,
+      jobTypeId,
+      fromDate,
+      toDate
+    );
+    if (!shifts || !shifts.length) return;
+
+    sheet = getOrCreateShiftsSheet_();
+    headerMap = getShiftsHeaderMap_();
+    lastCol = sheet.getLastColumn();
+
+    var startRow = sheet.getLastRow() + 1;
+    var values = [];
+    for (var j = 0; j < shifts.length; j++) {
+      values[j] = new Array(lastCol);
+      for (var c = 0; c < lastCol; c++) values[j][c] = "";
+    }
+
+    function set_(rowIdx, key, val) {
+      var col = headerMap[key];
+      if (!col) return;
+      values[rowIdx][col - 1] = val;
+    }
+
+    for (var s = 0; s < shifts.length; s++) {
+      var shObj = shifts[s];
+      set_(s, "shiftId", shObj.shiftId || "");
+      set_(s, "employeeId", shObj.employeeId || "");
+      set_(s, "employeeName", shObj.employeeName || "");
+      set_(s, "jobTypeId", shObj.jobTypeId || "");
+      set_(s, "jobTypeName", shObj.jobTypeName || "");
+      set_(s, "department", shObj.department || "");
+
+      var sd = shObj.shiftDate
+        ? toDateOnly_(shObj.shiftDate)
+        : toDateOnly_(shObj.startDateTime);
+      set_(s, "shiftDate", sd);
+
+      var st = shObj.startDateTime instanceof Date ? shObj.startDateTime : null;
+      var et = shObj.endDateTime instanceof Date ? shObj.endDateTime : null;
+      set_(s, "startTime", st);
+      set_(s, "endTime", et);
+      set_(s, "startDateTime", st);
+      set_(s, "endDateTime", et);
+
+      set_(s, "spanHours", shObj.spanHours || 0);
+      set_(s, "payHours", shObj.payHours || shObj.spanHours || 0);
+      set_(s, "status", shObj.status || "");
+      set_(s, "note", shObj.note || "");
+      set_(s, "sourceReportIds", shObj.sourceReportIds || "");
+    }
+
+    if (values.length) {
+      sheet.getRange(startRow, 1, values.length, lastCol).setValues(values);
+    }
+  }
+
+  function SHIFTS_upsertAroundWorkLog_(employeeId, jobTypeId, workDate) {
+    var empId = normalizeId_(employeeId);
+    var jobId = normalizeId_(jobTypeId);
+    if (!empId || !jobId) return;
+
+    var wd = toDateOnly_(workDate);
+    if (!wd) return;
+
+    var fromDate = addDays_(wd, -1);
+    var toDate = addDays_(wd, 1);
+
+    upsertShiftsForEmployeeJobAndRange(empId, jobId, fromDate, toDate);
+  }
+
+  function SHIFTS_rebuildYesterday() {
+    var today = toDateOnly_(new Date());
+    if (!today) return;
+    var yesterday = addDays_(today, -1);
+    var headerRow = CONFIG.HEADER_ROW || 1;
+
+    var sheet = getRawWorkLogSheet_();
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= headerRow) return;
+
+    var lastCol = sheet.getLastColumn();
+    var data = sheet
+      .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
+      .getValues();
+
+    var layout = buildWorkLogLayout_();
+    var cols = layout.cols;
+    var pairs = {};
+
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+      var workDt = toWorkDateTime_(
+        cols.timestamp ? row[cols.timestamp - 1] : "",
+        cols.fixDate ? row[cols.fixDate - 1] : "",
+        cols.fixTime ? row[cols.fixTime - 1] : ""
+      );
+      var rowDate = toDateOnly_(workDt);
+      if (!rowDate) continue;
+      if (rowDate.getTime() !== yesterday.getTime()) continue;
+
+      var empId = cols.employeeId ? normalizeId_(row[cols.employeeId - 1]) : "";
+      var jobId = cols.jobTypeId ? normalizeId_(row[cols.jobTypeId - 1]) : "";
+      if (!empId || !jobId) continue;
+
+      pairs[empId + "|||" + jobId] = { employeeId: empId, jobTypeId: jobId };
+    }
+
+    var fromDate = addDays_(yesterday, -1);
+    var toDate = addDays_(yesterday, 1);
+
+    var keys = Object.keys(pairs);
+    for (var k = 0; k < keys.length; k++) {
+      var p = pairs[keys[k]];
+      try {
+        upsertShiftsForEmployeeJobAndRange(
+          p.employeeId,
+          p.jobTypeId,
+          fromDate,
+          toDate
+        );
+      } catch (e) {
+        Logger.log(
+          "SHIFTS_rebuildYesterday error for emp=" +
+            p.employeeId +
+            " job=" +
+            p.jobTypeId +
+            ": " +
+            e
+        );
+      }
+    }
   }
 
   function filterShifts_(list, filters) {

@@ -68,6 +68,25 @@ function ensureInstallableOnOpenTrigger() {
   }
 }
 
+// הפעלה פעם אחת (Run) כדי ליצור טריגר יומי לבנייה מחדש של אתמול
+function ensureShiftsDailyTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (
+      triggers[i].getHandlerFunction &&
+      triggers[i].getHandlerFunction() === "SHIFTS_rebuildYesterday"
+    ) {
+      return;
+    }
+  }
+
+  ScriptApp.newTrigger("SHIFTS_rebuildYesterday")
+    .timeBased()
+    .everyDays(1)
+    .atHour(3)
+    .create();
+}
+
 /** ידיות תפריט → ספרייה */
 function gpt_all() {
   _getLib_().exportAllSheets();

@@ -23,7 +23,55 @@ const EMAIL_HEADER_CANDIDATES = [
   'דוא"ל',
 ];
 
+const HEADER_KEY_MAP = {
+  "ID משמרת": "shiftId",
+  "ID דיווח": "shiftId",
+  "Shift ID": "shiftId",
+  "Request ID": "id",
+  requestId: "id",
+  "Employee ID": "employeeId",
+  "ID עובד": "employeeId",
+  "מזהה עובד": "employeeId",
+  "ת.ז": "nationalId",
+  "שם מלא": "employeeName",
+  "ID סוג עבודה": "jobTypeId",
+  "ID סוגי עבודה": "jobTypeId",
+  "סוג עבודה": "jobName",
+  "סוגי עבודה": "jobName",
+  סטטוס: "status",
+  "סטטוס סוגי עבודה": "jobStatus",
+  "סטטוס משמרת": "status",
+  מחלקה: "department",
+  מחלקות: "department",
+  "דיווח שעות": "direction",
+  "כניסה / יציאה": "direction",
+  "תיקון תאריך": "fixDate",
+  "תיקון שעה": "fixTime",
+  "תאריך משמרת": "workDate",
+  "חותמת זמן": "timestamp",
+  שעות: "hoursDecimal",
+  "שעות לשכר": "payHours",
+  "כמות יחידות": "units",
+  "כמות היחידות": "units",
+  "דיווח יחידות": "units",
+  הערות: "note",
+  "הערה למנהל": "noteToManager",
+  "תאריך נשלח": "submittedAt",
+  "תאריך החלטה": "decidedAt",
+  "מנהל מחליט": "managerDecision",
+  תז: "nationalId",
+  "סוג בקשה": "requestType",
+  "סטטוס בקשה": "status",
+  "הערות למשמרת": "note",
+  "מקור דיווחים": "rawLogIds",
+};
+
 const SCRIPT_PROPERTIES = PropertiesService.getScriptProperties();
+const SPREADSHEET_ID = SCRIPT_PROPERTIES.getProperty("SPREADSHEET_ID") || "";
+const DEPLOYMENT_FINGERPRINT =
+  SCRIPT_PROPERTIES.getProperty("BUILD_ID") ||
+  SCRIPT_PROPERTIES.getProperty("DEPLOYED_AT") ||
+  "";
 const ACCESS_ISSUE_RECIPIENTS = (
   SCRIPT_PROPERTIES.getProperty("ACCESS_ISSUE_RECIPIENTS") || ""
 )
@@ -82,22 +130,49 @@ var ERROR_CODES = {
 
 // Contract/health metadata used by the status endpoint
 const CONTRACT_SCHEMA_VERSION = 1;
-const SUPPORTED_ACTIONS = [
-  "health",
-  "jobTypes.list",
-  "employee.linkedJobs",
-  "workLogs.listByEmployee",
-  "requests.listByEmployee",
-  "reportAccessIssue",
-  "shiftReport.submit",
-  "shiftCorrection.submit",
-  "shiftReport.monthlyErrorNotify",
-  "requests.approve",
-  "employee.save",
-  "employeeExistsByEmail",
-  "getCurrentEmployee",
-  "getWorkLogs",
-  "getEmployeeRequests",
+const SHEET_CONTRACT_SPEC = [
+  {
+    key: "Employees",
+    possibleNames: EMPLOYEES_SHEET_NAMES,
+    requiredColumnsCritical: [
+      ["מזהה עובד", "ID עובד", "Employee ID"],
+      ["שם מלא", "name"],
+      EMAIL_HEADER_CANDIDATES,
+      ["סטטוס", "סטטוס פעיל", "active", "status"],
+    ],
+    requiredColumnsOptional: [],
+  },
+  {
+    key: "WorkLogs",
+    possibleNames: [WORK_LOGS_SHEET_NAME],
+    requiredColumnsCritical: [
+      ["ID משמרת", "ID דיווח", "Shift ID"],
+      ["חותמת זמן", "timestamp"],
+      ["ID עובד", "מזהה עובד", "Employee ID"],
+      ["שם מלא", "name"],
+      ["כניסה / יציאה", "דיווח שעות"],
+      ["תיקון תאריך"],
+      ["תיקון שעה"],
+      ["ID סוג עבודה", "ID סוגי עבודה"],
+      ["סוג עבודה", "סוגי עבודה"],
+      ["מחלקה", "מחלקות"],
+      ["כמות היחידות", "דיווח יחידות"],
+    ],
+    requiredColumnsOptional: [["הערות", "הערה"]],
+  },
+  {
+    key: "Requests",
+    possibleNames: REQUESTS_SHEET_NAMES,
+    requiredColumnsCritical: [
+      ["ID משמרת"],
+      ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
+      ["סטטוס", "סטטוס בקשה"],
+      ["סוג עבודה", "סוגי עבודה"],
+      ["תאריך משמרת", "חותמת זמן", "תיקון תאריך"],
+      ["ID סוג עבודה", "ID סוגי עבודה"],
+    ],
+    requiredColumnsOptional: [["הערות", "הערה למנהל", "הערות למשמרת"]],
+  },
 ];
 
 function mapActionToOperation_(action) {
@@ -122,155 +197,107 @@ function mapActionToOperation_(action) {
   return map[action] || "APPS_SCRIPT_PROXY_GENERIC";
 }
 
+function getActionRegistry_() {
+  return {
+    health: function (_payload, _logger) {
+      return healthCheck_();
+    },
+    "jobTypes.list": function (_payload, _logger) {
+      return { jobTypes: listJobTypes_() };
+    },
+    "employee.linkedJobs": function (payload, _logger) {
+      return listEmployeeLinkedJobIds_(payload);
+    },
+    "workLogs.listByEmployee": function (payload, _logger) {
+      return listWorkLogsByEmployee_(payload);
+    },
+    "requests.listByEmployee": function (payload, _logger) {
+      return listRequestsByEmployee_(payload);
+    },
+    reportAccessIssue: function (payload, _logger) {
+      return reportAccessIssue_(payload || {});
+    },
+    "shiftReport.submit": function (payload, _logger) {
+      return handleShiftReportSubmit_(payload);
+    },
+    "shiftCorrection.submit": function (payload, _logger) {
+      return handleShiftCorrectionSubmit_(payload);
+    },
+    "shiftReport.monthlyErrorNotify": function (payload, _logger) {
+      return handleShiftReportMonthlyErrorNotify_(payload);
+    },
+    "shifts.list": function (payload, _logger) {
+      return listShifts_(payload || {});
+    },
+    "shifts.rebuildRange": function (payload, _logger) {
+      return rebuildShiftsForRange_(payload);
+    },
+    "requests.approve": function (payload, _logger) {
+      return handleRequestApprove_(payload);
+    },
+    "employee.save": function (payload, _logger) {
+      return handleEmployeeSave_(payload);
+    },
+    employeeExistsByEmail: function (payload, _logger) {
+      return employeeExistsByEmail_(payload || {});
+    },
+    // SPEC-EMP-001 / SPEC-EMP-002
+    getCurrentEmployee: function (payload, _logger) {
+      return getCurrentEmployeeData_(payload);
+    },
+    // Legacy stubs so existing screens stay alive until you wire real data
+    getWorkLogs: function (_payload, _logger) {
+      return { workLogs: [] };
+    },
+    getEmployeeRequests: function (_payload, _logger) {
+      return { requests: [] };
+    },
+  };
+}
+
+function getSupportedActions_() {
+  const registry = getActionRegistry_();
+  return Object.keys(registry);
+}
+
 function makeTraceId_() {
   var shortUuid = Utilities.getUuid().split("-")[0];
   return new Date().getTime().toString(36) + "-" + shortUuid;
 }
+    var handlers = getActionRegistry_();
+    var handler = handlers[action];
 
-function createScriptTraceContext_(meta, action) {
-  meta = meta || {};
-  var traceId = meta.traceId || makeTraceId_();
-  return {
-    traceId: traceId,
-    operation: meta.operation || mapActionToOperation_(action),
-    source: meta.source || "apps-script-router",
-    layer: meta.layer || "apps-script-router",
-    actor: meta.actor || null,
-    version: meta.version || "1.0",
-  };
-}
-
-function shouldLogScript_(severity) {
-  var order = { debug: 10, info: 20, warn: 30, error: 40 };
-  var envLevel = order[LOG_LEVEL_SCRIPT] || order.info;
-  return order[severity] >= envLevel;
-}
-
-function appendSystemLogRow_(event) {
-  if (!LOG_TO_SHEET_ENABLED) return;
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(SYSTEM_LOG_SHEET_NAME);
-    if (!sheet) {
-      sheet = ss.insertSheet(SYSTEM_LOG_SHEET_NAME);
-      sheet.hideSheet();
+    if (!handler) {
+      if (logger) logger.warn("unknown-action", { action: action });
+      return jsonResponse({ ok: false, error: "Unknown action" }, 400);
     }
-    var row = [
-      new Date(event.timestamp),
-      event.traceId,
-      event.layer,
-      event.operation,
-      event.step,
-      event.severity,
-      event.actor || "",
-      event.errorCode || "",
-      event.details ? JSON.stringify(event.details).slice(0, 500) : "",
-      "",
-    ];
-    sheet.appendRow(row);
-  } catch (err) {
-    // Never throw from logging path
-  }
-}
 
-function logScriptEvent_(context, severity, step, details, errorCode, error) {
-  if (!shouldLogScript_(severity)) return;
-  try {
-    var event = {
-      timestamp: new Date().toISOString(),
-      traceId: context && context.traceId ? context.traceId : makeTraceId_(),
-      operation: context && context.operation ? context.operation : "unknown",
-      layer: (context && context.layer) || "apps-script-router",
-      step: step || "response",
-      severity: severity,
-      actor: context && context.actor ? context.actor : null,
-      errorCode: errorCode || null,
-      errorMessage:
-        error && error.message
-          ? String(error.message).slice(0, 500)
-          : undefined,
-      details: details || {},
-    };
-    Logger.log(JSON.stringify(event));
-    appendSystemLogRow_(event);
-  } catch (err) {
-    // swallow logging failures
-  }
-}
-
-function createScriptLogger_(context) {
-  return {
-    context: context,
-    debug: function (step, details) {
-      logScriptEvent_(context, "debug", step, details);
-    },
-    info: function (step, details) {
-      logScriptEvent_(context, "info", step, details);
-    },
-    warn: function (step, details, errorCode) {
-      logScriptEvent_(context, "warn", step, details, errorCode);
-    },
-    error: function (step, details, errorCode, error) {
-      logScriptEvent_(context, "error", step, details, errorCode, error);
-    },
-  };
-}
-
-function getModuleLogger_(operation) {
-  var ctx = __activeTraceContext || {
-    traceId: makeTraceId_(),
-    operation: operation || "APPS_SCRIPT_PROXY_GENERIC",
+    var result = handler(payload || {}, logger);
+    if (logger) logger.info("response", { action: action });
+    return jsonResponse(withOk_(result));
     source: "apps-script-module",
     layer: "apps-script-module",
     actor: null,
     version: "1.0",
-  };
-  ctx.layer = "apps-script-module";
-  ctx.operation = ctx.operation || operation || "APPS_SCRIPT_PROXY_GENERIC";
-  return createScriptLogger_(ctx);
-}
+    if (!SPREADSHEET_ID) {
+      return {
+        ok: false,
+        error: "Missing SPREADSHEET_ID",
+        schemaVersion: CONTRACT_SCHEMA_VERSION,
+        supportedActions: getSupportedActions_(),
+        sheetChecks: [],
+        buildId: DEPLOYMENT_FINGERPRINT || null,
+      };
+    }
 
-const HEADER_KEY_MAP = {
-  "ID משמרת": "shiftId",
-  "ID דיווח": "shiftId",
-  "Shift ID": "shiftId",
-  "Request ID": "id",
-  requestId: "id",
-  "Employee ID": "employeeId",
-  "ID עובד": "employeeId",
-  "מזהה עובד": "employeeId",
-  "ID אופן תשלום": "payTypeId",
-  "ID אופני תשלום": "payTypeId",
-  "אופן תשלום": "payType",
-  "אופני תשלום": "payType",
-  "ת.ז": "nationalId",
-  "שם מלא": "employeeName",
-  "ID סוג עבודה": "jobTypeId",
-  "ID סוגי עבודה": "jobTypeId",
-  "סוג עבודה": "jobName",
-  "סוגי עבודה": "jobName",
-  סטטוס: "status",
-  "סטטוס סוגי עבודה": "jobStatus",
-  מחלקה: "department",
-  מחלקות: "department",
-  "דיווח שעות": "direction",
-  "כניסה / יציאה": "direction",
-  "תיקון תאריך": "fixDate",
-  "תיקון שעה": "fixTime",
-  "כמות היחידות": "units",
-  "דיווח יחידות": "units",
-  הערות: "note",
-  "הערה למנהל": "noteToManager",
-  "תאריך משמרת": "workDate",
-  "תיקון תאריך": "workDate",
-  "חותמת זמן": "timestamp",
-  "תאריך נשלח": "submittedAt",
-  "תאריך החלטה": "decidedAt",
+    const sheetChecks = SHEET_CONTRACT_SPEC.map(function (spec) {
   "מנהל מחליט": "managerDecision",
   תז: "nationalId",
   "סוג בקשה": "requestType",
+  "סטטוס משמרת": "status",
   "סטטוס בקשה": "status",
   "הערות למשמרת": "note",
+  "מקור דיווחים": "rawLogIds",
 };
 
 function doGet(e) {
@@ -384,177 +411,121 @@ function doPost(e) {
 
 function handleNewPost_(action, payload, logger) {
   if (logger) logger.info("dispatch", { action: action });
-  var response;
-  switch (action) {
-    case "health":
-      // SPEC-OPS-001
-      response = jsonResponse(withOk_(healthCheck_()));
-      break;
-    case "jobTypes.list":
-      response = jsonResponse(withOk_({ jobTypes: listJobTypes_() }));
-      break;
-    case "employee.linkedJobs":
-      response = jsonResponse(withOk_(listEmployeeLinkedJobIds_(payload)));
-      break;
-    case "workLogs.listByEmployee":
-      response = jsonResponse(withOk_(listWorkLogsByEmployee_(payload)));
-      break;
-    case "requests.listByEmployee":
-      response = jsonResponse(withOk_(listRequestsByEmployee_(payload)));
-      break;
-    case "reportAccessIssue":
-      response = jsonResponse(withOk_(reportAccessIssue_(payload || {})));
-      break;
-    case "shiftReport.submit":
-      response = jsonResponse(withOk_(handleShiftReportSubmit_(payload)));
-      break;
-    case "shiftCorrection.submit":
-      response = jsonResponse(withOk_(handleShiftCorrectionSubmit_(payload)));
-      break;
-    case "shiftReport.monthlyErrorNotify":
-      response = jsonResponse(
-        withOk_(handleShiftReportMonthlyErrorNotify_(payload))
-      );
-      break;
-    case "requests.approve":
-      response = jsonResponse(withOk_(handleRequestApprove_(payload)));
-      break;
-    case "employee.save":
-      response = jsonResponse(withOk_(handleEmployeeSave_(payload)));
-      break;
-    case "employeeExistsByEmail":
-      response = jsonResponse(withOk_(employeeExistsByEmail_(payload || {})));
-      break;
-    // Legacy stubs so existing screens stay alive until you wire real data
-    case "getCurrentEmployee": {
-      // SPEC-EMP-001 / SPEC-EMP-002
-      const email =
-        (payload && payload.email) ||
-        (payload && payload.user && payload.user.email) ||
-        "";
+  var handlers = getActionRegistry_();
+  var handler = handlers[action];
 
-      if (!email) {
-        response = jsonResponse({ ok: false, error: "Missing email" }, 400);
-        break;
-      }
-
-      const result = employeeExistsByEmail_({ email: email });
-      const found =
-        result &&
-        result.ok === true &&
-        (result.found === true || result.exists === true);
-
-      if (found) {
-        const emp = result.employee || {};
-        const idFromSheet = emp.id || result.employeeId || result.id || "";
-        const nameFromSheet =
-          emp.name || result.fullName || result.name || emp.fullName || "";
-        response = jsonResponse(
-          withOk_({
-            employee: {
-              id: idFromSheet || email, // never return empty id
-              employeeId: idFromSheet || email,
-              name: nameFromSheet,
-              email: emp.email || email,
-            },
-          })
-        );
-        break;
-      }
-
-      response = jsonResponse(withOk_({ employee: null }));
-      break;
-    }
-    case "getWorkLogs":
-      response = jsonResponse(withOk_({ workLogs: [] }));
-      break;
-    case "getEmployeeRequests":
-      response = jsonResponse(withOk_({ requests: [] }));
-      break;
-    default:
-      response = jsonResponse({ ok: false, error: "Unknown action" }, 400);
-      break;
+  if (!handler) {
+    if (logger) logger.warn("unknown-action", { action: action });
+    return jsonResponse({ ok: false, error: "Unknown action" }, 400);
   }
 
+  var result = handler(payload || {}, logger);
   if (logger) logger.info("response", { action: action });
-  return response;
+  return jsonResponse(withOk_(result));
+}
+
+function getCurrentEmployeeData_(payload) {
+  const email =
+    (payload && payload.email) ||
+    (payload && payload.user && payload.user.email) ||
+    "";
+
+  if (!email) {
+    return { ok: false, error: "Missing email" };
+  }
+
+  const result = employeeExistsByEmail_({ email: email });
+  const found =
+    result && result.ok === true && (result.found === true || result.exists);
+
+  if (found) {
+    const emp = result.employee || {};
+    const idFromSheet = emp.id || result.employeeId || result.id || "";
+    const nameFromSheet =
+      emp.name || result.fullName || result.name || emp.fullName || "";
+    return {
+      employee: {
+        id: idFromSheet || email, // never return empty id
+        employeeId: idFromSheet || email,
+        name: nameFromSheet,
+        email: emp.email || email,
+      },
+    };
+  }
+
+  return { employee: null };
 }
 
 // SPEC-OPS-001
 function healthCheck_() {
-  const requiredSheets = [
-    {
-      key: "Employees",
-      possibleNames: EMPLOYEES_SHEET_NAMES,
-      requiredColumns: [
-        ["מזהה עובד", "ID עובד", "Employee ID"],
-        ["שם מלא", "name"],
-        EMAIL_HEADER_CANDIDATES,
-        ["סטטוס", "סטטוס פעיל", "active", "status"],
-      ],
-    },
-    {
-      key: "WorkLogs",
-      possibleNames: [WORK_LOGS_SHEET_NAME],
-      requiredColumns: [
-        ["ID משמרת", "ID דיווח", "Shift ID"],
-        ["חותמת זמן", "timestamp"],
-        ["ID עובד", "מזהה עובד", "Employee ID"],
-        ["שם מלא", "name"],
-        ["כניסה / יציאה", "דיווח שעות"],
-        ["תיקון תאריך"],
-        ["תיקון שעה"],
-        ["ID סוג עבודה", "ID סוגי עבודה"],
-        ["סוג עבודה", "סוגי עבודה"],
-        ["מחלקה", "מחלקות"],
-        ["כמות היחידות", "דיווח יחידות"],
-        ["הערות", "הערה"],
-      ],
-    },
-    {
-      key: "Requests",
-      possibleNames: REQUESTS_SHEET_NAMES,
-      requiredColumns: [
-        ["ID משמרת"],
-        ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-        ["סטטוס", "סטטוס בקשה"],
-        ["סוג עבודה", "סוגי עבודה"],
-        ["תאריך משמרת", "חותמת זמן", "תיקון תאריך"],
-        ["ID סוג עבודה", "ID סוגי עבודה"],
-        ["הערות", "הערה למנהל", "הערות למשמרת"],
-      ],
-    },
-  ];
+  if (!SPREADSHEET_ID) {
+    return {
+      ok: false,
+      error: "Missing SPREADSHEET_ID",
+      schemaVersion: CONTRACT_SCHEMA_VERSION,
+      supportedActions: getSupportedActions_(),
+      sheetChecks: [],
+      buildId: DEPLOYMENT_FINGERPRINT || null,
+      buildIdWarning: !DEPLOYMENT_FINGERPRINT,
+    };
+  }
 
-  const sheetChecks = requiredSheets.map(function (spec) {
+  var ss;
+  try {
+    ss = getSpreadsheetForHealth_();
+  } catch (err) {
+    return {
+      ok: false,
+      error: "Failed to open spreadsheet",
+      errorCode: "SPREADSHEET_OPEN_FAILED",
+      errorMessage: String(err && err.message ? err.message : err).slice(
+        0,
+        300
+      ),
+      schemaVersion: CONTRACT_SCHEMA_VERSION,
+      supportedActions: getSupportedActions_(),
+      sheetChecks: [],
+      buildId: DEPLOYMENT_FINGERPRINT || null,
+      buildIdWarning: !DEPLOYMENT_FINGERPRINT,
+    };
+  }
+
+  const sheetChecks = SHEET_CONTRACT_SPEC.map(function (spec) {
     const entry = {
       key: spec.key,
       ok: false,
       foundSheetName: null,
-      missingColumns: [],
+      missingCriticalColumns: [],
+      missingOptionalColumns: [],
     };
 
     try {
-      const sheet = getSheetByPossibleNames_(spec.possibleNames);
+      const sheet = getSheetByNamesStrict_(ss, spec.possibleNames);
       entry.foundSheetName = sheet.getName();
       const headerMap = getHeaderMap_(sheet);
-      for (let i = 0; i < spec.requiredColumns.length; i++) {
-        const colCandidates = spec.requiredColumns[i];
-        try {
-          getRequiredColumn_(headerMap, colCandidates, sheet.getName());
-        } catch (err) {
-          const label = Array.isArray(colCandidates)
-            ? stringValue(colCandidates[0])
-            : stringValue(colCandidates);
-          if (label) entry.missingColumns.push(label);
-        }
-      }
-      entry.ok = entry.missingColumns.length === 0;
+
+      const missingCritical = collectMissing_(
+        headerMap,
+        spec.requiredColumnsCritical,
+        sheet.getName()
+      );
+      const missingOptional = collectMissing_(
+        headerMap,
+        spec.requiredColumnsOptional,
+        sheet.getName()
+      );
+
+      entry.missingCriticalColumns = missingCritical;
+      entry.missingOptionalColumns = missingOptional;
+      entry.ok = missingCritical.length === 0;
     } catch (err) {
       entry.error = String(err && err.message ? err.message : err);
-      entry.missingColumns = spec.requiredColumns.map(function (col) {
-        return Array.isArray(col) ? stringValue(col[0]) : stringValue(col);
-      });
+      entry.missingCriticalColumns = flattenColumnLabels_(
+        spec.requiredColumnsCritical
+      );
+      entry.missingOptionalColumns = flattenColumnLabels_(
+        spec.requiredColumnsOptional
+      );
     }
 
     return entry;
@@ -565,8 +536,10 @@ function healthCheck_() {
       return c.ok;
     }),
     schemaVersion: CONTRACT_SCHEMA_VERSION,
-    supportedActions: SUPPORTED_ACTIONS.slice(),
+    supportedActions: getSupportedActions_(),
     sheetChecks: sheetChecks,
+    buildId: DEPLOYMENT_FINGERPRINT || null,
+    buildIdWarning: !DEPLOYMENT_FINGERPRINT,
   };
 }
 
@@ -624,6 +597,8 @@ function jsonResponse(data, status) {
   if (body && typeof body === "object" && !Array.isArray(body)) {
     var incomingMeta =
       body.meta && typeof body.meta === "object" ? body.meta : {};
+    var statusCode =
+      typeof status === "number" ? status : incomingMeta.statusCode;
     body = Object.assign({}, body, {
       meta: Object.assign({}, incomingMeta, {
         traceId:
@@ -634,15 +609,13 @@ function jsonResponse(data, status) {
           __activeTraceContext && __activeTraceContext.operation
             ? __activeTraceContext.operation
             : incomingMeta.operation,
+        statusCode: statusCode,
       }),
     });
   }
 
   const output = ContentService.createTextOutput(JSON.stringify(body || {}));
   output.setMimeType(ContentService.MimeType.JSON);
-  if (typeof status === "number") {
-    output.setResponseCode(status);
-  }
   return output;
 }
 
@@ -1802,6 +1775,7 @@ function normalizeShiftForWrite_({
   payType,
   timestamp,
   workDate,
+    buildId: DEPLOYMENT_FINGERPRINT || null,
   direction,
   fixDate,
   fixTime,
@@ -1953,6 +1927,19 @@ function writeWorkLogFromNormalizedShift_(normalized, meta) {
   });
 
   logsSheet.appendRow(row);
+
+  try {
+    var workDateForUpsert = buildWorkDateForUpsert_(normalized);
+    if (workDateForUpsert) {
+      SHIFTS_upsertAroundWorkLog_(
+        stringValue(meta && meta.employeeId),
+        stringValue(normalized && normalized.jobTypeId),
+        workDateForUpsert
+      );
+    }
+  } catch (e) {
+    Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + e);
+  }
   return {
     ok: true,
     success: true,
@@ -1962,8 +1949,63 @@ function writeWorkLogFromNormalizedShift_(normalized, meta) {
   };
 }
 
+function refreshShiftsForWorkLog_(normalized, meta) {
+  const employeeId = stringValue(meta && meta.employeeId);
+  const workDateIso = toIsoDate_(
+    (normalized && normalized.workDate) ||
+      (normalized && normalized.fixDate) ||
+      (normalized && normalized.timestamp)
+  );
+  if (!employeeId || !workDateIso) return { ok: false, skipped: true };
+
+  const jobTypeId = stringValue(normalized && normalized.jobTypeId);
+
+  return rebuildShiftsForRange_({
+    dateFrom: workDateIso,
+    dateTo: workDateIso,
+    employeeId: employeeId,
+    jobTypeId: jobTypeId,
+  });
+}
+
 // Helpers
 function getEmployeesSheet_() {
+
+function buildWorkDateForUpsert_(normalized) {
+  if (!normalized) return null;
+
+  if (normalized.workDate instanceof Date) return normalized.workDate;
+  if (normalized.fixDate instanceof Date) return normalized.fixDate;
+  if (normalized.timestamp instanceof Date) return normalized.timestamp;
+
+  if (normalized.workDate) {
+    var d1 = new Date(normalized.workDate);
+    if (!isNaN(d1)) return d1;
+  }
+
+  if (normalized.fixDate && normalized.fixTime) {
+    var d2 = new Date(normalized.fixDate);
+    if (!isNaN(d2)) {
+      var p = String(normalized.fixTime || "").split(":");
+      if (p.length >= 2) {
+        var hh = parseInt(p[0], 10);
+        var mm = parseInt(p[1], 10);
+        if (!isNaN(hh)) d2.setHours(hh);
+        if (!isNaN(mm)) d2.setMinutes(mm);
+        d2.setSeconds(0);
+        d2.setMilliseconds(0);
+      }
+      if (!isNaN(d2)) return d2;
+    }
+  }
+
+  if (normalized.timestamp) {
+    var d3 = new Date(normalized.timestamp);
+    if (!isNaN(d3)) return d3;
+  }
+
+  return null;
+}
   try {
     return getSheetByPossibleNames_(EMPLOYEES_SHEET_NAMES);
   } catch (err) {
@@ -1977,7 +2019,7 @@ function getEmployeesSheet_() {
 }
 
 function findSheetByEmailHeader_() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = getSpreadsheet_();
   const sheets = ss.getSheets();
   for (let i = 0; i < sheets.length; i++) {
     const sheet = sheets[i];
@@ -1993,7 +2035,7 @@ function findSheetByEmailHeader_() {
 }
 
 function getSheetByPossibleNames_(names) {
-  const ss = SpreadsheetApp.getActive();
+  const ss = getSpreadsheet_();
   for (let i = 0; i < names.length; i++) {
     const sheet = ss.getSheetByName(names[i]);
     if (sheet) return sheet;
@@ -2002,9 +2044,63 @@ function getSheetByPossibleNames_(names) {
 }
 
 function getSheetOrThrow_(name) {
-  const sheet = SpreadsheetApp.getActive().getSheetByName(name);
+  const sheet = getSpreadsheet_().getSheetByName(name);
   if (!sheet) throw new Error("Sheet not found: " + name);
   return sheet;
+}
+
+function getSpreadsheet_() {
+  if (SPREADSHEET_ID) return SpreadsheetApp.openById(SPREADSHEET_ID);
+  const active = SpreadsheetApp.getActive();
+  if (active) return active;
+  throw new Error("Missing SPREADSHEET_ID and no active spreadsheet");
+}
+
+function getSpreadsheetForHealth_() {
+  if (!SPREADSHEET_ID) {
+    throw new Error("Missing SPREADSHEET_ID");
+  }
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (err) {
+    var e = new Error(
+      "SPREADSHEET_OPEN_FAILED: " +
+        (err && err.message ? String(err.message) : String(err))
+    );
+    e.code = "SPREADSHEET_OPEN_FAILED";
+    throw e;
+  }
+}
+
+function getSheetByNamesStrict_(ss, names) {
+  for (var i = 0; i < names.length; i++) {
+    var sheet = ss.getSheetByName(names[i]);
+    if (sheet) return sheet;
+  }
+  throw new Error("Sheet not found: " + names.join(", "));
+}
+
+function collectMissing_(headerMap, requiredMatrix, sheetName) {
+  var missing = [];
+  if (!requiredMatrix || !requiredMatrix.length) return missing;
+  for (var i = 0; i < requiredMatrix.length; i++) {
+    var colCandidates = requiredMatrix[i];
+    try {
+      getRequiredColumn_(headerMap, colCandidates, sheetName);
+    } catch (err) {
+      var label = Array.isArray(colCandidates)
+        ? stringValue(colCandidates[0])
+        : stringValue(colCandidates);
+      if (label) missing.push(label);
+    }
+  }
+  return missing;
+}
+
+function flattenColumnLabels_(matrix) {
+  return (matrix || []).map(function (col) {
+    return Array.isArray(col) ? stringValue(col[0]) : stringValue(col);
+  });
 }
 
 function getHeaderMap_(sheet, headerRow) {
@@ -2087,6 +2183,32 @@ function stringValue(value) {
   return String(value).trim();
 }
 
+function toIsoDate_(val) {
+  if (!val) return "";
+  if (
+    Object.prototype.toString.call(val) === "[object Date]" &&
+    !isNaN(val.getTime())
+  ) {
+    const y = val.getFullYear();
+    const m = ("0" + (val.getMonth() + 1)).slice(-2);
+    const d = ("0" + val.getDate()).slice(-2);
+    return y + "-" + m + "-" + d;
+  }
+
+  const s = stringValue(val);
+  if (!s) return "";
+
+  const mIso = s.match(/^(\d{4})[\/.\-](\d{2})[\/.\-](\d{2})$/);
+  if (mIso) return mIso[1] + "-" + mIso[2] + "-" + mIso[3];
+
+  const mDmy = s.match(/^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})$/);
+  if (mDmy) return mDmy[3] + "-" + mDmy[2] + "-" + mDmy[1];
+
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) return toIsoDate_(parsed);
+  return s;
+}
+
 function linkJobTypeToEmployee_(
   employeeId,
   employeeName,
@@ -2167,4 +2289,212 @@ function ensureEmployeeSizeColumns_(sheet, headers) {
   }
   const newHeaders = getHeaderMap_(sheet);
   return { sizeCol, sourceCol, headers: newHeaders };
+}
+
+function getShiftsSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sheet;
+  try {
+    sheet = getSheetOrThrow_("משמרות");
+  } catch (err) {
+    sheet = ss.insertSheet("משמרות");
+  }
+
+  const headers = [
+    "ID משמרת",
+    "מזהה עובד",
+    "שם מלא",
+    "תאריך משמרת",
+    "שעת התחלה",
+    "שעת סיום",
+    "ID סוג עבודה",
+    "סוג עבודה",
+    "מחלקה",
+    "שעות",
+    "שעות לשכר",
+    "כמות יחידות",
+    "סטטוס משמרת",
+    "הערות",
+    "מקור דיווחים",
+  ];
+
+  const lastCol = Math.max(sheet.getLastColumn(), headers.length);
+  const currentHeaders =
+    lastCol > 0
+      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+      : [];
+  const map = {};
+  for (let i = 0; i < currentHeaders.length; i++) {
+    const h = stringValue(currentHeaders[i]);
+    if (h) map[h] = i + 1;
+  }
+
+  if (!map["שעות לשכר"]) {
+    const hoursCol = map["שעות"];
+    if (hoursCol) {
+      sheet.insertColumnAfter(hoursCol);
+    }
+  }
+
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+
+  return sheet;
+}
+
+function listShifts_(payload) {
+  const filters = payload || {};
+  const sheet = getShiftsSheet_();
+  const headerMap = getHeaderMap_(sheet);
+  const sheetName = sheet.getName();
+
+  const shiftIdCol = getRequiredColumn_(headerMap, ["ID משמרת"], sheetName);
+  const employeeCol = getRequiredColumn_(
+    headerMap,
+    ["מזהה עובד", "ID עובד"],
+    sheetName
+  );
+  const employeeNameCol = getOptionalColumn_(headerMap, ["שם מלא"]);
+  const workDateCol = getRequiredColumn_(headerMap, ["תאריך משמרת"], sheetName);
+  const startCol = getRequiredColumn_(headerMap, ["שעת התחלה"], sheetName);
+  const endCol = getRequiredColumn_(headerMap, ["שעת סיום"], sheetName);
+  const jobTypeIdCol = getRequiredColumn_(
+    headerMap,
+    ["ID סוג עבודה", "ID סוגי עבודה"],
+    sheetName
+  );
+  const jobNameCol = getOptionalColumn_(headerMap, ["סוג עבודה", "סוגי עבודה"]);
+  const deptCol = getOptionalColumn_(headerMap, ["מחלקה", "מחלקות"]);
+  const hoursCol = getRequiredColumn_(headerMap, ["שעות"], sheetName);
+  const payCol = getRequiredColumn_(headerMap, ["שעות לשכר"], sheetName);
+  const unitsCol = getOptionalColumn_(headerMap, ["כמות יחידות", "דיווח יחידות"]);
+  const statusCol = getRequiredColumn_(headerMap, ["סטטוס משמרת"], sheetName);
+  const noteCol = getOptionalColumn_(headerMap, ["הערות", "הערה"], sheetName);
+  const rawIdsCol = getOptionalColumn_(headerMap, ["מקור דיווחים"], sheetName);
+
+  const dateFrom = toIsoDate_(filters.dateFrom || "");
+  const dateTo = toIsoDate_(filters.dateTo || "");
+  const employeeFilter = stringValue(filters.employeeId);
+  const statusFilters = Array.isArray(filters.statuses)
+    ? filters.statuses
+        .map(function (s) {
+          return stringValue(s).toUpperCase();
+        })
+        .filter(function (s) {
+          return !!s;
+        })
+    : [];
+  const jobTypeFilters = Array.isArray(filters.jobTypeIds)
+    ? filters.jobTypeIds
+        .map(function (s) {
+          return stringValue(s);
+        })
+        .filter(function (s) {
+          return !!s;
+        })
+    : [];
+
+  var limit = Number(filters.limit);
+  if (!isFinite(limit) || limit <= 0) limit = 200;
+  var offset = Number(filters.offset);
+  if (!isFinite(offset) || offset < 0) offset = 0;
+
+  function parseNumberOrNull_(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const n = Number(value);
+    return isNaN(n) ? null : n;
+  }
+
+  function formatTime_(value) {
+    if (
+      Object.prototype.toString.call(value) === "[object Date]" &&
+      !isNaN(value.getTime())
+    ) {
+      const hh = ("0" + value.getHours()).slice(-2);
+      const mm = ("0" + value.getMinutes()).slice(-2);
+      return hh + ":" + mm;
+    }
+    const s = stringValue(value);
+    if (!s) return "";
+    const m = s.match(/^(\d{1,2}):(\d{2})/);
+    if (m) return ("0" + m[1]).slice(-2) + ":" + m[2];
+    return s;
+  }
+
+  const values = sheet.getDataRange().getValues();
+  const results = [];
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+
+    const workDate = toIsoDate_(row[workDateCol - 1]);
+    if (dateFrom && workDate && workDate < dateFrom) continue;
+    if (dateTo && workDate && workDate > dateTo) continue;
+
+    const employeeId = stringValue(row[employeeCol - 1]);
+    if (employeeFilter && employeeId !== employeeFilter) continue;
+
+    const statusRaw = stringValue(row[statusCol - 1]);
+    const statusNorm = statusRaw.toUpperCase();
+    if (statusFilters.length && statusFilters.indexOf(statusNorm) === -1)
+      continue;
+
+    const jobTypeId = stringValue(row[jobTypeIdCol - 1]);
+    if (jobTypeFilters.length && jobTypeFilters.indexOf(jobTypeId) === -1)
+      continue;
+
+    const hoursDecimal = parseNumberOrNull_(row[hoursCol - 1]);
+    const payHours = parseNumberOrNull_(row[payCol - 1]);
+    const unitsVal = unitsCol ? parseNumberOrNull_(row[unitsCol - 1]) : null;
+
+    results.push({
+      shiftId: stringValue(row[shiftIdCol - 1]),
+      employeeId: employeeId,
+      employeeName: employeeNameCol
+        ? stringValue(row[employeeNameCol - 1])
+        : "",
+      workDate: workDate,
+      startTime: formatTime_(row[startCol - 1]),
+      endTime: formatTime_(row[endCol - 1]),
+      jobTypeId: jobTypeId,
+      jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
+      department: deptCol ? stringValue(row[deptCol - 1]) : "",
+      hoursDecimal: hoursDecimal,
+      payHours: payHours,
+      units: unitsVal,
+      status: statusRaw,
+      note: noteCol ? stringValue(row[noteCol - 1]) : "",
+      rawLogIds: rawIdsCol ? stringValue(row[rawIdsCol - 1]) : "",
+    });
+  }
+
+  const total = results.length;
+  const sliced = results.slice(offset, offset + limit);
+  return { shifts: sliced, total: total };
+}
+
+function rebuildShiftsDaily_() {
+  const today = new Date();
+  const dateTo = toIsoDate_(today);
+  const dateFromDate = new Date(today.getTime());
+  dateFromDate.setDate(today.getDate() - 31);
+  const dateFrom = toIsoDate_(dateFromDate);
+  return rebuildShiftsForRange_({ dateFrom: dateFrom, dateTo: dateTo });
+}
+
+function ensureDailyShiftsRebuildTrigger_() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const exists = triggers.some(function (t) {
+    return (
+      t.getHandlerFunction && t.getHandlerFunction() === "rebuildShiftsDaily_"
+    );
+  });
+  if (exists) return { ok: true, status: "exists" };
+
+  ScriptApp.newTrigger("rebuildShiftsDaily_")
+    .timeBased()
+    .atHour(4)
+    .everyDays(1)
+    .create();
+
+  return { ok: true, status: "created" };
 }
