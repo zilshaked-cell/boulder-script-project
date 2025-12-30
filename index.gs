@@ -2511,6 +2511,212 @@ function listShifts_(payload) {
   return { shifts: sliced, total: total };
 }
 
+function SHIFTS_getHourlyOverlaps(filter) {
+  const src = filter && typeof filter === "object" ? filter : {};
+
+  const dateFrom = toIsoDate_(src.dateFrom || "");
+  const dateTo = toIsoDate_(src.dateTo || "");
+  const employeeId = stringValue(src.employeeId || "");
+  const statuses = Array.isArray(src.statuses)
+    ? src.statuses
+        .map(function (s) {
+          return stringValue(s).toUpperCase();
+        })
+        .filter(function (s) {
+          return !!s;
+        })
+    : [];
+  const jobTypeIds = Array.isArray(src.jobTypeIds)
+    ? src.jobTypeIds
+        .map(function (s) {
+          return stringValue(s);
+        })
+        .filter(function (s) {
+          return !!s;
+        })
+    : [];
+
+  let bucketSizeMinutes = Number(src.bucketSizeMinutes);
+  if (!isFinite(bucketSizeMinutes) || bucketSizeMinutes <= 0)
+    bucketSizeMinutes = 60;
+
+  function parseIsoDateLocal_(iso) {
+    const s = stringValue(iso);
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    if (!isFinite(y) || !isFinite(mo) || !isFinite(d)) return null;
+    return new Date(y, mo - 1, d, 0, 0, 0, 0);
+  }
+
+  function parseHm_(value) {
+    const s = stringValue(value);
+    const m = s.match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (!isFinite(hh) || !isFinite(mm)) return null;
+    if (hh < 0 || hh > 23) return null;
+    if (mm < 0 || mm > 59) return null;
+    return { hh: hh, mm: mm };
+  }
+
+  function makeDateTime_(isoDate, hm) {
+    const base = parseIsoDateLocal_(isoDate);
+    if (!base || !hm) return null;
+    base.setHours(hm.hh, hm.mm, 0, 0);
+    return base;
+  }
+
+  function fmtDateTime_(dt) {
+    try {
+      return Utilities.formatDate(
+        dt,
+        Session.getScriptTimeZone(),
+        "yyyy-MM-dd'T'HH:mm:ss"
+      );
+    } catch (_err) {
+      return String(dt);
+    }
+  }
+
+  const shiftsResponse = listShifts_({
+    dateFrom: dateFrom,
+    dateTo: dateTo,
+    employeeId: employeeId || undefined,
+    statuses: statuses.length ? statuses : undefined,
+    jobTypeIds: jobTypeIds.length ? jobTypeIds : undefined,
+    limit: 100000,
+    offset: 0,
+  });
+
+  const shifts =
+    shiftsResponse && Array.isArray(shiftsResponse.shifts)
+      ? shiftsResponse.shifts
+      : [];
+
+  const bucketMs = bucketSizeMinutes * 60 * 1000;
+  const bucketMap = Object.create(null);
+
+  let missingTimes = 0;
+  let invalidTimes = 0;
+  let crossMidnight = 0;
+
+  function getOrCreateBucket_(bucketStartMs) {
+    const key = String(bucketStartMs);
+    if (bucketMap[key]) return bucketMap[key];
+
+    const start = new Date(bucketStartMs);
+    const end = new Date(bucketStartMs + bucketMs);
+    const bucket = {
+      bucketStart: fmtDateTime_(start),
+      bucketEnd: fmtDateTime_(end),
+      count: 0,
+      byJob: [],
+      __byJobMap: Object.create(null),
+    };
+    bucketMap[key] = bucket;
+    return bucket;
+  }
+
+  function bumpJob_(bucket, jobTypeId) {
+    const jobId = stringValue(jobTypeId);
+    if (!jobId) return;
+    const cur = bucket.__byJobMap[jobId] || 0;
+    bucket.__byJobMap[jobId] = cur + 1;
+  }
+
+  for (let i = 0; i < shifts.length; i++) {
+    const sh = shifts[i] || {};
+    const isoDate = stringValue(sh.workDate);
+    const startHm = parseHm_(sh.startTime);
+    const endHm = parseHm_(sh.endTime);
+    if (!isoDate || !startHm || !endHm) {
+      missingTimes++;
+      continue;
+    }
+
+    const startDt = makeDateTime_(isoDate, startHm);
+    const endDt = makeDateTime_(isoDate, endHm);
+    if (!startDt || !endDt) {
+      invalidTimes++;
+      continue;
+    }
+
+    const startMs = startDt.getTime();
+    const endMs = endDt.getTime();
+    if (!isFinite(startMs) || !isFinite(endMs)) {
+      invalidTimes++;
+      continue;
+    }
+
+    if (endMs <= startMs) {
+      // Cross-midnight or invalid; the normalized shifts sheet should ideally avoid this.
+      crossMidnight++;
+      continue;
+    }
+
+    const jobTypeId = stringValue(sh.jobTypeId);
+
+    // Walk buckets that overlap the shift interval.
+    let cursor = Math.floor(startMs / bucketMs) * bucketMs;
+    const lastBucketStart = Math.floor((endMs - 1) / bucketMs) * bucketMs;
+    while (cursor <= lastBucketStart) {
+      const bucketStart = cursor;
+      const bucketEnd = cursor + bucketMs;
+      const overlapMs = Math.min(endMs, bucketEnd) - Math.max(startMs, bucketStart);
+      if (overlapMs > 0) {
+        const bucket = getOrCreateBucket_(bucketStart);
+        bucket.count += 1;
+        bumpJob_(bucket, jobTypeId);
+      }
+      cursor += bucketMs;
+    }
+  }
+
+  const buckets = Object.keys(bucketMap)
+    .map(function (k) {
+      return bucketMap[k];
+    })
+    .sort(function (a, b) {
+      // bucketStart is formatted consistently; lexical compare works.
+      return String(a.bucketStart).localeCompare(String(b.bucketStart));
+    })
+    .map(function (b) {
+      const jobIds = Object.keys(b.__byJobMap);
+      b.byJob = jobIds
+        .map(function (jobId) {
+          return { jobTypeId: jobId, count: b.__byJobMap[jobId] || 0 };
+        })
+        .sort(function (x, y) {
+          return String(x.jobTypeId).localeCompare(String(y.jobTypeId));
+        });
+      delete b.__byJobMap;
+      return b;
+    });
+
+  return {
+    buckets: buckets,
+    totalBuckets: buckets.length,
+    totalShifts: shifts.length,
+    skipped: {
+      missingTimes: missingTimes,
+      invalidTimes: invalidTimes,
+      crossMidnight: crossMidnight,
+    },
+    filter: {
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
+      employeeId: employeeId || null,
+      statuses: statuses,
+      jobTypeIds: jobTypeIds,
+      bucketSizeMinutes: bucketSizeMinutes,
+    },
+  };
+}
+
 function rebuildShiftsDaily_() {
   const today = new Date();
   const dateTo = toIsoDate_(today);
