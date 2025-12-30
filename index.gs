@@ -268,41 +268,6 @@ function makeTraceId_() {
   var shortUuid = Utilities.getUuid().split("-")[0];
   return new Date().getTime().toString(36) + "-" + shortUuid;
 }
-    var handlers = getActionRegistry_();
-    var handler = handlers[action];
-
-    if (!handler) {
-      if (logger) logger.warn("unknown-action", { action: action });
-      return jsonResponse({ ok: false, error: "Unknown action" }, 400);
-    }
-
-    var result = handler(payload || {}, logger);
-    if (logger) logger.info("response", { action: action });
-    return jsonResponse(withOk_(result));
-    source: "apps-script-module",
-    layer: "apps-script-module",
-    actor: null,
-    version: "1.0",
-    if (!SPREADSHEET_ID) {
-      return {
-        ok: false,
-        error: "Missing SPREADSHEET_ID",
-        schemaVersion: CONTRACT_SCHEMA_VERSION,
-        supportedActions: getSupportedActions_(),
-        sheetChecks: [],
-        buildId: DEPLOYMENT_FINGERPRINT || null,
-      };
-    }
-
-    const sheetChecks = SHEET_CONTRACT_SPEC.map(function (spec) {
-  "מנהל מחליט": "managerDecision",
-  תז: "nationalId",
-  "סוג בקשה": "requestType",
-  "סטטוס משמרת": "status",
-  "סטטוס בקשה": "status",
-  "הערות למשמרת": "note",
-  "מקור דיווחים": "rawLogIds",
-};
 
 function doGet(e) {
   const params = (e && e.parameter) || {};
@@ -1850,7 +1815,6 @@ function normalizeShiftForWrite_({
   payType,
   timestamp,
   workDate,
-    buildId: DEPLOYMENT_FINGERPRINT || null,
   direction,
   fixDate,
   fixTime,

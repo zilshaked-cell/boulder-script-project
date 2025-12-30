@@ -314,16 +314,8 @@ var OPT = OPT || {};
     return buildCache_().paysById[key] || null;
   }
 
-  function getPaymentByName_(name) {
+  function getJobByName_(name) {
     var key = normKey_(name);
-    if (!key) return null;
-    return buildCache_().paysByName[key] || null;
-  }
-  function getPaymentByName_(name) {
-    var key = normKey_(name);
-    if (!key) return null;
-    return buildCache_().paysByName[key] || null;
-  }
     if (!key) return null;
     return buildCache_().jobsByName[key] || null;
   }
