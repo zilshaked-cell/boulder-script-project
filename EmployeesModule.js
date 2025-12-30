@@ -1656,18 +1656,76 @@ function EMP_saveEmployeePayload(payload) {
       return { ok: false, error: "payload לא תקין מה-Sidebar" };
     }
 
+    var saveResult;
     if (
       typeof EMP !== "undefined" &&
       EMP &&
       typeof EMP.saveEmployeePayload === "function"
     ) {
-      return EMP.saveEmployeePayload(payload);
-    }
-    if (typeof saveEmployeePayload_ === "function") {
-      return saveEmployeePayload_(payload);
+      saveResult = EMP.saveEmployeePayload(payload);
+    } else if (typeof saveEmployeePayload_ === "function") {
+      saveResult = saveEmployeePayload_(payload);
+    } else {
+      saveResult = { ok: false, error: "saveEmployeePayload_ missing" };
     }
 
-    return { ok: false, error: "saveEmployeePayload_ missing" };
+    // Phase 3: After a successful sidebar save, backfill job/pay IDs for this employee.
+    // Backfill failures must NOT fail the save.
+    try {
+      if (saveResult && saveResult.ok) {
+        var employeeId = "";
+        if (saveResult.employeeId)
+          employeeId = String(saveResult.employeeId).trim();
+        else if (saveResult.id) employeeId = String(saveResult.id).trim();
+        else if (payload && payload.id) employeeId = String(payload.id).trim();
+
+        if (
+          employeeId &&
+          typeof EMP_backfillJobAndPaymentIdsForEmployee === "function"
+        ) {
+          var backfillResult =
+            EMP_backfillJobAndPaymentIdsForEmployee(employeeId);
+          saveResult.backfill = {
+            ok: !!(backfillResult && backfillResult.ok),
+            updatedRows: (backfillResult && backfillResult.updatedRows) || [],
+            missingJobs: (backfillResult && backfillResult.missingJobs) || [],
+            missingPayments:
+              (backfillResult && backfillResult.missingPayments) || [],
+            error: (backfillResult && backfillResult.error) || null,
+          };
+
+          if (saveResult.backfill.ok === false && saveResult.backfill.error) {
+            Logger.log(
+              "[EMP_saveEmployeePayload] backfill failed for employeeId=%s: %s",
+              employeeId,
+              saveResult.backfill.error
+            );
+          }
+        }
+      }
+    } catch (backfillErr) {
+      // Never fail the save due to backfill issues.
+      try {
+        Logger.log(
+          "[EMP_saveEmployeePayload] backfill threw: %s",
+          backfillErr && backfillErr.message ? backfillErr.message : backfillErr
+        );
+      } catch (_ignored) {}
+      if (saveResult && saveResult.ok) {
+        saveResult.backfill = {
+          ok: false,
+          updatedRows: [],
+          missingJobs: [],
+          missingPayments: [],
+          error:
+            backfillErr && backfillErr.message
+              ? backfillErr.message
+              : String(backfillErr),
+        };
+      }
+    }
+
+    return saveResult;
   } catch (err) {
     return {
       ok: false,
