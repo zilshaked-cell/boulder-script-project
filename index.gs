@@ -232,6 +232,10 @@ function getActionRegistry_() {
     "shifts.rebuildRange": function (payload, _logger) {
       return rebuildShiftsForRange_(payload);
     },
+    "shifts.getHourlyOverlaps": function (payload, _logger) {
+      var filter = (payload && payload.filter) || {};
+      return SHIFTS_getHourlyOverlaps(filter);
+    },
     "requests.approve": function (payload, _logger) {
       return handleRequestApprove_(payload);
     },
@@ -306,6 +310,8 @@ function doGet(e) {
     params.action || (params.ping ? "ping" : params.shifts ? "shifts" : "");
   try {
     switch (action) {
+      case "health":
+        return jsonResponse(healthCheck_());
       case "ping":
         return jsonResponse(
           withOk_({ pong: true, timestamp: new Date().toISOString() })
@@ -337,24 +343,88 @@ function doGet(e) {
   }
 }
 
-function doPost(e) {
-  const parsed = parseBody(e);
-  const body = parsed.body || {};
-  const action = stringValue(body.action);
-  const payload = body.payload || {};
-  const traceContext = createScriptTraceContext_(body.meta, action);
-  __activeTraceContext = traceContext;
-  const logger = createScriptLogger_(traceContext);
+// Ensure the web-app endpoints (doGet/doPost) never return HTML.
+// Any unexpected exception should be converted into a JSON payload.
+function createScriptTraceContext_(incomingMeta, action) {
+  var meta = incomingMeta && typeof incomingMeta === "object" ? incomingMeta : {};
+  var traceId = stringValue(meta.traceId) || makeTraceId_();
+  var opFromClient = stringValue(meta.operation);
+  var operation = opFromClient || mapActionToOperation_(stringValue(action));
 
-  if (!body.meta || !body.meta.traceId) {
-    logger.warn(
-      "start",
-      { reason: "Missing traceId from client" },
-      "MISSING_TRACE_ID"
-    );
+  return {
+    traceId: traceId,
+    operation: operation || "APPS_SCRIPT_PROXY_GENERIC",
+    source: stringValue(meta.source) || "apps-script-webapp",
+    actor: meta.actor !== undefined ? meta.actor : null,
+    version: stringValue(meta.version) || "1.0",
+  };
+}
+
+function createScriptLogger_(traceContext) {
+  var ctx = traceContext || { traceId: makeTraceId_(), operation: "UNKNOWN" };
+
+  function emit(level, step, details, errorCode, err) {
+    var payload = {
+      timestamp: new Date().toISOString(),
+      traceId: ctx.traceId,
+      operation: ctx.operation,
+      layer: "apps-script-router",
+      step: step || "log",
+      severity: level,
+      actor: ctx.actor || null,
+      errorCode: errorCode || null,
+      details: details || null,
+      errorMessage: err && err.message ? String(err.message) : undefined,
+    };
+
+    // Prefer console logging; sheet logging is optional and may not be configured.
+    if (level === "error") {
+      console.error("[trace]", payload);
+    } else if (level === "warn") {
+      console.warn("[trace]", payload);
+    } else {
+      console.log("[trace]", payload);
+    }
   }
 
+  return {
+    context: ctx,
+    debug: function (step, details) {
+      emit("debug", step, details);
+    },
+    info: function (step, details) {
+      emit("info", step, details);
+    },
+    warn: function (step, details, errorCode) {
+      emit("warn", step, details, errorCode);
+    },
+    error: function (step, details, errorCode, err) {
+      emit("error", step, details, errorCode, err);
+    },
+  };
+}
+
+function doPost(e) {
+  var logger = null;
+  var action = "";
+
   try {
+    const parsed = parseBody(e);
+    const body = parsed.body || {};
+    action = stringValue(body.action);
+    const payload = body.payload || {};
+    const traceContext = createScriptTraceContext_(body.meta, action);
+    __activeTraceContext = traceContext;
+    logger = createScriptLogger_(traceContext);
+
+    if (!body.meta || !body.meta.traceId) {
+      logger.warn(
+        "start",
+        { reason: "Missing traceId from client" },
+        "MISSING_TRACE_ID"
+      );
+    }
+
     if (parsed.error) {
       logger.warn(
         "validate-input",
@@ -386,15 +456,20 @@ function doPost(e) {
     logger.info("response", { action: action });
     return response;
   } catch (err) {
-    logger.error(
-      "error",
-      {
-        action: action,
-        message: err && err.message ? err.message : "Unexpected error",
-      },
-      "APPS_SCRIPT_EXCEPTION",
-      err
-    );
+    if (logger && logger.error) {
+      logger.error(
+        "error",
+        {
+          action: action,
+          message: err && err.message ? err.message : "Unexpected error",
+        },
+        "APPS_SCRIPT_EXCEPTION",
+        err
+      );
+    } else {
+      console.error("[apps-script] doPost failed", err);
+    }
+
     return jsonResponse(
       {
         ok: false,
