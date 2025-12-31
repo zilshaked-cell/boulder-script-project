@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <base target="_top" />
+    <title>חפיפות בשכר שעתי</title>
+    <style>
+      body {
+        font: 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        padding: 16px;
+      }
+      h2 {
+        margin: 0 0 12px;
+      }
+      h3 {
+        margin: 18px 0 8px;
+      }
+      .row {
+        margin: 8px 0;
+      }
+      label {
+        display: inline-block;
+        min-width: 84px;
+      }
+      input,
+      select,
+      button {
+        font: inherit;
+        padding: 6px 10px;
+      }
+      button {
+        border: 0;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .primary {
+        background: #1a73e8;
+        color: #fff;
+      }
+      .ghost {
+        background: #eee;
+      }
+      .status {
+        margin-top: 10px;
+        padding: 8px 10px;
+        background: #f6f6f6;
+        border-radius: 8px;
+        color: #333;
+        min-height: 20px;
+      }
+      .status.ok {
+        background: #eef8f1;
+        color: #0a7;
+      }
+      .status.err {
+        background: #fdeeee;
+        color: #c00;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 6px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 6px 8px;
+        vertical-align: top;
+      }
+      th {
+        background: #fafafa;
+        text-align: right;
+        white-space: nowrap;
+      }
+      .muted {
+        color: #666;
+      }
+      .filters {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px 14px;
+        align-items: end;
+      }
+      .filters .wide {
+        grid-column: 1 / -1;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>חפיפות בשכר שעתי</h2>
+
+    <div class="filters">
+      <div class="row">
+        <label for="dateFrom">מתאריך</label>
+        <input type="date" id="dateFrom" />
+      </div>
+      <div class="row">
+        <label for="dateTo">עד תאריך</label>
+        <input type="date" id="dateTo" />
+      </div>
+
+      <div class="row wide">
+        <label for="jobTypeId">סוג עבודה</label>
+        <select id="jobTypeId">
+          <option value="">כל סוגי העבודה</option>
+        </select>
+        <div class="muted" style="margin-top: 6px">
+          אפשר לבחור טווח של עד 31 ימים.
+        </div>
+      </div>
+
+      <div class="row wide actions">
+        <button class="ghost" onclick="setCurrentMonthRange()">
+          חודש נוכחי
+        </button>
+        <button class="ghost" onclick="setLastWeekRange()">שבוע אחרון</button>
+        <button class="primary" onclick="loadOverlaps()">רענן</button>
+        <button class="ghost" onclick="google.script.host.close()">סגור</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">מוכן.</div>
+
+    <h3>סיכום לפי סוג עבודה</h3>
+    <table id="summaryTable">
+      <thead>
+        <tr>
+          <th>סוג עבודה</th>
+          <th>מספר ימים עם חפיפות</th>
+          <th>סה״כ דקות חפיפה</th>
+          <th>מספר עובדים מעורבים</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h3>חפיפות לפי תאריך</h3>
+    <table id="overlapsTable">
+      <thead>
+        <tr>
+          <th>תאריך</th>
+          <th>סוג עבודה</th>
+          <th>שעת התחלת חפיפה</th>
+          <th>שעת סיום חפיפה</th>
+          <th>משך (דקות)</th>
+          <th>עובד 1</th>
+          <th>עובד 2</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <script>
+      function pad2(n) {
+        n = Number(n) || 0;
+        return (n < 10 ? "0" : "") + String(n);
+      }
+
+      function toDateInputValue(d) {
+        if (!d || isNaN(d.getTime())) return "";
+        return (
+          d.getFullYear() +
+          "-" +
+          pad2(d.getMonth() + 1) +
+          "-" +
+          pad2(d.getDate())
+        );
+      }
+
+      function parseDate(val) {
+        if (!val) return null;
+        if (val instanceof Date && !isNaN(val.getTime())) return val;
+        var d = new Date(val);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      function minutesBetween(a, b) {
+        var d1 = parseDate(a);
+        var d2 = parseDate(b);
+        if (!d1 || !d2) return 0;
+        var ms = d2.getTime() - d1.getTime();
+        if (ms <= 0) return 0;
+        return Math.round(ms / 60000);
+      }
+
+      function setStatus(text, kind) {
+        var el = document.getElementById("status");
+        el.className = "status" + (kind ? " " + kind : "");
+        el.textContent = text || "";
+      }
+
+      function clearTables() {
+        document.querySelector("#summaryTable tbody").innerHTML = "";
+        document.querySelector("#overlapsTable tbody").innerHTML = "";
+      }
+
+      function setCurrentMonthRange() {
+        var now = new Date();
+        var from = new Date(now.getFullYear(), now.getMonth(), 1);
+        var to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        document.getElementById("dateFrom").value = toDateInputValue(from);
+        document.getElementById("dateTo").value = toDateInputValue(to);
+      }
+
+      function setLastWeekRange() {
+        var now = new Date();
+        var to = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        var from = new Date(to.getTime());
+        from.setDate(from.getDate() - 6);
+        document.getElementById("dateFrom").value = toDateInputValue(from);
+        document.getElementById("dateTo").value = toDateInputValue(to);
+      }
+
+      function buildFilterFromUI() {
+        var dateFrom = document.getElementById("dateFrom").value;
+        var dateTo = document.getElementById("dateTo").value;
+        var jobTypeId = document.getElementById("jobTypeId").value;
+        return {
+          dateFrom: dateFrom || null,
+          dateTo: dateTo || null,
+          jobTypeId: jobTypeId || null,
+        };
+      }
+
+      function loadOverlaps() {
+        setStatus("טוען חפיפות…");
+        clearTables();
+
+        var filter = buildFilterFromUI();
+        google.script.run
+          .withSuccessHandler(onOverlapsLoaded)
+          .withFailureHandler(onOverlapsError)
+          .SHIFTS_getHourlyOverlaps(filter);
+      }
+
+      function onOverlapsLoaded(result) {
+        if (!result) {
+          setStatus("אירעה שגיאה לא צפויה (result ריק)", "err");
+          return;
+        }
+
+        if (result.ok === false) {
+          setStatus(result.message || "הבקשה נכשלה", "err");
+          return;
+        }
+
+        var overlaps = Array.isArray(result.overlaps) ? result.overlaps : [];
+        var summary = Array.isArray(result.summaryByJob)
+          ? result.summaryByJob
+          : [];
+        var skipped = Number(result.crossMidnightSkippedCount || 0);
+
+        var statusText =
+          "נמצאו " +
+          overlaps.length +
+          " חפיפות, " +
+          summary.length +
+          " סוגי עבודה.";
+        if (skipped)
+          statusText += " " + skipped + " משמרות שחצו חצות לא נבדקו.";
+        if (!overlaps.length) statusText = "לא נמצאו חפיפות בטווח שנבחר.";
+        setStatus(statusText, overlaps.length ? "ok" : "");
+
+        // Render summary table (server source of truth)
+        var summaryTbody = document.querySelector("#summaryTable tbody");
+        summary.forEach(function (s) {
+          var tr = document.createElement("tr");
+          var jobName = (s && s.jobTypeName) || (s && s.jobTypeId) || "";
+
+          // Prefer explicit contract names; tolerate older names without recomputing
+          var days =
+            s && s.overlappingDays !== undefined
+              ? Number(s.overlappingDays || 0)
+              : Number(s.daysWithOverlapsCount || 0);
+
+          var minutes =
+            s && s.totalOverlapMinutes !== undefined
+              ? Number(s.totalOverlapMinutes || 0)
+              : s && s.totalMinutes !== undefined
+              ? Number(s.totalMinutes || 0)
+              : 0;
+
+          var employees =
+            s && s.distinctEmployeesCount !== undefined
+              ? Number(s.distinctEmployeesCount || 0)
+              : Number(s.employeesInvolvedCount || 0);
+
+          tr.innerHTML =
+            "<td>" +
+            escapeHtml(jobName) +
+            "</td>" +
+            "<td>" +
+            days +
+            "</td>" +
+            "<td>" +
+            Math.round(minutes) +
+            "</td>" +
+            "<td>" +
+            employees +
+            "</td>";
+          summaryTbody.appendChild(tr);
+        });
+
+        // Render overlaps table
+        var overlapsTbody = document.querySelector("#overlapsTable tbody");
+        overlaps.forEach(function (ov) {
+          var tr = document.createElement("tr");
+          var emps = (ov && ov.employees) || [];
+          var e1 = emps[0] || {};
+          var e2 = emps[1] || {};
+
+          var dur = minutesBetween(
+            ov.overlapStartDateTime,
+            ov.overlapEndDateTime
+          );
+
+          tr.innerHTML =
+            "<td>" +
+            escapeHtml(ov.date || "") +
+            "</td>" +
+            "<td>" +
+            escapeHtml(ov.jobTypeName || ov.jobTypeId || "") +
+            "</td>" +
+            "<td>" +
+            escapeHtml(ov.overlapStartTime || "") +
+            "</td>" +
+            "<td>" +
+            escapeHtml(ov.overlapEndTime || "") +
+            "</td>" +
+            "<td>" +
+            dur +
+            "</td>" +
+            "<td>" +
+            formatEmployeeCell(e1) +
+            "</td>" +
+            "<td>" +
+            formatEmployeeCell(e2) +
+            "</td>";
+
+          overlapsTbody.appendChild(tr);
+        });
+      }
+
+      function onOverlapsError(err) {
+        setStatus("שגיאה בטעינת נתונים מהשרת", "err");
+        try {
+          console.log(err);
+        } catch (e) {}
+      }
+
+      function formatEmployeeCell(e) {
+        if (!e) return "";
+        var name = e.employeeName || e.employeeId || "";
+        var stD = parseDate(e.startDateTime);
+        var enD = parseDate(e.endDateTime);
+        var span = "";
+        if (stD && enD) {
+          span =
+            " (" +
+            pad2(stD.getHours()) +
+            ":" +
+            pad2(stD.getMinutes()) +
+            "–" +
+            pad2(enD.getHours()) +
+            ":" +
+            pad2(enD.getMinutes()) +
+            ")";
+        }
+        return escapeHtml(name + span);
+      }
+
+      function escapeHtml(s) {
+        s = String(s || "");
+        return s
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function init() {
+        // Default range: last 7 days (today-6 .. today)
+        setLastWeekRange();
+
+        // TODO: populate jobType dropdown from options/job types
+
+        loadOverlaps();
+      }
+
+      init();
+    </script>
+  </body>
+</html>
