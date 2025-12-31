@@ -102,6 +102,7 @@ var BONUSES = BONUSES || {};
   };
 
   var RAW_WORK_LOG_SHEET_NAME = "דיווח שעות עבודה";
+  var MAX_YESTERDAY_REBUILD_PAIRS = 200; // safety guard for SHIFTS_rebuildYesterday
 
   // התאמת shiftId לפי סכימה ידועה
   if (CONFIG.SHEET_NAME === "דיווח שעות עבודה") {
@@ -1043,6 +1044,21 @@ var BONUSES = BONUSES || {};
     var toDate = addDays_(yesterday, 1);
 
     var keys = Object.keys(pairs);
+    var totalPairs = keys.length;
+    if (totalPairs > MAX_YESTERDAY_REBUILD_PAIRS) {
+      Logger.log(
+        "[SHIFTS_rebuildYesterday][GUARD] yesterday=" +
+          toIsoDate_(yesterday) +
+          " pairs=" +
+          totalPairs +
+          " limit=" +
+          MAX_YESTERDAY_REBUILD_PAIRS +
+          " — skipping upsert"
+      );
+      return;
+    }
+
+    var errorCount = 0;
     for (var k = 0; k < keys.length; k++) {
       var p = pairs[keys[k]];
       try {
@@ -1061,8 +1077,18 @@ var BONUSES = BONUSES || {};
             ": " +
             e
         );
+        errorCount += 1;
       }
     }
+
+    Logger.log(
+      "[SHIFTS_rebuildYesterday][SUMMARY] yesterday=" +
+        toIsoDate_(yesterday) +
+        " pairs=" +
+        totalPairs +
+        " errors=" +
+        errorCount
+    );
   }
 
   function filterShifts_(list, filters) {

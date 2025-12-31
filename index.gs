@@ -271,30 +271,37 @@ function makeTraceId_() {
 
 function doGet(e) {
   const params = (e && e.parameter) || {};
-  const action =
-    params.action || (params.ping ? "ping" : params.shifts ? "shifts" : "");
+  const action = params.action || (params.ping ? "ping" : "");
   try {
     switch (action) {
-      case "health":
+      case "health": {
+        const expected = SCRIPT_PROPERTIES.getProperty("HEALTH_TOKEN");
+        const provided = params.token || "";
+        if (expected && expected !== provided) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Unauthorized health check",
+              errorCode: "HEALTH_TOKEN_MISMATCH",
+            },
+            401
+          );
+        }
         return jsonResponse(healthCheck_());
+      }
       case "ping":
         return jsonResponse(
           withOk_({ pong: true, timestamp: new Date().toISOString() })
         );
-      case "shifts": {
-        const employeeId = params.employeeId || params.empId || params.id || "";
-        if (!employeeId)
-          return jsonResponse({ ok: false, error: "Missing employeeId" }, 400);
-        return jsonResponse(withOk_(listWorkLogsByEmployee_({ employeeId })));
-      }
-      case "employeeExistsByEmail": {
-        const result = employeeExistsByEmail_(params);
-        return jsonResponse(
-          Object.assign({}, result, { success: result.ok === true })
-        );
-      }
       default:
-        return jsonResponse({ ok: false, error: "Unknown action" }, 400);
+        return jsonResponse(
+          {
+            ok: false,
+            error: "GET not allowed for this action",
+            errorCode: "METHOD_NOT_ALLOWED",
+          },
+          405
+        );
     }
   } catch (err) {
     return jsonResponse(
@@ -311,7 +318,8 @@ function doGet(e) {
 // Ensure the web-app endpoints (doGet/doPost) never return HTML.
 // Any unexpected exception should be converted into a JSON payload.
 function createScriptTraceContext_(incomingMeta, action) {
-  var meta = incomingMeta && typeof incomingMeta === "object" ? incomingMeta : {};
+  var meta =
+    incomingMeta && typeof incomingMeta === "object" ? incomingMeta : {};
   var traceId = stringValue(meta.traceId) || makeTraceId_();
   var opFromClient = stringValue(meta.operation);
   var operation = opFromClient || mapActionToOperation_(stringValue(action));
@@ -323,6 +331,43 @@ function createScriptTraceContext_(incomingMeta, action) {
     actor: meta.actor !== undefined ? meta.actor : null,
     version: stringValue(meta.version) || "1.0",
   };
+}
+
+function sanitizeForLogs_(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  var blockedKeys = {
+    payload: true,
+    headers: true,
+    authorization: true,
+    token: true,
+    email: true,
+    mail: true,
+    spreadsheetid: true,
+    spreadsheetId: true,
+  };
+
+  function sanitizeValue(value, depth) {
+    if (depth > 2) return "[truncated]";
+    if (value && typeof value === "object") {
+      var out = Array.isArray(value) ? [] : {};
+      var keys = Object.keys(value).slice(0, 20);
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (blockedKeys[k.toLowerCase ? k.toLowerCase() : k]) {
+          out[k] = "[redacted]";
+        } else {
+          out[k] = sanitizeValue(value[k], depth + 1);
+        }
+      }
+      return out;
+    }
+    if (typeof value === "string") {
+      return value.length > 120 ? value.slice(0, 120) + "…" : value;
+    }
+    return value;
+  }
+
+  return sanitizeValue(obj, 0);
 }
 
 function createScriptLogger_(traceContext) {
@@ -338,7 +383,7 @@ function createScriptLogger_(traceContext) {
       severity: level,
       actor: ctx.actor || null,
       errorCode: errorCode || null,
-      details: details || null,
+      details: sanitizeForLogs_(details) || null,
       errorMessage: err && err.message ? String(err.message) : undefined,
     };
 
@@ -637,20 +682,25 @@ function jsonResponse(data, status) {
   if (body && typeof body === "object" && !Array.isArray(body)) {
     var incomingMeta =
       body.meta && typeof body.meta === "object" ? body.meta : {};
-    var statusCode =
-      typeof status === "number" ? status : incomingMeta.statusCode;
+    var mergedMeta = Object.assign({}, incomingMeta, {
+      traceId:
+        __activeTraceContext && __activeTraceContext.traceId
+          ? __activeTraceContext.traceId
+          : incomingMeta.traceId,
+      operation:
+        __activeTraceContext && __activeTraceContext.operation
+          ? __activeTraceContext.operation
+          : incomingMeta.operation,
+    });
+
+    if (typeof status === "number") {
+      mergedMeta.statusCode = status;
+    } else if (incomingMeta.statusCode !== undefined) {
+      mergedMeta.statusCode = incomingMeta.statusCode;
+    }
+
     body = Object.assign({}, body, {
-      meta: Object.assign({}, incomingMeta, {
-        traceId:
-          __activeTraceContext && __activeTraceContext.traceId
-            ? __activeTraceContext.traceId
-            : incomingMeta.traceId,
-        operation:
-          __activeTraceContext && __activeTraceContext.operation
-            ? __activeTraceContext.operation
-            : incomingMeta.operation,
-        statusCode: statusCode,
-      }),
+      meta: mergedMeta,
     });
   }
 
@@ -1669,7 +1719,6 @@ function employeeExistsByEmail_(payload) {
   const email = stringValue(
     payload && (payload.email || payload.mail)
   ).toLowerCase();
-  Logger.log("[employeeExistsByEmail] email=" + email);
 
   if (!email) {
     return { ok: false, success: false, error: "missing email" };
@@ -1678,12 +1727,6 @@ function employeeExistsByEmail_(payload) {
   const sheet = getEmployeesSheet_();
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
-  Logger.log(
-    "[employeeExistsByEmail] sheet=" +
-      sheetName +
-      ", id=" +
-      SpreadsheetApp.getActive().getId()
-  );
 
   const colEmail = getRequiredColumn_(
     headerMap,
@@ -2009,42 +2052,41 @@ function refreshShiftsForWorkLog_(normalized, meta) {
 
 // Helpers
 function getEmployeesSheet_() {
+  function buildWorkDateForUpsert_(normalized) {
+    if (!normalized) return null;
 
-function buildWorkDateForUpsert_(normalized) {
-  if (!normalized) return null;
+    if (normalized.workDate instanceof Date) return normalized.workDate;
+    if (normalized.fixDate instanceof Date) return normalized.fixDate;
+    if (normalized.timestamp instanceof Date) return normalized.timestamp;
 
-  if (normalized.workDate instanceof Date) return normalized.workDate;
-  if (normalized.fixDate instanceof Date) return normalized.fixDate;
-  if (normalized.timestamp instanceof Date) return normalized.timestamp;
-
-  if (normalized.workDate) {
-    var d1 = new Date(normalized.workDate);
-    if (!isNaN(d1)) return d1;
-  }
-
-  if (normalized.fixDate && normalized.fixTime) {
-    var d2 = new Date(normalized.fixDate);
-    if (!isNaN(d2)) {
-      var p = String(normalized.fixTime || "").split(":");
-      if (p.length >= 2) {
-        var hh = parseInt(p[0], 10);
-        var mm = parseInt(p[1], 10);
-        if (!isNaN(hh)) d2.setHours(hh);
-        if (!isNaN(mm)) d2.setMinutes(mm);
-        d2.setSeconds(0);
-        d2.setMilliseconds(0);
-      }
-      if (!isNaN(d2)) return d2;
+    if (normalized.workDate) {
+      var d1 = new Date(normalized.workDate);
+      if (!isNaN(d1)) return d1;
     }
-  }
 
-  if (normalized.timestamp) {
-    var d3 = new Date(normalized.timestamp);
-    if (!isNaN(d3)) return d3;
-  }
+    if (normalized.fixDate && normalized.fixTime) {
+      var d2 = new Date(normalized.fixDate);
+      if (!isNaN(d2)) {
+        var p = String(normalized.fixTime || "").split(":");
+        if (p.length >= 2) {
+          var hh = parseInt(p[0], 10);
+          var mm = parseInt(p[1], 10);
+          if (!isNaN(hh)) d2.setHours(hh);
+          if (!isNaN(mm)) d2.setMinutes(mm);
+          d2.setSeconds(0);
+          d2.setMilliseconds(0);
+        }
+        if (!isNaN(d2)) return d2;
+      }
+    }
 
-  return null;
-}
+    if (normalized.timestamp) {
+      var d3 = new Date(normalized.timestamp);
+      if (!isNaN(d3)) return d3;
+    }
+
+    return null;
+  }
   try {
     return getSheetByPossibleNames_(EMPLOYEES_SHEET_NAMES);
   } catch (err) {
@@ -2359,9 +2401,7 @@ function getShiftsSheet_() {
 
   const lastCol = Math.max(sheet.getLastColumn(), headers.length);
   const currentHeaders =
-    lastCol > 0
-      ? sheet.getRange(1, 1, 1, lastCol).getValues()[0]
-      : [];
+    lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
   const map = {};
   for (let i = 0; i < currentHeaders.length; i++) {
     const h = stringValue(currentHeaders[i]);
@@ -2405,7 +2445,10 @@ function listShifts_(payload) {
   const deptCol = getOptionalColumn_(headerMap, ["מחלקה", "מחלקות"]);
   const hoursCol = getRequiredColumn_(headerMap, ["שעות"], sheetName);
   const payCol = getRequiredColumn_(headerMap, ["שעות לשכר"], sheetName);
-  const unitsCol = getOptionalColumn_(headerMap, ["כמות יחידות", "דיווח יחידות"]);
+  const unitsCol = getOptionalColumn_(headerMap, [
+    "כמות יחידות",
+    "דיווח יחידות",
+  ]);
   const statusCol = getRequiredColumn_(headerMap, ["סטטוס משמרת"], sheetName);
   const noteCol = getOptionalColumn_(headerMap, ["הערות", "הערה"], sheetName);
   const rawIdsCol = getOptionalColumn_(headerMap, ["מקור דיווחים"], sheetName);
@@ -2666,7 +2709,8 @@ function SHIFTS_getHourlyOverlaps(filter) {
     while (cursor <= lastBucketStart) {
       const bucketStart = cursor;
       const bucketEnd = cursor + bucketMs;
-      const overlapMs = Math.min(endMs, bucketEnd) - Math.max(startMs, bucketStart);
+      const overlapMs =
+        Math.min(endMs, bucketEnd) - Math.max(startMs, bucketStart);
       if (overlapMs > 0) {
         const bucket = getOrCreateBucket_(bucketStart);
         bucket.count += 1;
@@ -2742,4 +2786,11 @@ function ensureDailyShiftsRebuildTrigger_() {
     .create();
 
   return { ok: true, status: "created" };
+}
+
+function showHourlyOverlapsDialog() {
+  var html = HtmlService.createHtmlOutputFromFile("OverlapsDialog")
+    .setWidth(1000)
+    .setHeight(700);
+  SpreadsheetApp.getUi().showModalDialog(html, "חפיפות בשכר שעתי");
 }

@@ -752,6 +752,68 @@
         padding: 6px 0;
       }
 
+      .overlap-summary {
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        padding: 8px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .overlap-summary-actions {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+
+      .overlap-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .overlap-summary-card {
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-md);
+        padding: 8px;
+      }
+
+      .overlap-summary-card .metric-label {
+        font-size: 11px;
+        color: var(--color-text-muted);
+      }
+
+      .overlap-summary-card .metric-value {
+        font-size: 16px;
+        font-weight: 800;
+      }
+
+      .overlap-summary-status.error {
+        color: #fca5a5;
+      }
+
+      .overlap-top-list {
+        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .overlap-top-item {
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+
+      .overlap-top-item small {
+        color: var(--color-text-muted);
+        display: block;
+        margin-top: 2px;
+      }
+
       /* --- Requests tab --- */
       .requests-message {
         font-size: 12px;
@@ -1276,6 +1338,52 @@
             </button>
           </div>
 
+          <div class="section overlap-summary" id="shifts-overlap-summary">
+            <div class="label-with-actions">
+              <span class="label">חפיפות בשכר שעתי</span>
+              <div class="overlap-summary-actions">
+                <button
+                  id="overlap-refresh-btn"
+                  class="btn-secondary"
+                  type="button"
+                >
+                  רענן
+                </button>
+                <button
+                  id="overlap-dialog-btn"
+                  class="btn-secondary"
+                  type="button"
+                >
+                  חלון חפיפות
+                </button>
+              </div>
+            </div>
+            <div
+              id="overlap-summary-status"
+              class="muted overlap-summary-status"
+            >
+              יטען אחרי חיפוש.
+            </div>
+            <div
+              id="overlap-summary-metrics"
+              class="overlap-summary-grid hidden"
+            >
+              <div class="overlap-summary-card">
+                <div class="metric-label">חלונות עם חפיפה</div>
+                <div class="metric-value" id="overlap-metric-buckets">-</div>
+              </div>
+              <div class="overlap-summary-card">
+                <div class="metric-label">עומס מקסימלי</div>
+                <div class="metric-value" id="overlap-metric-max">-</div>
+              </div>
+              <div class="overlap-summary-card">
+                <div class="metric-label">משמרות בטווח</div>
+                <div class="metric-value" id="overlap-metric-total">-</div>
+              </div>
+            </div>
+            <div id="overlap-top-list" class="overlap-top-list hidden"></div>
+          </div>
+
           <div class="shifts-results" id="shifts-results"></div>
           <div class="shifts-actions">
             <button
@@ -1455,6 +1563,7 @@
       var shiftsEmployeeMode = "all";
       var shiftsEmployeeSearchSelection = { id: "", name: "" };
       var shiftsQuickRangeSnapshot = null;
+      var hourlyOverlapState = { loading: false, lastKey: "" };
 
       // Requests tab state
       var requests = [];
@@ -3271,6 +3380,217 @@
         shiftsState.filters = { limit: 50, offset: 0 };
       }
 
+      function setOverlapSummaryStatus(text, isError) {
+        var el = $("overlap-summary-status");
+        if (!el) return;
+        el.textContent = text || "";
+        el.classList.toggle("error", !!isError);
+      }
+
+      function pad2(num) {
+        var n = Number(num) || 0;
+        return (n < 10 ? "0" : "") + String(n);
+      }
+
+      function buildOverlapFilterFromShifts(filters) {
+        var f = filters || {};
+        var res = {
+          dateFrom: f.dateFrom || null,
+          dateTo: f.dateTo || null,
+          employeeId: f.employeeId || null,
+          statuses: f.statuses || [],
+          bucketSizeMinutes: 60,
+        };
+
+        if (!res.dateFrom && !res.dateTo) {
+          var to = new Date();
+          var from = new Date(to.getTime());
+          from.setDate(from.getDate() - 6);
+          res.dateFrom = formatDateForInput(from);
+          res.dateTo = formatDateForInput(to);
+        }
+
+        return res;
+      }
+
+      function formatBucketLabel(bucket) {
+        if (!bucket) return "";
+        var startStr = bucket.bucketStart || bucket.start || "";
+        var endStr = bucket.bucketEnd || bucket.end || "";
+        var start = startStr ? new Date(startStr) : null;
+        var end = endStr ? new Date(endStr) : null;
+        if (start && !isNaN(start.getTime()) && end && !isNaN(end.getTime())) {
+          return (
+            pad2(start.getDate()) +
+            "/" +
+            pad2(start.getMonth() + 1) +
+            " " +
+            pad2(start.getHours()) +
+            ":" +
+            pad2(start.getMinutes()) +
+            "–" +
+            pad2(end.getHours()) +
+            ":" +
+            pad2(end.getMinutes())
+          );
+        }
+        return (startStr || "") + (endStr ? "–" + endStr : "");
+      }
+
+      function formatJobBreakdown(byJob) {
+        var list = Array.isArray(byJob)
+          ? byJob
+              .map(function (j) {
+                return {
+                  id: j && (j.jobTypeId || j.jobId || ""),
+                  count: Number((j && j.count) || 0),
+                };
+              })
+              .filter(function (j) {
+                return j.id;
+              })
+          : [];
+
+        list.sort(function (a, b) {
+          return (b.count || 0) - (a.count || 0);
+        });
+
+        if (!list.length) return "";
+        var top = list.slice(0, 3).map(function (j) {
+          return j.id + " (" + j.count + ")";
+        });
+        return top.join(" • ");
+      }
+
+      function renderOverlapTopList(buckets) {
+        var listEl = $("overlap-top-list");
+        if (!listEl) return;
+
+        if (!buckets || !buckets.length) {
+          listEl.innerHTML =
+            '<div class="overlap-top-item">לא נמצאו חפיפות בטווח.</div>';
+          listEl.classList.remove("hidden");
+          return;
+        }
+
+        var html = "";
+        buckets.forEach(function (b) {
+          var jobText = formatJobBreakdown(b.byJob || []);
+          html += '<div class="overlap-top-item">';
+          html +=
+            formatBucketLabel(b) +
+            " • " +
+            (Number(b.count || 0) || 0) +
+            " משמרות";
+          if (jobText) {
+            html += "<small>" + jobText + "</small>";
+          }
+          html += "</div>";
+        });
+
+        listEl.innerHTML = html;
+        listEl.classList.remove("hidden");
+      }
+
+      function renderOverlapSummary(res) {
+        var metricsEl = $("overlap-summary-metrics");
+        var buckets = (res && Array.isArray(res.buckets) && res.buckets) || [];
+
+        if (!buckets.length) {
+          if (metricsEl) metricsEl.classList.add("hidden");
+          renderOverlapTopList([]);
+          setOverlapSummaryStatus("לא נמצאו חפיפות בטווח הנוכחי.", false);
+          return;
+        }
+
+        var overlapping = buckets.filter(function (b) {
+          return Number(b && b.count) > 1;
+        });
+        var maxCount = overlapping.reduce(function (max, b) {
+          var c = Number(b && b.count) || 0;
+          return c > max ? c : max;
+        }, 0);
+        var totalShifts = Number((res && res.totalShifts) || 0);
+        var skipped = (res && res.skipped) || {};
+        var skippedTotal =
+          Number(skipped.missingTimes || 0) +
+          Number(skipped.invalidTimes || 0) +
+          Number(skipped.crossMidnight || 0);
+
+        if (metricsEl) {
+          metricsEl.classList.remove("hidden");
+          var bucketsEl = $("overlap-metric-buckets");
+          var maxEl = $("overlap-metric-max");
+          var totalEl = $("overlap-metric-total");
+          if (bucketsEl) bucketsEl.textContent = overlapping.length;
+          if (maxEl) maxEl.textContent = maxCount || 0;
+          if (totalEl) totalEl.textContent = totalShifts;
+        }
+
+        var statusText = overlapping.length
+          ? "נמצאו " +
+            overlapping.length +
+            " חלונות עם חפיפה (מקסימום " +
+            (maxCount || 0) +
+            " במקביל)."
+          : "לא נמצאו חפיפות בטווח הנוכחי.";
+        if (skippedTotal) {
+          statusText += " דילג על " + skippedTotal + " שורות ללא שעות תקינות.";
+        }
+        setOverlapSummaryStatus(statusText, false);
+
+        var topBuckets = overlapping
+          .slice()
+          .sort(function (a, b) {
+            return (Number(b.count) || 0) - (Number(a.count) || 0);
+          })
+          .slice(0, 5);
+        renderOverlapTopList(topBuckets);
+      }
+
+      function loadHourlyOverlapSummary(baseFilters) {
+        var metricsEl = $("overlap-summary-metrics");
+        var listEl = $("overlap-top-list");
+        if (metricsEl) metricsEl.classList.add("hidden");
+        if (listEl) {
+          listEl.classList.add("hidden");
+          listEl.innerHTML = "";
+        }
+
+        var filters = buildOverlapFilterFromShifts(baseFilters || {});
+        var key = JSON.stringify(filters);
+        hourlyOverlapState.loading = true;
+        hourlyOverlapState.lastKey = key;
+        setOverlapSummaryStatus("טוען חפיפות...", false);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            hourlyOverlapState.loading = false;
+            if (hourlyOverlapState.lastKey !== key) return;
+            renderOverlapSummary(res);
+          })
+          .withFailureHandler(function (_err) {
+            hourlyOverlapState.loading = false;
+            if (hourlyOverlapState.lastKey !== key) return;
+            setOverlapSummaryStatus("שגיאה בטעינת חפיפות", true);
+          })
+          .SHIFTS_getHourlyOverlaps(filters);
+      }
+
+      function openHourlyOverlapsDialog() {
+        var btn = $("overlap-dialog-btn");
+        if (btn) btn.disabled = true;
+        google.script.run
+          .withSuccessHandler(function () {
+            if (btn) btn.disabled = false;
+          })
+          .withFailureHandler(function (_err) {
+            if (btn) btn.disabled = false;
+            setOverlapSummaryStatus("שגיאה בפתיחת חלון החפיפות", true);
+          })
+          .showHourlyOverlapsDialog();
+      }
+
       // ----- Requests tab helpers -----
       function getSelectedRequestStatuses() {
         var sel = $("requests-status-select");
@@ -3716,6 +4036,7 @@
             renderShiftSearchResults(
               $("shifts-search-term") ? $("shifts-search-term").value : ""
             );
+            loadHourlyOverlapSummary(filters);
           })
           .withFailureHandler(function (err) {
             shiftsState.loading = false;
@@ -4002,6 +4323,15 @@
 
         var saveBtn = $("shift-save-btn");
         if (saveBtn) saveBtn.addEventListener("click", saveShiftEdit);
+
+        var overlapRefreshBtn = $("overlap-refresh-btn");
+        if (overlapRefreshBtn)
+          overlapRefreshBtn.addEventListener("click", function () {
+            loadHourlyOverlapSummary(collectShiftFilters(false));
+          });
+        var overlapDialogBtn = $("overlap-dialog-btn");
+        if (overlapDialogBtn)
+          overlapDialogBtn.addEventListener("click", openHourlyOverlapsDialog);
 
         applyQuickRange("month");
         updateQuickRangeHighlight();

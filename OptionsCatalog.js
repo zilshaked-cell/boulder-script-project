@@ -5,27 +5,27 @@ var OPT = OPT || {};
     SHEET_NAME_OPTIONS: "אופציות בחירה ו ID'S",
     HEADER_ROW: 1,
     COL: {
-      JOB_STATUS: 1,       // A – סטטוס סוגי עבודה
-      JOB_ID: 2,           // B – ID סוגי עבודה
-      JOB_NAME: 3,         // C – סוגי עבודה
-      JOB_DEPARTMENT: 4,   // D – מחלקות
+      JOB_STATUS: 1, // A – סטטוס סוגי עבודה
+      JOB_ID: 2, // B – ID סוגי עבודה
+      JOB_NAME: 3, // C – סוגי עבודה
+      JOB_DEPARTMENT: 4, // D – מחלקות
 
-      BONUS_STATUS: 5,     // E – סטטוס בונוס
-      BONUS_ID: 6,         // F – ID בונוס
-      BONUS_NAME: 7,       // G – סוג בונוס
+      BONUS_STATUS: 5, // E – סטטוס בונוס
+      BONUS_ID: 6, // F – ID בונוס
+      BONUS_NAME: 7, // G – סוג בונוס
 
       SENIORITY_STATUS: 8, // H – סטטוס רמת ותק
-      SENIORITY_ID: 9,     // I – ID רמות ותק
-      SENIORITY_NAME: 10,  // J – רמות ותק
+      SENIORITY_ID: 9, // I – ID רמות ותק
+      SENIORITY_NAME: 10, // J – רמות ותק
 
-      TRAIN_STATUS: 11,    // K – סטטוס סוג הכשרה
-      TRAIN_ID: 12,        // L – ID סוג הכשרה
-      TRAIN_NAME: 13,      // M – סוגי הכשרה
+      TRAIN_STATUS: 11, // K – סטטוס סוג הכשרה
+      TRAIN_ID: 12, // L – ID סוג הכשרה
+      TRAIN_NAME: 13, // M – סוגי הכשרה
 
-      PAY_STATUS: 14,      // N – סטטוס אופן תשלום
-      PAY_ID: 15,          // O – ID אופן תשלום
-      PAY_NAME: 16         // P – אופן תשלום
-    }
+      PAY_STATUS: 14, // N – סטטוס אופן תשלום
+      PAY_ID: 15, // O – ID אופן תשלום
+      PAY_NAME: 16, // P – אופן תשלום
+    },
   };
 
   var cache = null;
@@ -34,14 +34,16 @@ var OPT = OPT || {};
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(CONFIG.SHEET_NAME_OPTIONS);
     if (!sh) {
-      throw new Error('לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME_OPTIONS + '"');
+      throw new Error(
+        'לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME_OPTIONS + '"'
+      );
     }
     return sh;
   }
 
   function normalize_(val) {
-    if (val === null || val === undefined) return '';
-    return String(val).replace(/\s+/g, ' ').trim();
+    if (val === null || val === undefined) return "";
+    return String(val).replace(/\s+/g, " ").trim();
   }
 
   /**
@@ -63,7 +65,7 @@ var OPT = OPT || {};
       jobsList: [],
       paysByName: {},
       paysById: {},
-      paysList: []
+      paysList: [],
     };
 
     if (lastRow <= headerRow) {
@@ -86,10 +88,10 @@ var OPT = OPT || {};
 
       if (jobId || jobName) {
         var job = {
-          id: jobId || '',
-          name: jobName || '',
-          department: dept || '',
-          status: normalize_(jobStatus)
+          id: jobId || "",
+          name: jobName || "",
+          department: dept || "",
+          status: normalize_(jobStatus),
         };
 
         var keyName = normalize_(job.name);
@@ -109,9 +111,9 @@ var OPT = OPT || {};
 
       if (payId || payName) {
         var pay = {
-          id: payId || '',
-          name: payName || '',
-          status: normalize_(payStatus)
+          id: payId || "",
+          name: payName || "",
+          status: normalize_(payStatus),
         };
 
         var pKey = normalize_(pay.name);
@@ -129,7 +131,7 @@ var OPT = OPT || {};
     return result;
   }
 
-   function getJobByName_(name) {
+  function getJobByName_(name) {
     var maps = buildJobMaps_();
     var key = normalizeKey_(name);
     if (!key) return null;
@@ -155,14 +157,14 @@ var OPT = OPT || {};
       if (!maps.byName.hasOwnProperty(key)) continue;
       var rec = maps.byName[key];
       if (!rec) continue;
-      var status = String(rec.status || '').trim();
-      if (onlyActive && status && status !== 'פעיל') {
+      var status = String(rec.status || "").trim();
+      if (onlyActive && status && status !== "פעיל") {
         continue;
       }
       list.push(rec);
     }
     list.sort(function (a, b) {
-      return String(a.name || '').localeCompare(String(b.name || ''));
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
     return list;
   }
@@ -179,21 +181,22 @@ var OPT = OPT || {};
       if (!maps.byName.hasOwnProperty(key)) continue;
       var rec = maps.byName[key];
       if (!rec) continue;
-      var status = String(rec.status || '').trim();
-      if (onlyActive && status && status !== 'פעיל') {
+      var status = String(rec.status || "").trim();
+      if (onlyActive && status && status !== "פעיל") {
         continue;
       }
       list.push(rec);
     }
     list.sort(function (a, b) {
-      return String(a.name || '').localeCompare(String(b.name || ''));
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
     return list;
   }
 
-   // חשיפה החוצה
-  OPT.getJobByName      = getJobByName_;
-  OPT.getPaymentByName  = getPaymentByName_;
-  OPT.getAllJobs        = getAllJobs_;
-  OPT.getAllPayments    = getAllPayments_;
+  // חשיפה החוצה
+  // Do not override an existing Options provider (OptionsModule is the source of truth).
+  if (!OPT.getJobByName) OPT.getJobByName = getJobByName_;
+  if (!OPT.getPaymentByName) OPT.getPaymentByName = getPaymentByName_;
+  if (!OPT.getAllJobs) OPT.getAllJobs = getAllJobs_;
+  if (!OPT.getAllPayments) OPT.getAllPayments = getAllPayments_;
 })();

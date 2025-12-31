@@ -1003,6 +1003,12 @@ var EMP = EMP || {};
         .createMenu("בולדר עובדים")
         .addItem("פתח סייד בר עובדים", "EMP_openSidebar")
         .addItem("רענן סייד בר", "EMP_reloadSidebar")
+        .addSeparator()
+        .addItem("בדיקת באקפיל IDs (DRY_RUN)", "EMP_menuBackfillIdsDryRun")
+        .addItem(
+          "באקפיל IDs לכל העובדים (EXECUTE)",
+          "EMP_menuBackfillIdsExecute"
+        )
         .addToUi();
     } catch (_menuErr) {
       // ignore menu errors so onOpen continues
@@ -1669,61 +1675,8 @@ function EMP_saveEmployeePayload(payload) {
       saveResult = { ok: false, error: "saveEmployeePayload_ missing" };
     }
 
-    // Phase 3: After a successful sidebar save, backfill job/pay IDs for this employee.
-    // Backfill failures must NOT fail the save.
-    try {
-      if (saveResult && saveResult.ok) {
-        var employeeId = "";
-        if (saveResult.employeeId)
-          employeeId = String(saveResult.employeeId).trim();
-        else if (saveResult.id) employeeId = String(saveResult.id).trim();
-        else if (payload && payload.id) employeeId = String(payload.id).trim();
-
-        if (
-          employeeId &&
-          typeof EMP_backfillJobAndPaymentIdsForEmployee === "function"
-        ) {
-          var backfillResult =
-            EMP_backfillJobAndPaymentIdsForEmployee(employeeId);
-          saveResult.backfill = {
-            ok: !!(backfillResult && backfillResult.ok),
-            updatedRows: (backfillResult && backfillResult.updatedRows) || [],
-            missingJobs: (backfillResult && backfillResult.missingJobs) || [],
-            missingPayments:
-              (backfillResult && backfillResult.missingPayments) || [],
-            error: (backfillResult && backfillResult.error) || null,
-          };
-
-          if (saveResult.backfill.ok === false && saveResult.backfill.error) {
-            Logger.log(
-              "[EMP_saveEmployeePayload] backfill failed for employeeId=%s: %s",
-              employeeId,
-              saveResult.backfill.error
-            );
-          }
-        }
-      }
-    } catch (backfillErr) {
-      // Never fail the save due to backfill issues.
-      try {
-        Logger.log(
-          "[EMP_saveEmployeePayload] backfill threw: %s",
-          backfillErr && backfillErr.message ? backfillErr.message : backfillErr
-        );
-      } catch (_ignored) {}
-      if (saveResult && saveResult.ok) {
-        saveResult.backfill = {
-          ok: false,
-          updatedRows: [],
-          missingJobs: [],
-          missingPayments: [],
-          error:
-            backfillErr && backfillErr.message
-              ? backfillErr.message
-              : String(backfillErr),
-        };
-      }
-    }
+    // Phase 3 (disabled): backfill after sidebar save is paused until Gate2.
+    // Backfill/normalize should be run via Admin menu only (DRY_RUN first).
 
     return saveResult;
   } catch (err) {
@@ -1772,9 +1725,12 @@ function EMP_normalizeJobAndPayRow_(
   cols,
   missingJobs,
   missingPayments,
-  correctedText
+  actions,
+  opts
 ) {
   var row = rows[rowIndex];
+  var options = opts || {};
+  var dryRun = options.dryRun !== false; // default DRY_RUN
 
   function norm_(v) {
     if (v === null || v === undefined) return "";
@@ -1784,7 +1740,9 @@ function EMP_normalizeJobAndPayRow_(
   function writeIfChanged_(colIdx, val) {
     if (row[colIdx - 1] === val) return;
     row[colIdx - 1] = val;
-    sheet.getRange(sheetRow, colIdx).setValue(val);
+    if (!dryRun) {
+      sheet.getRange(sheetRow, colIdx).setValue(val);
+    }
     rowUpdated = true;
   }
 
@@ -1796,66 +1754,23 @@ function EMP_normalizeJobAndPayRow_(
   var jobTypeName = norm_(row[cols.jobTypeNameCol - 1]);
   var department = norm_(row[cols.departmentCol - 1]);
 
-  if (jobTypeId) {
-    var job =
-      (typeof OPT !== "undefined" && OPT.getJobById
-        ? OPT.getJobById(jobTypeId)
-        : null) || null;
-    if (job) {
-      var oldJobName = jobTypeName;
-      var oldDept = department;
-      if (jobTypeId !== job.id) writeIfChanged_(cols.jobTypeIdCol, job.id);
-      if (jobTypeName !== job.name)
-        writeIfChanged_(cols.jobTypeNameCol, job.name || "");
-      if (department !== job.department)
-        writeIfChanged_(cols.departmentCol, job.department || "");
-      if (
-        correctedText &&
-        (oldJobName !== job.name || oldDept !== job.department)
-      ) {
-        correctedText.push({
-          rowIndex: sheetRow,
-          field: "job",
-          from: { name: oldJobName, department: oldDept },
-          to: { name: job.name || "", department: job.department || "" },
-        });
-      }
-    } else {
-      // attempt repair by name/department if available
-      var job2 =
-        (typeof OPT !== "undefined" && OPT.getJobByNameAndDepartment
-          ? OPT.getJobByNameAndDepartment(jobTypeName, department)
-          : null) || null;
-      if (job2) {
-        if (jobTypeId !== job2.id)
-          writeIfChanged_(cols.jobTypeIdCol, job2.id || "");
-        if (jobTypeName !== job2.name)
-          writeIfChanged_(cols.jobTypeNameCol, job2.name || "");
-        if (department !== job2.department)
-          writeIfChanged_(cols.departmentCol, job2.department || "");
-      } else {
-        // clear invalid ID to avoid stale values
-        writeIfChanged_(cols.jobTypeIdCol, "");
-        missingJobs.push({
-          employeeId: employeeId,
-          rowIndex: sheetRow,
-          jobName: jobTypeName,
-          department: department,
-          reason: "invalid-id",
-        });
-      }
-    }
-  } else if (jobTypeName) {
+  // If ID already exists, we leave it untouched (fill-missing-only).
+  if (!jobTypeId && jobTypeName) {
     var jobByName =
       (typeof OPT !== "undefined" && OPT.getJobByNameAndDepartment
         ? OPT.getJobByNameAndDepartment(jobTypeName, department)
         : null) || null;
-    if (jobByName) {
-      writeIfChanged_(cols.jobTypeIdCol, jobByName.id || "");
-      if (jobTypeName !== jobByName.name)
-        writeIfChanged_(cols.jobTypeNameCol, jobByName.name || "");
-      if (department !== jobByName.department)
-        writeIfChanged_(cols.departmentCol, jobByName.department || "");
+    if (jobByName && jobByName.id) {
+      writeIfChanged_(cols.jobTypeIdCol, jobByName.id);
+      if (actions) {
+        actions.push({
+          employeeId: employeeId,
+          rowIndex: sheetRow,
+          field: "jobTypeId",
+          action: "FILL_MISSING_JOB_ID",
+          value: jobByName.id,
+        });
+      }
     } else {
       missingJobs.push({
         employeeId: employeeId,
@@ -1871,53 +1786,22 @@ function EMP_normalizeJobAndPayRow_(
   var payTypeId = norm_(row[cols.payTypeIdCol - 1]);
   var payTypeName = norm_(row[cols.payTypeNameCol - 1]);
 
-  if (payTypeId) {
-    var pay =
-      (typeof OPT !== "undefined" && OPT.getPaymentById
-        ? OPT.getPaymentById(payTypeId)
-        : null) || null;
-    if (pay) {
-      var oldPayName = payTypeName;
-      if (payTypeId !== pay.id) writeIfChanged_(cols.payTypeIdCol, pay.id);
-      if (payTypeName !== pay.name)
-        writeIfChanged_(cols.payTypeNameCol, pay.name || "");
-      if (correctedText && oldPayName !== pay.name) {
-        correctedText.push({
-          rowIndex: sheetRow,
-          field: "pay",
-          from: oldPayName,
-          to: pay.name || "",
-        });
-      }
-    } else {
-      var pay2 =
-        (typeof OPT !== "undefined" && OPT.getPaymentByName
-          ? OPT.getPaymentByName(payTypeName)
-          : null) || null;
-      if (pay2) {
-        if (payTypeId !== pay2.id)
-          writeIfChanged_(cols.payTypeIdCol, pay2.id || "");
-        if (payTypeName !== pay2.name)
-          writeIfChanged_(cols.payTypeNameCol, pay2.name || "");
-      } else {
-        writeIfChanged_(cols.payTypeIdCol, "");
-        missingPayments.push({
-          employeeId: employeeId,
-          rowIndex: sheetRow,
-          payName: payTypeName,
-          reason: "invalid-id",
-        });
-      }
-    }
-  } else if (payTypeName) {
+  if (!payTypeId && payTypeName) {
     var payByName =
       (typeof OPT !== "undefined" && OPT.getPaymentByName
         ? OPT.getPaymentByName(payTypeName)
         : null) || null;
-    if (payByName) {
-      writeIfChanged_(cols.payTypeIdCol, payByName.id || "");
-      if (payTypeName !== payByName.name)
-        writeIfChanged_(cols.payTypeNameCol, payByName.name || "");
+    if (payByName && payByName.id) {
+      writeIfChanged_(cols.payTypeIdCol, payByName.id);
+      if (actions) {
+        actions.push({
+          employeeId: employeeId,
+          rowIndex: sheetRow,
+          field: "payTypeId",
+          action: "FILL_MISSING_PAYMENT_ID",
+          value: payByName.id,
+        });
+      }
     } else {
       missingPayments.push({
         employeeId: employeeId,
@@ -1938,7 +1822,9 @@ function EMP_normalizeJobAndPayRow_(
  * - O: "ID אופן תשלום"
  * בכרטיסייה "פרטי עובדים"
  */
-function EMP_backfillJobAndPaymentIdsForAllEmployees() {
+function EMP_backfillJobAndPaymentIdsForAllEmployees(opts) {
+  var options = opts || {};
+  var dryRun = options.dryRun !== false; // default DRY_RUN
   var sheet = getEmployeesSheet_();
   if (!sheet) {
     throw new Error('לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"');
@@ -1988,7 +1874,7 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
   var updated = 0;
   var missingJobs = [];
   var missingPayments = [];
-  var correctedText = [];
+  var actions = [];
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
@@ -2006,14 +1892,18 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
       cols,
       missingJobs,
       missingPayments,
-      correctedText
+      actions,
+      { dryRun: dryRun }
     );
 
     if (rowUpdated) updated++;
   }
 
   var msg =
-    "עודכנו " + updated + " עובדים (ID סוג עבודה / מחלקה / ID אופן תשלום).";
+    (dryRun ? "(DRY_RUN) " : "") +
+    "עודכנו " +
+    updated +
+    " עובדים (ID סוג עבודה / מחלקה / ID אופן תשלום).";
   if (missingJobs.length)
     msg +=
       " אין התאמה ל-" + missingJobs.length + " סוגי עבודה (פירוט ב-Logger).";
@@ -2030,17 +1920,21 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees() {
     updated: updated,
     missingJobs: missingJobs,
     missingPayments: missingPayments,
-    correctedText: correctedText,
+    actions: actions,
+    dryRun: dryRun,
   };
 }
 
 /**
  * Backfills job/payment IDs for a single employeeId.
  * @param {string} employeeId
- * @return {{ ok: boolean, employeeId: string, updatedRows: number[], missingJobs: Object[], missingPayments: Object[], correctedText?: Object[], error?: string }}
+ * @param {{dryRun?:boolean}=} opts
+ * @return {{ ok: boolean, employeeId: string, updatedRows: number[], missingJobs: Object[], missingPayments: Object[], actions?: Object[], error?: string, dryRun?: boolean }}
  * @private
  */
-function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
+function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
+  var options = opts || {};
+  var dryRun = options.dryRun !== false; // default DRY_RUN
   var normalizedId = employeeId ? String(employeeId).trim() : "";
   if (!normalizedId) {
     return {
@@ -2049,7 +1943,8 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
       updatedRows: [],
       missingJobs: [],
       missingPayments: [],
-      correctedText: [],
+      actions: [],
+      dryRun: dryRun,
       error: "missing employeeId",
     };
   }
@@ -2062,7 +1957,8 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
       updatedRows: [],
       missingJobs: [],
       missingPayments: [],
-      correctedText: [],
+      actions: [],
+      dryRun: dryRun,
       error: 'לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"',
     };
   }
@@ -2075,7 +1971,8 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
       updatedRows: [],
       missingJobs: [],
       missingPayments: [],
-      correctedText: [],
+      actions: [],
+      dryRun: dryRun,
       error: colsResult.error,
     };
   }
@@ -2091,7 +1988,8 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
       updatedRows: [],
       missingJobs: [],
       missingPayments: [],
-      correctedText: [],
+      actions: [],
+      dryRun: dryRun,
     };
   }
 
@@ -2102,7 +2000,7 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
   var updatedRows = [];
   var missingJobs = [];
   var missingPayments = [];
-  var correctedText = [];
+  var actions = [];
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
@@ -2118,9 +2016,10 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
       cols,
       missingJobs,
       missingPayments,
-      correctedText
+      actions,
+      { dryRun: dryRun }
     );
-    if (rowUpdated) updatedRows.push(sheetRow);
+    if (rowUpdated && !dryRun) updatedRows.push(sheetRow);
   }
 
   return {
@@ -2129,6 +2028,90 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId) {
     updatedRows: updatedRows,
     missingJobs: missingJobs,
     missingPayments: missingPayments,
-    correctedText: correctedText,
+    actions: actions,
+    dryRun: dryRun,
   };
+}
+
+function EMP_logBackfill_(
+  mode,
+  scope,
+  updatedCount,
+  missingJobsCount,
+  missingPaymentsCount
+) {
+  var logSheet = getLogSheet_();
+  if (!logSheet) return;
+  var actor = "unknown";
+  try {
+    actor = Session.getActiveUser().getEmail() || "unknown";
+  } catch (_e) {}
+
+  logSheet.appendRow([
+    new Date(),
+    "EMP_ID_BACKFILL",
+    mode,
+    scope,
+    updatedCount,
+    missingJobsCount,
+    missingPaymentsCount,
+    actor,
+  ]);
+}
+
+function EMP_menuBackfillIdsDryRun() {
+  var result = EMP_backfillJobAndPaymentIdsForAllEmployees({ dryRun: true });
+  var msg =
+    "(DRY_RUN) עודכנו " +
+    (result.updated || 0) +
+    " עובדים; חסרים: " +
+    (result.missingJobs.length || 0) +
+    " סוגי עבודה, " +
+    (result.missingPayments.length || 0) +
+    " אופני תשלום.";
+  try {
+    SpreadsheetApp.getActive().toast(msg, "EMP_backfillJobAndPaymentIds", 7);
+  } catch (_ignored) {}
+  try {
+    Logger.log(msg + " actions=" + JSON.stringify(result.actions || []));
+  } catch (_ignored2) {}
+}
+
+function EMP_menuBackfillIdsExecute() {
+  var ui = SpreadsheetApp.getUi();
+  var dry = EMP_backfillJobAndPaymentIdsForAllEmployees({ dryRun: true });
+  var prompt =
+    "ימולאו IDs חסרים עבור " +
+    (dry.updated || 0) +
+    " עובדים. חסרים: " +
+    (dry.missingJobs.length || 0) +
+    " סוגי עבודה, " +
+    (dry.missingPayments.length || 0) +
+    " אופני תשלום. להמשיך?";
+  var answer = ui.alert("EMP Backfill", prompt, ui.ButtonSet.YES_NO);
+  if (answer !== ui.Button.YES) return;
+
+  var exec = EMP_backfillJobAndPaymentIdsForAllEmployees({ dryRun: false });
+  EMP_logBackfill_(
+    "EXECUTE",
+    "ALL",
+    exec.updated || 0,
+    exec.missingJobs.length || 0,
+    exec.missingPayments.length || 0
+  );
+
+  var msg =
+    "(EXECUTE) מולאו IDs עבור " +
+    (exec.updated || 0) +
+    " עובדים; חסרים: " +
+    (exec.missingJobs.length || 0) +
+    " סוגי עבודה, " +
+    (exec.missingPayments.length || 0) +
+    " אופני תשלום.";
+  try {
+    SpreadsheetApp.getActive().toast(msg, "EMP_backfillJobAndPaymentIds", 7);
+  } catch (_ignored3) {}
+  try {
+    Logger.log(msg + " actions=" + JSON.stringify(exec.actions || []));
+  } catch (_ignored4) {}
 }
