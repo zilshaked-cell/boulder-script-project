@@ -104,6 +104,9 @@ var LOG_TO_SHEET_ENABLED =
   (SCRIPT_PROPERTIES.getProperty("LOG_TO_SHEET_ENABLED") || "true")
     .toLowerCase()
     .trim() === "true";
+var LOG_LIST_TOKEN = (SCRIPT_PROPERTIES.getProperty("LOG_LIST_TOKEN") || "")
+  .toString()
+  .trim();
 var __activeTraceContext = null;
 var ERROR_CODES = {
   EMPLOYEE_NOT_FOUND: "EMPLOYEE_NOT_FOUND",
@@ -179,6 +182,7 @@ function mapActionToOperation_(action) {
   if (!action) return "APPS_SCRIPT_PROXY_GENERIC";
   var map = {
     health: "HEALTH",
+    "logs.list": "SYSTEM_LOG_LIST",
     "jobTypes.list": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
     "workLogs.listByEmployee": "WORK_LOG_LOAD",
@@ -201,6 +205,9 @@ function getActionRegistry_() {
   return {
     health: function (_payload, _logger) {
       return healthCheck_();
+    },
+    "logs.list": function (payload, _logger) {
+      return listSystemLogs_(payload || {});
     },
     "jobTypes.list": function (_payload, _logger) {
       return { jobTypes: listJobTypes_() };
@@ -370,6 +377,82 @@ function sanitizeForLogs_(obj) {
   return sanitizeValue(obj, 0);
 }
 
+function ensureSystemLogSheet_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SYSTEM_LOG_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(SYSTEM_LOG_SHEET_NAME);
+    try {
+      sheet.hideSheet();
+    } catch (err) {
+      // If hiding fails, continue without throwing to keep logging resilient.
+    }
+  }
+
+  var lastCol = sheet.getLastColumn();
+  if (lastCol === 0) {
+    sheet.appendRow([
+      "timestamp",
+      "traceId",
+      "layer",
+      "operation",
+      "step",
+      "severity",
+      "actor",
+      "errorCode",
+      "details",
+      "extra",
+    ]);
+  }
+
+  return sheet;
+}
+
+function appendSystemLog_(entry) {
+  if (!LOG_TO_SHEET_ENABLED) return;
+  try {
+    var sheet = ensureSystemLogSheet_();
+    var details = "";
+    if (entry && entry.details !== undefined) {
+      try {
+        details = JSON.stringify(sanitizeForLogs_(entry.details)).slice(0, 500);
+      } catch (err) {
+        details = String(entry.details).slice(0, 500);
+      }
+    }
+
+    var extra = "";
+    if (entry && entry.extra !== undefined) {
+      try {
+        extra = JSON.stringify(sanitizeForLogs_(entry.extra)).slice(0, 500);
+      } catch (err2) {
+        extra = String(entry.extra).slice(0, 500);
+      }
+    }
+
+    sheet.appendRow([
+      entry && entry.timestamp ? entry.timestamp : new Date().toISOString(),
+      (entry && entry.traceId) || "",
+      (entry && entry.layer) || "apps-script-router",
+      (entry && entry.operation) || "",
+      (entry && entry.step) || "log",
+      (entry && entry.severity) || "info",
+      entry && entry.actor !== undefined ? entry.actor : "",
+      (entry && entry.errorCode) || "",
+      details,
+      extra,
+    ]);
+  } catch (err3) {
+    try {
+      console.warn("[trace] system_log_append_failed", {
+        message: err3 && err3.message ? err3.message : String(err3),
+      });
+    } catch (ignore) {
+      // Never throw from logging path.
+    }
+  }
+}
+
 function createScriptLogger_(traceContext) {
   var ctx = traceContext || { traceId: makeTraceId_(), operation: "UNKNOWN" };
 
@@ -394,6 +477,21 @@ function createScriptLogger_(traceContext) {
       console.warn("[trace]", payload);
     } else {
       console.log("[trace]", payload);
+    }
+
+    if (LOG_TO_SHEET_ENABLED) {
+      appendSystemLog_({
+        timestamp: payload.timestamp,
+        traceId: payload.traceId,
+        operation: payload.operation,
+        layer: payload.layer,
+        step: payload.step,
+        severity: payload.severity,
+        actor: payload.actor,
+        errorCode: payload.errorCode,
+        details: payload.details,
+        extra: { errorMessage: payload.errorMessage },
+      });
     }
   }
 
@@ -636,6 +734,75 @@ function healthCheck_() {
     sheetChecks: sheetChecks,
     buildId: DEPLOYMENT_FINGERPRINT || null,
     buildIdWarning: !DEPLOYMENT_FINGERPRINT,
+  };
+}
+
+function listSystemLogs_(payload) {
+  var token = stringValue(payload && payload.token);
+  if (!LOG_LIST_TOKEN) {
+    return {
+      ok: false,
+      error: "logs_list_disabled",
+      errorCode: ERROR_CODES.UNAUTHORIZED,
+    };
+  }
+
+  if (!token || token !== LOG_LIST_TOKEN) {
+    return {
+      ok: false,
+      error: "unauthorized",
+      errorCode: ERROR_CODES.UNAUTHORIZED,
+    };
+  }
+
+  var limit = Number(payload && payload.limit);
+  if (!isFinite(limit) || limit <= 0) limit = 200;
+  var MAX_LIMIT = 500;
+  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+  var offset = Number(payload && payload.offset);
+  if (!isFinite(offset) || offset < 0) offset = 0;
+
+  var sheet = null;
+  try {
+    sheet = getSpreadsheet_().getSheetByName(SYSTEM_LOG_SHEET_NAME);
+  } catch (err) {
+    sheet = null;
+  }
+  if (!sheet) {
+    return { ok: true, logs: [], total: 0, limit: limit, offset: offset };
+  }
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    return { ok: true, logs: [], total: 0, limit: limit, offset: offset };
+  }
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var total = lastRow - 1;
+  var startRow = 2 + offset;
+  if (startRow > lastRow) {
+    return { ok: true, logs: [], total: total, limit: limit, offset: offset };
+  }
+
+  var rowsToFetch = Math.min(limit, lastRow - startRow + 1);
+  var data = sheet
+    .getRange(startRow, 1, rowsToFetch, headers.length)
+    .getValues();
+  var logs = data.map(function (row) {
+    var obj = {};
+    for (var i = 0; i < headers.length; i++) {
+      obj[stringValue(headers[i])] = row[i];
+    }
+    return obj;
+  });
+
+  return {
+    ok: true,
+    logs: logs,
+    total: total,
+    limit: limit,
+    offset: offset,
+    hasMore: offset + logs.length < total,
   };
 }
 
