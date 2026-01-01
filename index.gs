@@ -414,6 +414,17 @@ function createScriptLogger_(traceContext) {
   };
 }
 
+// Lightweight module logger helper to avoid undefined crashes.
+function getModuleLogger_(operation) {
+  var ctx = __activeTraceContext || {
+    traceId: makeTraceId_(),
+    operation: operation || "UNKNOWN",
+  };
+  // If caller passed an operation string, prefer it.
+  if (operation) ctx.operation = operation;
+  return createScriptLogger_(ctx);
+}
+
 function doPost(e) {
   var logger = null;
   var action = "";
@@ -2373,7 +2384,7 @@ function ensureEmployeeSizeColumns_(sheet, headers) {
 }
 
 function getShiftsSheet_() {
-  const ss = SpreadsheetApp.getActive();
+  const ss = getSpreadsheet_();
   let sheet;
   try {
     sheet = getSheetOrThrow_("משמרות");

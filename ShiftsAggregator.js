@@ -102,6 +102,15 @@ function computeHoursDiff_(start, end) {
   return Math.round((diff / (1000 * 60 * 60)) * 100) / 100;
 }
 
+function daysBetweenInclusive_(fromIso, toIso) {
+  const from = isoToDate_(fromIso);
+  const to = isoToDate_(toIso);
+  if (!from || !to) return null;
+  const oneDay = 24 * 60 * 60 * 1000;
+  const diff = Math.floor((to.getTime() - from.getTime()) / oneDay);
+  return diff + 1; // inclusive
+}
+
 function isoToDate_(iso) {
   const s = stringValue(iso);
   if (!s) return null;
@@ -369,6 +378,34 @@ function buildShiftRows_(shifts, headerMap) {
 
 function rebuildShiftsForRange_(opts) {
   const filters = opts || {};
+  const dateFrom = toIsoDate_(filters.dateFrom || "");
+  const dateTo = toIsoDate_(filters.dateTo || "");
+  const employeeFilter = stringValue(filters.employeeId);
+  if (!dateFrom || !dateTo) {
+    throw new Error("rebuildShiftsForRange_: dateFrom/dateTo are required");
+  }
+
+  const daysRequested = daysBetweenInclusive_(dateFrom, dateTo);
+  if (daysRequested === null) {
+    throw new Error("rebuildShiftsForRange_: invalid date range");
+  }
+  const MAX_DAYS = 40;
+  if (daysRequested > MAX_DAYS) {
+    throw new Error(
+      "rebuildShiftsForRange_: range too large (" +
+        daysRequested +
+        " days > " +
+        MAX_DAYS +
+        ")"
+    );
+  }
+
+  // Lock previous month after the 9th of current month: do not edit/write rows before the start of the current month.
+  const today = new Date();
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lockActive = today.getDate() >= 9;
+  const lockedCutoffIso = lockActive ? toIsoDate_(currentMonthStart) : "";
+
   const sheet = getShiftsSheet_();
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
@@ -386,24 +423,15 @@ function rebuildShiftsForRange_(opts) {
   const shifts = buildAggregatedShifts_(readWorkLogsForRange_(filters));
   const rows = buildShiftRows_(shifts, headerMap);
 
-  const dateFrom = toIsoDate_(filters.dateFrom || "");
-  const dateTo = toIsoDate_(filters.dateTo || "");
-  const employeeFilter = stringValue(filters.employeeId);
-  const fullRebuild = !dateFrom && !dateTo && !employeeFilter;
-
-  if (fullRebuild) {
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) {
-      sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).clearContent();
-    }
-  } else if (sheet.getLastRow() > 1) {
+  // Delete only matching range/employee, and never touch locked dates.
+  if (sheet.getLastRow() > 1) {
     const data = sheet.getDataRange().getValues();
     const toDelete = [];
     for (let i = 1; i < data.length; i++) {
       const rowDate = toIsoDate_(data[i][workDateCol - 1]);
       if (!rowDate) continue;
-      if (dateFrom && rowDate < dateFrom) continue;
-      if (dateTo && rowDate > dateTo) continue;
+      if (lockedCutoffIso && rowDate < lockedCutoffIso) continue; // locked past period
+      if (rowDate < dateFrom || rowDate > dateTo) continue;
       if (
         employeeFilter &&
         stringValue(data[i][employeeCol - 1]) !== employeeFilter
@@ -416,16 +444,42 @@ function rebuildShiftsForRange_(opts) {
     }
   }
 
-  if (!rows.length) return { ok: true, shiftsWritten: 0 };
+  // Filter out shifts that fall into locked periods.
+  const writableRows = [];
+  for (let i = 0; i < rows.length; i++) {
+    const workDateIso = shifts[i] ? shifts[i].workDateIso : "";
+    if (lockedCutoffIso && workDateIso && workDateIso < lockedCutoffIso) {
+      continue; // skip locked
+    }
+    writableRows.push(rows[i]);
+  }
+
+  if (!writableRows.length) {
+    return {
+      ok: true,
+      shiftsWritten: 0,
+      skippedLocked: rows.length - writableRows.length,
+    };
+  }
 
   const startRow = sheet.getLastRow() + 1;
-  sheet.getRange(startRow, 1, rows.length, rows[0].length).setValues(rows);
-  sheet.getRange(startRow, hoursCol, rows.length, 1).setNumberFormat("0.00");
-  sheet.getRange(startRow, payCol, rows.length, 1).setNumberFormat("0.00");
+  sheet
+    .getRange(startRow, 1, writableRows.length, writableRows[0].length)
+    .setValues(writableRows);
+  sheet
+    .getRange(startRow, hoursCol, writableRows.length, 1)
+    .setNumberFormat("0.00");
+  sheet
+    .getRange(startRow, payCol, writableRows.length, 1)
+    .setNumberFormat("0.00");
 
   const startBg = [];
   const endBg = [];
   for (let i = 0; i < shifts.length; i++) {
+    const workDateIso = shifts[i] ? shifts[i].workDateIso : "";
+    if (lockedCutoffIso && workDateIso && workDateIso < lockedCutoffIso) {
+      continue; // skipped locked
+    }
     const status = shifts[i].status;
     const startColor =
       status === "MISSING_IN"
@@ -443,8 +497,13 @@ function rebuildShiftsForRange_(opts) {
     endBg.push([endColor]);
   }
 
-  sheet.getRange(startRow, startCol, rows.length, 1).setBackgrounds(startBg);
-  sheet.getRange(startRow, endCol, rows.length, 1).setBackgrounds(endBg);
+  sheet.getRange(startRow, startCol, startBg.length, 1).setBackgrounds(startBg);
+  sheet.getRange(startRow, endCol, endBg.length, 1).setBackgrounds(endBg);
 
-  return { ok: true, shiftsWritten: rows.length };
+  return {
+    ok: true,
+    shiftsWritten: writableRows.length,
+    skippedLocked: rows.length - writableRows.length,
+    daysRequested: daysRequested,
+  };
 }
