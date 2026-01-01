@@ -1092,6 +1092,11 @@ var EMP = EMP || {};
   EMP.getEmployeeColumnsForBackfill = EMP_getEmployeeColumns_;
 })();
 
+// Legacy alias to avoid ReferenceError for callers that still expect global CONFIG
+if (typeof CONFIG === "undefined" && typeof EMP !== "undefined" && EMP.CONFIG) {
+  var CONFIG = EMP.CONFIG;
+}
+
 /** === עטיפות גלובליות לטריגרים ול-HTML === */
 
 function EMP_onOpen(e) {
