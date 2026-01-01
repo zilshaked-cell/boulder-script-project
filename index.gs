@@ -2966,6 +2966,71 @@ function ensureDailyShiftsRebuildTrigger_() {
   return { ok: true, status: "created" };
 }
 
+// Keep shifts up to date when work-log rows change directly in the sheet (limited scope to avoid heavy runs).
+function onEdit(e) {
+  if (!e || !e.range) return;
+  const sheet = e.range.getSheet();
+  if (!sheet || sheet.getName() !== WORK_LOGS_SHEET_NAME) return;
+
+  const startRow = e.range.getRow();
+  const numRows = e.range.getNumRows();
+  if (startRow < 2) return; // skip header row
+  if (numRows > 5) return; // avoid bulk edits triggering many rebuilds
+
+  const headerMap = getHeaderMap_(sheet);
+  const empCol = getRequiredColumn_(
+    headerMap,
+    ["ID עובד", "מזהה עובד"],
+    sheet.getName()
+  );
+  const tsCol = getRequiredColumn_(headerMap, ["חותמת זמן"], sheet.getName());
+  const fixDateCol = getOptionalColumn_(headerMap, ["תיקון תאריך"]);
+  const workDateCol = getOptionalColumn_(headerMap, ["תאריך משמרת"]);
+  const jobTypeIdCol = getOptionalColumn_(headerMap, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
+
+  const values = sheet
+    .getRange(startRow, 1, numRows, sheet.getLastColumn())
+    .getValues();
+
+  const rebuildRequests = {};
+
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const employeeId = stringValue(row[empCol - 1]);
+    const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : "";
+    const tsRaw = row[tsCol - 1];
+    const workDateIso = toIsoDate_(fixDateRaw || workDateRaw || tsRaw);
+    if (!workDateIso) continue;
+
+    const jobTypeId = jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "";
+    const key = workDateIso + "__" + employeeId + "__" + jobTypeId;
+    rebuildRequests[key] = {
+      date: workDateIso,
+      employeeId: employeeId,
+      jobTypeId: jobTypeId,
+    };
+  }
+
+  const keys = Object.keys(rebuildRequests);
+  for (let i = 0; i < keys.length; i++) {
+    const req = rebuildRequests[keys[i]];
+    try {
+      rebuildShiftsForRange_({
+        dateFrom: req.date,
+        dateTo: req.date,
+        employeeId: req.employeeId,
+        jobTypeId: req.jobTypeId,
+      });
+    } catch (err) {
+      // Non-blocking: rely on rebuildShiftsForRange_ logging and guards.
+    }
+  }
+}
+
 function showHourlyOverlapsDialog() {
   var html = HtmlService.createHtmlOutputFromFile("OverlapsDialog")
     .setWidth(1000)
