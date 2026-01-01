@@ -3046,7 +3046,19 @@ function onEdit(e) {
 
 // UI entrypoint: shifts refresh menu (chunked to avoid long runs or timeouts).
 function onOpen() {
+  // Preserve existing menus if present (e.g., GPT Export library).
+  try {
+    if (typeof exportGSS_onOpenStandalone === "function") {
+      exportGSS_onOpenStandalone();
+    }
+  } catch (_err) {}
+
   const ui = SpreadsheetApp.getUi();
+  const root = ui.createMenu("בולדר עובדים");
+
+  // Re-attach legacy items if their handlers exist (names per existing deployment).
+  appendLegacyBoulderMenuItems_(root);
+
   const shiftsMenu = ui
     .createMenu("משמרות")
     .addItem("ריענון היום", "rebuildShiftsTodayMenuAction")
@@ -3054,7 +3066,27 @@ function onOpen() {
     .addItem("ריענון 14 ימים", "rebuildShiftsLast14MenuAction")
     .addItem("ריענון 30 ימים", "rebuildShiftsLast30MenuAction");
 
-  ui.createMenu("בולדר עובדים").addSubMenu(shiftsMenu).addToUi();
+  root.addSubMenu(shiftsMenu).addToUi();
+}
+
+function appendLegacyBoulderMenuItems_(menu) {
+  // These handlers are added only if they exist, so we do not break missing functions.
+  maybeAddMenuItem_(menu, "פתח סידור עובדים", "openRosterSidebar");
+  maybeAddMenuItem_(menu, "ריענון סידור", "refreshRosterMenuAction");
+  maybeAddMenuItem_(menu, "בדיקת IDs (DRY_RUN)", "freezeIdsDryRun");
+  maybeAddMenuItem_(
+    menu,
+    "הקפאת IDs לכל העובדים (EXECUTE)",
+    "freezeIdsExecute"
+  );
+}
+
+function maybeAddMenuItem_(menu, label, handlerName) {
+  try {
+    if (handlerName && typeof this[handlerName] === "function") {
+      menu.addItem(label, handlerName);
+    }
+  } catch (_err) {}
 }
 
 function rebuildShiftsTodayMenuAction() {
