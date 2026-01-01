@@ -1079,6 +1079,9 @@ var EMP = EMP || {};
   EMP.hasHiddenRowsForEmployee = hasHiddenRowsForEmployee_;
   EMP.ensureEmployeeIds = ensureEmployeeIds_;
   EMP.showSidebar = showSidebar_;
+  EMP.getEmployeesSheet = getEmployeesSheet_;
+  EMP.getLogSheet = getLogSheet_;
+  EMP.CONFIG = CONFIG;
   // Expose for legacy callers that reference the global name directly
   if (typeof globalThis !== "undefined") {
     globalThis.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
@@ -1833,9 +1836,19 @@ function EMP_normalizeJobAndPayRow_(
 function EMP_backfillJobAndPaymentIdsForAllEmployees(opts) {
   var options = opts || {};
   var dryRun = options.dryRun !== false; // default DRY_RUN
-  var sheet = getEmployeesSheet_();
+  var empConfig = typeof EMP !== "undefined" ? EMP.CONFIG : null;
+  if (!empConfig) {
+    throw new Error("EMP.CONFIG is not available for backfill");
+  }
+
+  var sheet =
+    typeof EMP !== "undefined" && EMP.getEmployeesSheet
+      ? EMP.getEmployeesSheet()
+      : null;
   if (!sheet) {
-    throw new Error('לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"');
+    throw new Error(
+      'לא נמצאה כרטיסייה "' + empConfig.SHEET_NAME_EMPLOYEES + '"'
+    );
   }
 
   var colsResult = null;
@@ -1870,8 +1883,8 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees(opts) {
   }
 
   var cols = colsResult.cols;
-  var HEADER_ROW = CONFIG.HEADER_ROW;
-  var COL_FULL_NAME = CONFIG.COL.FULL_NAME;
+  var HEADER_ROW = empConfig.HEADER_ROW;
+  var COL_FULL_NAME = empConfig.COL.FULL_NAME;
 
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
@@ -1952,6 +1965,19 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees(opts) {
 function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
   var options = opts || {};
   var dryRun = options.dryRun !== false; // default DRY_RUN
+  var empConfig = typeof EMP !== "undefined" ? EMP.CONFIG : null;
+  if (!empConfig) {
+    return {
+      ok: false,
+      employeeId: "",
+      updatedRows: [],
+      missingJobs: [],
+      missingPayments: [],
+      actions: [],
+      dryRun: dryRun,
+      error: "EMP.CONFIG is not available for backfill",
+    };
+  }
   var normalizedId = employeeId ? String(employeeId).trim() : "";
   if (!normalizedId) {
     return {
@@ -1966,7 +1992,10 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
     };
   }
 
-  var sheet = getEmployeesSheet_();
+  var sheet =
+    typeof EMP !== "undefined" && EMP.getEmployeesSheet
+      ? EMP.getEmployeesSheet()
+      : null;
   if (!sheet) {
     return {
       ok: false,
@@ -1976,7 +2005,7 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
       missingPayments: [],
       actions: [],
       dryRun: dryRun,
-      error: 'לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"',
+      error: 'לא נמצאה כרטיסייה "' + empConfig.SHEET_NAME_EMPLOYEES + '"',
     };
   }
 
@@ -2003,7 +2032,7 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
   }
 
   var cols = colsResult.cols;
-  var HEADER_ROW = CONFIG.HEADER_ROW;
+  var HEADER_ROW = empConfig.HEADER_ROW;
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
   if (lastRow <= HEADER_ROW) {
@@ -2065,7 +2094,8 @@ function EMP_logBackfill_(
   missingJobsCount,
   missingPaymentsCount
 ) {
-  var logSheet = getLogSheet_();
+  var logSheet =
+    typeof EMP !== "undefined" && EMP.getLogSheet ? EMP.getLogSheet() : null;
   if (!logSheet) return;
   var actor = "unknown";
   try {

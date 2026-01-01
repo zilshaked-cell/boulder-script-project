@@ -3044,6 +3044,86 @@ function onEdit(e) {
   }
 }
 
+// UI entrypoint: shifts refresh menu (chunked to avoid long runs or timeouts).
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  const shiftsMenu = ui
+    .createMenu("משמרות")
+    .addItem("ריענון היום", "rebuildShiftsTodayMenuAction")
+    .addItem("ריענון 7 ימים", "rebuildShiftsLast7MenuAction")
+    .addItem("ריענון 14 ימים", "rebuildShiftsLast14MenuAction")
+    .addItem("ריענון 30 ימים", "rebuildShiftsLast30MenuAction");
+
+  ui.createMenu("בולדר עובדים").addSubMenu(shiftsMenu).addToUi();
+}
+
+function rebuildShiftsTodayMenuAction() {
+  const todayIso = toIsoDate_(new Date());
+  return rebuildShiftsChunked_(todayIso, todayIso, 1);
+}
+
+function rebuildShiftsLast7MenuAction() {
+  return rebuildShiftsSlidingWindow_(7);
+}
+
+function rebuildShiftsLast14MenuAction() {
+  return rebuildShiftsSlidingWindow_(14);
+}
+
+function rebuildShiftsLast30MenuAction() {
+  return rebuildShiftsSlidingWindow_(30);
+}
+
+function rebuildShiftsSlidingWindow_(daysBack) {
+  const today = new Date();
+  const dateTo = toIsoDate_(today);
+  const dateFromDate = new Date(today.getTime());
+  dateFromDate.setDate(today.getDate() - Math.max(0, Number(daysBack) || 0));
+  const dateFrom = toIsoDate_(dateFromDate);
+  return rebuildShiftsChunked_(dateFrom, dateTo, 7);
+}
+
+// Rebuild shifts in small slices to reduce runtime/memory.
+function rebuildShiftsChunked_(dateFromIso, dateToIso, chunkDays) {
+  const start = isoToDate_(dateFromIso);
+  const end = isoToDate_(dateToIso);
+  if (!start || !end || start > end) {
+    return { ok: false, error: "invalid range" };
+  }
+
+  const maxSpanDays = 40;
+  const spanDays =
+    Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  if (spanDays > maxSpanDays) {
+    return { ok: false, error: "range too large", spanDays: spanDays };
+  }
+
+  const step = Math.max(1, Number(chunkDays) || 7);
+  const summaries = [];
+  let cursor = new Date(start.getTime());
+
+  while (cursor <= end) {
+    const chunkStart = new Date(cursor.getTime());
+    const chunkEnd = new Date(cursor.getTime());
+    chunkEnd.setDate(chunkEnd.getDate() + step - 1);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+
+    const fromIso = toIsoDate_(chunkStart);
+    const toIso = toIsoDate_(chunkEnd);
+
+    try {
+      const res = rebuildShiftsForRange_({ dateFrom: fromIso, dateTo: toIso });
+      summaries.push({ from: fromIso, to: toIso, result: res });
+    } catch (err) {
+      summaries.push({ from: fromIso, to: toIso, error: String(err) });
+    }
+
+    cursor.setDate(cursor.getDate() + step);
+  }
+
+  return { ok: true, chunks: summaries.length, summaries: summaries };
+}
+
 function showHourlyOverlapsDialog() {
   var html = HtmlService.createHtmlOutputFromFile("OverlapsDialog")
     .setWidth(1000)
