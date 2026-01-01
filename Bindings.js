@@ -15,43 +15,87 @@ function _getLib_() {
 }
 
 function onOpen(e) {
-  // קודם כל – התפריט של GPT Export
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu("GPT Export")
-    .addSubMenu(
-      ui
-        .createMenu("Export")
-        .addItem("All Sheets (Auto)", "gpt_all")
-        .addItem("Selected Sheet…", "gpt_selected")
-        .addItem("SCHEMA only (All)", "gpt_schema")
-    )
-    .addSeparator()
-    .addItem("Refresh Sheet List", "gpt_refresh")
-    .addItem("Open Spreadsheet Folder", "gpt_openFolder")
-    .addToUi();
 
-  // מודול אופציות (UUID לאופציות) – אוטומטי
-  if (typeof OPT_onOpen === "function") {
-    OPT_onOpen(e);
+  // GPT Export (ראשי)
+  try {
+    ui.createMenu("GPT Export")
+      .addSubMenu(
+        ui
+          .createMenu("Export")
+          .addItem("All Sheets (Auto)", "gpt_all")
+          .addItem("Selected Sheet…", "gpt_selected")
+          .addItem("SCHEMA only (All)", "gpt_schema")
+      )
+      .addSeparator()
+      .addItem("Refresh Sheet List", "gpt_refresh")
+      .addItem("Open Spreadsheet Folder", "gpt_openFolder")
+      .addToUi();
+  } catch (err) {
+    Logger.log("onOpen GPT Export error: " + err);
   }
 
-  // מודול עובדים
-  if (e && e.authMode === ScriptApp.AuthMode.FULL) {
-    EMP_onOpen(e);
+  // GPT Export (LIB) – לשימור אם הספרייה מחוברת
+  try {
+    if (typeof exportGSS_onOpenStandalone === "function") {
+      exportGSS_onOpenStandalone();
+    }
+  } catch (errLib) {
+    Logger.log("onOpen exportGSS_onOpenStandalone error: " + errLib);
+  }
+
+  // תפריט מאוחד: בולדר חיפה (עובדים + משמרות)
+  try {
+    const root = ui.createMenu("בולדר חיפה");
+    if (typeof appendLegacyBoulderMenuItems_ === "function") {
+      appendLegacyBoulderMenuItems_(root);
+    }
+    if (typeof buildShiftsSubMenu_ === "function") {
+      root.addSubMenu(buildShiftsSubMenu_(ui));
+    }
+    root.addToUi();
+  } catch (errMenu) {
+    Logger.log("onOpen Boulder menu error: " + errMenu);
+  }
+
+  // מודול אופציות (UUID לאופציות) – אוטומטי
+  try {
+    if (typeof OPT_onOpen === "function") {
+      OPT_onOpen(e);
+    }
+  } catch (errOpt) {
+    Logger.log("onOpen OPT_onOpen error: " + errOpt);
+  }
+
+  // מודול עובדים – מפעיל לוגיקה אבל מדלג על יצירת תפריט פנימי (כדי לא להכפיל)
+  try {
+    if (
+      e &&
+      e.authMode === ScriptApp.AuthMode.FULL &&
+      typeof EMP_onOpen === "function"
+    ) {
+      var empEvent = e || {};
+      empEvent.__skipEmpMenu = true;
+      EMP_onOpen(empEvent);
+    }
+  } catch (errEmp) {
+    Logger.log("onOpen EMP_onOpen error: " + errEmp);
   }
 
   try {
     if (typeof REQ_onOpen === "function") {
       REQ_onOpen(e || {});
     }
-  } catch (err) {
-    Logger.log("REQ_onOpen error: " + err);
+  } catch (errReq) {
+    Logger.log("onOpen REQ_onOpen error: " + errReq);
   }
 
   try {
-    SCH_onOpen(e || {});
-  } catch (err) {
-    Logger.log("SCH_onOpen error: " + err);
+    if (typeof SCH_onOpen === "function") {
+      SCH_onOpen(e || {});
+    }
+  } catch (errSch) {
+    Logger.log("onOpen SCH_onOpen error: " + errSch);
   }
 }
 

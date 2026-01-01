@@ -998,20 +998,24 @@ var EMP = EMP || {};
     var sheet = getEmployeesSheet_();
     if (!sheet) return;
 
-    try {
-      SpreadsheetApp.getUi()
-        .createMenu("בולדר עובדים")
-        .addItem("פתח סייד בר עובדים", "EMP_openSidebar")
-        .addItem("רענן סייד בר", "EMP_reloadSidebar")
-        .addSeparator()
-        .addItem("בדיקת באקפיל IDs (DRY_RUN)", "EMP_menuBackfillIdsDryRun")
-        .addItem(
-          "באקפיל IDs לכל העובדים (EXECUTE)",
-          "EMP_menuBackfillIdsExecute"
-        )
-        .addToUi();
-    } catch (_menuErr) {
-      // ignore menu errors so onOpen continues
+    var skipMenu = e && e.__skipEmpMenu;
+
+    if (!skipMenu) {
+      try {
+        SpreadsheetApp.getUi()
+          .createMenu("בולדר עובדים")
+          .addItem("פתח סייד בר עובדים", "EMP_openSidebar")
+          .addItem("רענן סייד בר", "EMP_reloadSidebar")
+          .addSeparator()
+          .addItem("בדיקת באקפיל IDs (DRY_RUN)", "EMP_menuBackfillIdsDryRun")
+          .addItem(
+            "באקפיל IDs לכל העובדים (EXECUTE)",
+            "EMP_menuBackfillIdsExecute"
+          )
+          .addToUi();
+      } catch (_menuErr) {
+        // ignore menu errors so onOpen continues
+      }
     }
 
     ensureEmployeeIds_(sheet);
