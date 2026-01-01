@@ -2073,7 +2073,8 @@ function EMP_menuBackfillIdsDryRun() {
     SpreadsheetApp.getActive().toast(msg, "EMP_backfillJobAndPaymentIds", 7);
   } catch (_ignored) {}
   try {
-    Logger.log(msg + " actions=" + JSON.stringify(result.actions || []));
+    var actionsLen = Array.isArray(result.actions) ? result.actions.length : 0;
+    Logger.log(msg + " actions_len=" + actionsLen);
   } catch (_ignored2) {}
 }
 
@@ -2112,6 +2113,7 @@ function EMP_menuBackfillIdsExecute() {
     SpreadsheetApp.getActive().toast(msg, "EMP_backfillJobAndPaymentIds", 7);
   } catch (_ignored3) {}
   try {
-    Logger.log(msg + " actions=" + JSON.stringify(exec.actions || []));
+    var execActionsLen = Array.isArray(exec.actions) ? exec.actions.length : 0;
+    Logger.log(msg + " actions_len=" + execActionsLen);
   } catch (_ignored4) {}
 }

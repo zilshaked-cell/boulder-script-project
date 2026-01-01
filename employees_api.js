@@ -189,15 +189,7 @@ function employeeExistsByEmail(params) {
     return jsonResponse({ success: false, error: "missing email" });
   }
 
-  Logger.log("[employeeExistsByEmail] called with email=" + email);
-
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  Logger.log(
-    "[employeeExistsByEmail] spreadsheet name=" +
-      ss.getName() +
-      ", id=" +
-      ss.getId()
-  );
 
   var sheet = ss.getSheetByName(EMPLOYEE_SHEET_NAME);
   if (!sheet) {
@@ -206,15 +198,6 @@ function employeeExistsByEmail(params) {
       error: "Sheet not found: " + EMPLOYEE_SHEET_NAME,
     });
   }
-
-  Logger.log(
-    "[employeeExistsByEmail] using sheet=" +
-      sheet.getName() +
-      ", lastRow=" +
-      sheet.getLastRow() +
-      ", lastCol=" +
-      sheet.getLastColumn()
-  );
 
   var lastRow = sheet.getLastRow();
   if (lastRow <= EMPLOYEE_HEADER_ROW) {
