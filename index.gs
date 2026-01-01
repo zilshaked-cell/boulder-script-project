@@ -131,6 +131,19 @@ var ERROR_CODES = {
   EMPTY_RESPONSE: "EMPTY_RESPONSE",
 };
 
+// Ensure a module logger exists even if a deployed version is missing getModuleLogger_.
+function ensureModuleLoggerDefined_(operation) {
+  if (typeof getModuleLogger_ === "function") {
+    return getModuleLogger_(operation);
+  }
+  var ctx = __activeTraceContext || {
+    traceId: makeTraceId_(),
+    operation: operation || "UNKNOWN",
+  };
+  if (operation) ctx.operation = operation;
+  return createScriptLogger_(ctx);
+}
+
 // Contract/health metadata used by the status endpoint
 const CONTRACT_SCHEMA_VERSION = 1;
 const SHEET_CONTRACT_SPEC = [
@@ -896,7 +909,7 @@ function withOk_(data) {
 }
 
 function listJobTypes_() {
-  var logger = getModuleLogger_("REPORT_LOAD");
+  var logger = ensureModuleLoggerDefined_("REPORT_LOAD");
   logger.info("start", { sheetNames: OPTIONS_SHEET_NAMES });
   const sheet = getSheetByPossibleNames_(OPTIONS_SHEET_NAMES);
   const headerMap = getHeaderMap_(sheet);
@@ -989,7 +1002,7 @@ function listJobTypes_() {
 }
 
 function listEmployeeLinkedJobIds_(payload) {
-  var logger = getModuleLogger_("REPORT_LOAD");
+  var logger = ensureModuleLoggerDefined_("REPORT_LOAD");
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) {

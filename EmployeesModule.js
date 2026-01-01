@@ -1079,6 +1079,14 @@ var EMP = EMP || {};
   EMP.hasHiddenRowsForEmployee = hasHiddenRowsForEmployee_;
   EMP.ensureEmployeeIds = ensureEmployeeIds_;
   EMP.showSidebar = showSidebar_;
+  // Expose for legacy callers that reference the global name directly
+  if (typeof globalThis !== "undefined") {
+    globalThis.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
+  } else {
+    this.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
+  }
+  // Export column resolver for backfill functions defined outside the IIFE
+  EMP.getEmployeeColumnsForBackfill = EMP_getEmployeeColumns_;
 })();
 
 /** === עטיפות גלובליות לטריגרים ול-HTML === */
@@ -1830,9 +1838,18 @@ function EMP_backfillJobAndPaymentIdsForAllEmployees(opts) {
     throw new Error('לא נמצאה כרטיסייה "' + CONFIG.SHEET_NAME_EMPLOYEES + '"');
   }
 
-  var colsResult = EMP_getEmployeeColumns_();
-  if (!colsResult.ok) {
-    var errMsg = "EMP_backfillJobAndPaymentIds: " + colsResult.error;
+  var colsResult = null;
+  if (typeof EMP !== "undefined" && EMP.getEmployeeColumnsForBackfill) {
+    colsResult = EMP.getEmployeeColumnsForBackfill();
+  } else if (typeof EMP_getEmployeeColumns_ === "function") {
+    colsResult = EMP_getEmployeeColumns_();
+  }
+  if (!colsResult || !colsResult.ok) {
+    var errMsg =
+      "EMP_backfillJobAndPaymentIds: " +
+      (colsResult && colsResult.error
+        ? colsResult.error
+        : "EMP_getEmployeeColumns_ missing");
     try {
       Logger.log(errMsg);
     } catch (_ignored) {}
@@ -1963,8 +1980,13 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
     };
   }
 
-  var colsResult = EMP_getEmployeeColumns_();
-  if (!colsResult.ok) {
+  var colsResult = null;
+  if (typeof EMP !== "undefined" && EMP.getEmployeeColumnsForBackfill) {
+    colsResult = EMP.getEmployeeColumnsForBackfill();
+  } else if (typeof EMP_getEmployeeColumns_ === "function") {
+    colsResult = EMP_getEmployeeColumns_();
+  }
+  if (!colsResult || !colsResult.ok) {
     return {
       ok: false,
       employeeId: normalizedId,
@@ -1973,7 +1995,10 @@ function EMP_backfillJobAndPaymentIdsForEmployee(employeeId, opts) {
       missingPayments: [],
       actions: [],
       dryRun: dryRun,
-      error: colsResult.error,
+      error:
+        colsResult && colsResult.error
+          ? colsResult.error
+          : "EMP_getEmployeeColumns_ missing",
     };
   }
 
