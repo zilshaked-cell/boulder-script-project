@@ -3071,22 +3071,14 @@ function onOpen() {
 
 function appendLegacyBoulderMenuItems_(menu) {
   // These handlers are added only if they exist, so we do not break missing functions.
-  maybeAddMenuItem_(menu, "פתח סידור עובדים", "openRosterSidebar");
-  maybeAddMenuItem_(menu, "ריענון סידור", "refreshRosterMenuAction");
-  maybeAddMenuItem_(menu, "בדיקת IDs (DRY_RUN)", "freezeIdsDryRun");
+  maybeAddMenuItem_(menu, "פתח סייד בר עובדים", "EMP_openSidebar");
+  maybeAddMenuItem_(menu, "רענן סייד בר", "EMP_reloadSidebar");
+  maybeAddMenuItem_(menu, "בדיקת באקפיל IDs (DRY_RUN)", "EMP_menuBackfillIdsDryRun");
   maybeAddMenuItem_(
     menu,
-    "הקפאת IDs לכל העובדים (EXECUTE)",
-    "freezeIdsExecute"
+    "באקפיל IDs לכל העובדים (EXECUTE)",
+    "EMP_menuBackfillIdsExecute"
   );
-}
-
-function maybeAddMenuItem_(menu, label, handlerName) {
-  try {
-    if (handlerName && typeof this[handlerName] === "function") {
-      menu.addItem(label, handlerName);
-    }
-  } catch (_err) {}
 }
 
 function rebuildShiftsTodayMenuAction() {
