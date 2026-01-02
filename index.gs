@@ -652,9 +652,10 @@ function getCurrentEmployeeData_(payload) {
       emp.name || result.fullName || result.name || emp.fullName || "";
     return {
       employee: {
+        ...emp,
         id: idFromSheet || email, // never return empty id
         employeeId: idFromSheet || email,
-        name: nameFromSheet,
+        name: nameFromSheet || emp.name || "",
         email: emp.email || email,
       },
     };
@@ -1942,6 +1943,46 @@ function employeeExistsByEmail_(payload) {
     "שם",
     "שמות עובדים",
   ]);
+  const colPhone = getOptionalColumn_(headerMap, [
+    "טלפון",
+    "פלאפון",
+    "נייד",
+    "phone",
+    "mobile",
+  ]);
+  const colBirthDate = getOptionalColumn_(headerMap, [
+    "ת. לידה",
+    "תאריך לידה",
+    "date of birth",
+    "dob",
+  ]);
+  const colGender = getOptionalColumn_(headerMap, ["מין", "gender"]);
+  const colShirtSize = getOptionalColumn_(headerMap, [
+    "מידת חולצה",
+    "חולצה",
+    "shirt size",
+    "shirt",
+    "tshirt size",
+  ]);
+  const colDepartment = getOptionalColumn_(headerMap, [
+    "מחלקה",
+    "מחלקות",
+    "department",
+  ]);
+  const colSize = getOptionalColumn_(headerMap, [
+    "מידה (WebApp)",
+    "מידה",
+    "size",
+  ]);
+  const colSizeSource = getOptionalColumn_(headerMap, [
+    "SOURCE_SIZE",
+    "source size",
+  ]);
+  const colJobName = getOptionalColumn_(headerMap, [
+    "סוג העבודה",
+    "סוגי עבודה",
+  ]);
+  const colNotes = getOptionalColumn_(headerMap, ["הערות", "notes"]);
 
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
@@ -1959,6 +2000,30 @@ function employeeExistsByEmail_(payload) {
 
     const empId = colId ? stringValue(row[colId - 1]) : "";
     const empName = colName ? stringValue(row[colName - 1]) : "";
+    const employee = {
+      id: empId,
+      name: empName,
+      email: rowEmail,
+      active: active,
+      status: statusVal,
+    };
+
+    if (colPhone) employee.phone = stringValue(row[colPhone - 1]);
+    if (colBirthDate)
+      employee.birthDate = toIsoDate_(row[colBirthDate - 1]);
+    if (colGender) employee.gender = stringValue(row[colGender - 1]);
+    if (colShirtSize) employee.shirtSize = stringValue(row[colShirtSize - 1]);
+    if (colDepartment)
+      employee.department = stringValue(row[colDepartment - 1]);
+    if (colSize) employee.size = stringValue(row[colSize - 1]);
+    if (colSizeSource)
+      employee.sizeSource = stringValue(row[colSizeSource - 1]);
+    if (colJobName) {
+      const jobName = stringValue(row[colJobName - 1]);
+      employee.jobName = jobName;
+      employee.jobTitle = jobName;
+    }
+    if (colNotes) employee.notes = stringValue(row[colNotes - 1]);
 
     return {
       ok: true,
@@ -1968,13 +2033,7 @@ function employeeExistsByEmail_(payload) {
       employeeId: empId,
       fullName: empName,
       name: empName,
-      employee: {
-        id: empId,
-        name: empName,
-        email: rowEmail,
-        active: active,
-        status: statusVal,
-      },
+      employee: employee,
     };
   }
 
@@ -3073,7 +3132,11 @@ function appendLegacyBoulderMenuItems_(menu) {
   // These handlers are added only if they exist, so we do not break missing functions.
   maybeAddMenuItem_(menu, "פתח סייד בר עובדים", "EMP_openSidebar");
   maybeAddMenuItem_(menu, "רענן סייד בר", "EMP_reloadSidebar");
-  maybeAddMenuItem_(menu, "בדיקת באקפיל IDs (DRY_RUN)", "EMP_menuBackfillIdsDryRun");
+  maybeAddMenuItem_(
+    menu,
+    "בדיקת באקפיל IDs (DRY_RUN)",
+    "EMP_menuBackfillIdsDryRun"
+  );
   maybeAddMenuItem_(
     menu,
     "באקפיל IDs לכל העובדים (EXECUTE)",
