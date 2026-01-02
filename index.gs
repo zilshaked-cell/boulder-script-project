@@ -2009,8 +2009,7 @@ function employeeExistsByEmail_(payload) {
     };
 
     if (colPhone) employee.phone = stringValue(row[colPhone - 1]);
-    if (colBirthDate)
-      employee.birthDate = toIsoDate_(row[colBirthDate - 1]);
+    if (colBirthDate) employee.birthDate = toIsoDate_(row[colBirthDate - 1]);
     if (colGender) employee.gender = stringValue(row[colGender - 1]);
     if (colShirtSize) employee.shirtSize = stringValue(row[colShirtSize - 1]);
     if (colDepartment)
