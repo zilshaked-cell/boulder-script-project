@@ -35,14 +35,7 @@ function onOpen(e) {
     Logger.log("onOpen GPT Export error: " + err);
   }
 
-  // GPT Export (LIB) – לשימור אם הספרייה מחוברת
-  try {
-    if (typeof exportGSS_onOpenStandalone === "function") {
-      exportGSS_onOpenStandalone();
-    }
-  } catch (errLib) {
-    Logger.log("onOpen exportGSS_onOpenStandalone error: " + errLib);
-  }
+  // GPT Export (LIB) – מושבת כדי למנוע כפילות תפריט
 
   // תפריט מאוחד: בולדר חיפה (עובדים + משמרות)
   try {
