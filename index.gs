@@ -3102,29 +3102,14 @@ function onEdit(e) {
   }
 }
 
-// UI entrypoint: shifts refresh menu (chunked to avoid long runs or timeouts).
-function onOpen() {
-  // Preserve existing menus if present (e.g., GPT Export library).
-  try {
-    if (typeof exportGSS_onOpenStandalone === "function") {
-      exportGSS_onOpenStandalone();
-    }
-  } catch (_err) {}
-
-  const ui = SpreadsheetApp.getUi();
-  const root = ui.createMenu("בולדר עובדים");
-
-  // Re-attach legacy items if their handlers exist (names per existing deployment).
-  appendLegacyBoulderMenuItems_(root);
-
-  const shiftsMenu = ui
+// UI helper: build shifts submenu (chunked refresh actions).
+function buildShiftsSubMenu_(ui) {
+  return ui
     .createMenu("משמרות")
     .addItem("ריענון היום", "rebuildShiftsTodayMenuAction")
     .addItem("ריענון 7 ימים", "rebuildShiftsLast7MenuAction")
     .addItem("ריענון 14 ימים", "rebuildShiftsLast14MenuAction")
     .addItem("ריענון 30 ימים", "rebuildShiftsLast30MenuAction");
-
-  root.addSubMenu(shiftsMenu).addToUi();
 }
 
 function appendLegacyBoulderMenuItems_(menu) {
