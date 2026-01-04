@@ -158,6 +158,131 @@ var EMP = EMP || {};
     return true;
   }
 
+  function normalizeSpace_(val) {
+    if (val === null || val === undefined) return "";
+    return String(val).replace(/\s+/g, " ").trim();
+  }
+
+  function normalizeKey_(val) {
+    var v = normalizeSpace_(val);
+    return v ? v.toLowerCase() : "";
+  }
+
+  function getOptionsSheet_() {
+    var ss = getSpreadsheet_();
+    var candidates = ["אופציות בחירה ו ID'S"];
+    for (var i = 0; i < candidates.length; i++) {
+      var sh = ss.getSheetByName(candidates[i]);
+      if (sh) return sh;
+    }
+    return null;
+  }
+
+  function resolveOptionJobColumns_() {
+    var sh = getOptionsSheet_();
+    if (!sh) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "אופציות בחירה ו ID\'S"' };
+    }
+
+    var headerRow = 1;
+    var lastCol = sh.getLastColumn();
+    var headers = sh.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+
+    function resolve_(names, fallbackIdx) {
+      for (var n = 0; n < names.length; n++) {
+        var idx = colIndexByHeader_(headers, names[n]);
+        if (idx) return idx;
+      }
+      if (fallbackIdx && typeof fallbackIdx === "number") return fallbackIdx;
+      return null;
+    }
+
+    var jobNameCol = resolve_(["סוגי עבודה", "סוג העבודה", "סוג עבודה"], null);
+    var jobIdCol = resolve_(["ID סוגי עבודה", "ID סוג עבודה"], null);
+
+    if (!jobNameCol || !jobIdCol) {
+      return {
+        ok: false,
+        error: "Missing required option headers (job name / job ID)",
+      };
+    }
+
+    return {
+      ok: true,
+      sheet: sh,
+      headerRow: headerRow,
+      jobNameCol: jobNameCol,
+      jobIdCol: jobIdCol,
+    };
+  }
+
+  function buildJobNameToIdMap_() {
+    var resolved = resolveOptionJobColumns_();
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+
+    var sh = resolved.sheet;
+    var headerRow = resolved.headerRow;
+    var lastRow = sh.getLastRow();
+    if (lastRow <= headerRow) return { ok: true, map: {} };
+
+    var lastCol = sh.getLastColumn();
+    var values = sh
+      .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
+      .getValues();
+
+    var map = {};
+    for (var i = 0; i < values.length; i++) {
+      var row = values[i];
+      var name = normalizeKey_(row[resolved.jobNameCol - 1]);
+      var id = normalizeSpace_(row[resolved.jobIdCol - 1]);
+      if (!name || !id) continue;
+      if (!map.hasOwnProperty(name)) {
+        map[name] = id;
+      }
+    }
+
+    return { ok: true, map: map };
+  }
+
+  function EMP_fillJobIdForRow_(sheet, rowIndex, cols, jobLookup) {
+    var sh = sheet || getEmployeesSheet_();
+    if (!sh) return false;
+
+    var colsResult = cols;
+    if (!colsResult) {
+      var resolved = EMP_getEmployeeColumns_();
+      if (!resolved || !resolved.ok) return false;
+      colsResult = resolved.cols;
+    }
+
+    var lookup = jobLookup;
+    if (!lookup) {
+      var mapRes = buildJobNameToIdMap_();
+      if (!mapRes.ok) return false;
+      lookup = mapRes.map;
+    }
+
+    var jobName = sh.getRange(rowIndex, colsResult.jobTypeNameCol).getValue();
+    var key = normalizeKey_(jobName);
+    if (!key) return false;
+
+    var targetId = lookup[key];
+    if (!targetId) {
+      try {
+        Logger.log("[EMP_fillJobIdForRow_] missing job type: " + jobName);
+      } catch (_ignored) {}
+      return false;
+    }
+
+    var currentId = normalizeSpace_(
+      sh.getRange(rowIndex, colsResult.jobTypeIdCol).getValue()
+    );
+    if (currentId === targetId) return false;
+
+    sh.getRange(rowIndex, colsResult.jobTypeIdCol).setValue(targetId);
+    return true;
+  }
+
   /**
    * מבטיח ID עובד יציב לפי שם מלא:
    * - אם קיימת שורה עם אותו שם מלא ו-ID קיים → משתמשים באותו ID בכל השורות
@@ -1059,14 +1184,39 @@ var EMP = EMP || {};
 
     if (sheet.getName() !== CONFIG.SHEET_NAME_EMPLOYEES) return;
 
-    // רק אם העריכה נוגעת ב-B או C
     var startCol = range.getColumn();
     var endCol = startCol + range.getNumColumns() - 1;
     var idCol = CONFIG.COL.ID; // 2
     var nameCol = CONFIG.COL.FULL_NAME; // 3
-    if (endCol < idCol || startCol > nameCol) return;
+    var touchesIdOrName = !(endCol < idCol || startCol > nameCol);
+    if (touchesIdOrName) {
+      ensureEmployeeIds_(sheet);
+    }
 
-    ensureEmployeeIds_(sheet);
+    var colsResult = EMP_getEmployeeColumns_();
+    if (!colsResult || !colsResult.ok) return;
+    var jobTypeNameCol = colsResult.cols.jobTypeNameCol;
+    if (!jobTypeNameCol) return;
+
+    var touchesJobTypeName =
+      startCol <= jobTypeNameCol && jobTypeNameCol <= endCol;
+    if (!touchesJobTypeName) return;
+
+    var mapRes = buildJobNameToIdMap_();
+    if (!mapRes.ok) {
+      try {
+        Logger.log("[EMP_handleEdit] cannot build job map: " + mapRes.error);
+      } catch (_ignored) {}
+      return;
+    }
+
+    var firstRow = range.getRow();
+    var numRows = range.getNumRows();
+    for (var i = 0; i < numRows; i++) {
+      var rowIndex = firstRow + i;
+      if (rowIndex <= CONFIG.HEADER_ROW) continue;
+      EMP_fillJobIdForRow_(sheet, rowIndex, colsResult.cols, mapRes.map);
+    }
   }
 
   // חשיפה ל-EMP (API פנימי)
@@ -1643,6 +1793,22 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
           sheet
             .getRange(headerRow + 1, colFmt, sheet.getLastRow() - headerRow, 1)
             .setNumberFormat("@");
+        }
+      }
+    }
+
+    var rowsNeedingJobId = rowsToFormat.concat(appendedRowIndices);
+    if (rowsNeedingJobId.length) {
+      var colsResult = EMP_getEmployeeColumns_();
+      var mapRes = buildJobNameToIdMap_();
+      if (colsResult && colsResult.ok && mapRes && mapRes.ok) {
+        var seenRows = {};
+        for (var f = 0; f < rowsNeedingJobId.length; f++) {
+          var rNum = rowsNeedingJobId[f];
+          if (rNum <= headerRow) continue;
+          if (seenRows[rNum]) continue;
+          seenRows[rNum] = true;
+          EMP_fillJobIdForRow_(sheet, rNum, colsResult.cols, mapRes.map);
         }
       }
     }
