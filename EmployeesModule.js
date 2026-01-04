@@ -217,6 +217,12 @@ var EMP = EMP || {};
   }
 
   function buildJobNameToIdMap_() {
+    if (typeof OPT !== "undefined" && OPT.ensureCatalogIds) {
+      try {
+        OPT.ensureCatalogIds();
+      } catch (_ignored) {}
+    }
+
     var resolved = resolveOptionJobColumns_();
     if (!resolved.ok) return { ok: false, error: resolved.error };
 
