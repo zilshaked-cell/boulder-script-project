@@ -202,6 +202,7 @@ function mapActionToOperation_(action) {
     "requests.listByEmployee": "REQUEST_LIST",
     reportAccessIssue: "REPORT_SAVE",
     "shiftReport.submit": "WORK_LOG_SAVE",
+    "shiftReport.deleteByIds": "WORK_LOG_SAVE",
     "shiftCorrection.submit": "SHIFT_CORRECTION_SAVE",
     "shiftReport.monthlyErrorNotify": "MONTHLY_JOB_ERROR_REPORT",
     "requests.approve": "REQUEST_DECIDE",
@@ -239,6 +240,9 @@ function getActionRegistry_() {
     },
     "shiftReport.submit": function (payload, _logger) {
       return handleShiftReportSubmit_(payload);
+    },
+    "shiftReport.deleteByIds": function (payload, _logger) {
+      return handleShiftReportDeleteByIds_(payload);
     },
     "shiftCorrection.submit": function (payload, _logger) {
       return handleShiftCorrectionSubmit_(payload);
@@ -1399,7 +1403,7 @@ function handleShiftReportSubmit_(payload) {
   if (!jobName) throw new Error("Missing jobName");
   const department = isOther ? "" : job ? stringValue(job.department) : "";
   const isLinked = jobTypeId ? linked.indexOf(jobTypeId) >= 0 : false;
-  const direction = stringValue(payload.direction);
+  const direction = normalizeDirectionToHebrew_(payload.direction);
   const fixDate = stringValue(payload.fixDate);
   const fixTime = stringValue(payload.fixTime);
   const units =
@@ -1572,11 +1576,36 @@ function handleShiftReportSubmit_(payload) {
   normalized.department = department;
   normalized.timestamp = timestamp;
 
-  return writeWorkLogFromNormalizedShift_(normalized, {
+  const writeResult = writeWorkLogFromNormalizedShift_(normalized, {
     employeeId: employeeId,
     employeeName: employeeName,
     note: payload.note,
   });
+
+  // Detect duplicates after writing (to include the new row in the list).
+  const duplicates = findDuplicateWorkLogs_(
+    {
+      employeeId: employeeId,
+      jobTypeId: jobTypeId,
+      jobName: jobName,
+      department: department,
+      direction: normalized.direction,
+      workDate: normalized.workDate,
+    },
+    shiftId
+  );
+  const duplicatesFound = duplicates.length >= 2;
+
+  if (duplicatesFound) {
+    return {
+      ok: true,
+      status: "duplicate_found",
+      shiftId: shiftId,
+      duplicates: duplicates,
+    };
+  }
+
+  return writeResult;
 }
 
 function handleShiftReportMonthlyErrorNotify_(payload) {
@@ -1659,7 +1688,7 @@ function handleShiftCorrectionSubmit_(payload) {
     workDate: stringValue(payload.originalWorkDate || payload.workDate),
     startTime: stringValue(payload.originalStartTime),
     endTime: stringValue(payload.originalEndTime),
-    direction: stringValue(payload.originalDirection),
+    direction: normalizeDirectionToHebrew_(payload.originalDirection),
     jobTypeId: stringValue(payload.originalJobTypeId),
     units:
       payload.originalUnits !== undefined && payload.originalUnits !== null
@@ -1671,7 +1700,7 @@ function handleShiftCorrectionSubmit_(payload) {
     workDate: stringValue(payload.newWorkDate),
     startTime: stringValue(payload.newStartTime),
     endTime: stringValue(payload.newEndTime),
-    direction: stringValue(payload.newDirection),
+    direction: normalizeDirectionToHebrew_(payload.newDirection),
     jobTypeId: stringValue(payload.newJobTypeId),
     units:
       payload.newUnits !== undefined && payload.newUnits !== null
@@ -1716,7 +1745,9 @@ function handleShiftCorrectionSubmit_(payload) {
     payload.jobName || payload.newJobName || payload.originalJobName
   );
   const workDate = updated.workDate || original.workDate;
-  const direction = updated.direction || original.direction;
+  const direction =
+    normalizeDirectionToHebrew_(updated.direction) ||
+    normalizeDirectionToHebrew_(original.direction);
   const units = updated.units !== "" ? updated.units : original.units;
 
   const noteToManager = JSON.stringify({
@@ -2103,6 +2134,29 @@ function normalizePayType_(name) {
   return "";
 }
 
+function normalizeDirectionToHebrew_(value) {
+  const key = stringValue(value).toLowerCase();
+  if (!key) return "";
+  if (
+    key === "exit" ||
+    key === "out" ||
+    key === "end" ||
+    key === "יציאה" ||
+    key === "יצא"
+  )
+    return "יציאה";
+  if (
+    key === "entry" ||
+    key === "enter" ||
+    key === "in" ||
+    key === "start" ||
+    key === "כניסה" ||
+    key === "נכנס"
+  )
+    return "כניסה";
+  return stringValue(value);
+}
+
 function normalizeShiftForWrite_({
   payType,
   timestamp,
@@ -2277,6 +2331,149 @@ function writeWorkLogFromNormalizedShift_(normalized, meta) {
     requiresApproval: false,
     shiftId: normalized.shiftId,
     status: "logged",
+  };
+}
+
+function findDuplicateWorkLogs_(criteria, includeShiftId) {
+  const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const headers = getHeaderMap_(sheet);
+  const shiftIdCol = getRequiredColumn_(
+    headers,
+    ["ID משמרת", "ID דיווח"],
+    sheet.getName()
+  );
+  const empCol = getRequiredColumn_(
+    headers,
+    ["ID עובד", "מזהה עובד"],
+    sheet.getName()
+  );
+  const jobTypeIdCol = getOptionalColumn_(headers, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
+  const jobNameCol = getOptionalColumn_(headers, ["סוג עבודה", "סוגי עבודה"]);
+  const deptCol = getOptionalColumn_(headers, ["מחלקה", "מחלקות"]);
+  const directionCol = getOptionalColumn_(headers, [
+    "כניסה / יציאה",
+    "דיווח שעות",
+  ]);
+  const workDateCol = getOptionalColumn_(headers, [
+    "תאריך משמרת",
+    "תיקון תאריך",
+    "חותמת זמן",
+  ]);
+  const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
+
+  const values = sheet.getDataRange().getValues();
+  const targetKey = buildDuplicateKey_(
+    criteria.employeeId,
+    criteria.jobTypeId,
+    criteria.workDate,
+    criteria.direction
+  );
+
+  const results = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const rowEmployeeId = stringValue(row[empCol - 1]);
+    const rowJobTypeId = jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "";
+    const rowDirection = directionCol ? stringValue(row[directionCol - 1]) : "";
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const rowWorkDate = toIsoDate_(workDateRaw) || "";
+    const key = buildDuplicateKey_(
+      rowEmployeeId,
+      rowJobTypeId,
+      rowWorkDate,
+      rowDirection
+    );
+
+    if (key !== targetKey) continue;
+    const shiftId = stringValue(row[shiftIdCol - 1]);
+    const jobName = jobNameCol ? stringValue(row[jobNameCol - 1]) : "";
+    const department = deptCol ? stringValue(row[deptCol - 1]) : "";
+
+    // includeShiftId is used to ensure the just-created row is not skipped
+    if (includeShiftId && shiftId === includeShiftId) {
+      // always include
+    }
+
+    results.push({
+      shiftId: shiftId,
+      employeeId: rowEmployeeId,
+      jobTypeId: rowJobTypeId,
+      jobName: jobName,
+      department: department,
+      direction: rowDirection,
+      workDate: rowWorkDate,
+      timestamp: tsCol ? toIsoDate_(row[tsCol - 1]) : null,
+      rowIndex: i + 1,
+    });
+  }
+
+  return results;
+}
+
+function buildDuplicateKey_(employeeId, jobTypeId, workDate, direction) {
+  const w = toIsoDate_(workDate) || "";
+  const dir = stringValue(direction || "").trim();
+  return [stringValue(employeeId), stringValue(jobTypeId), w, dir].join("__");
+}
+
+function handleShiftReportDeleteByIds_(payload) {
+  const shiftIds = (payload && payload.shiftIds) || [];
+  if (!Array.isArray(shiftIds) || !shiftIds.length) {
+    return { ok: false, error: "missing_shiftIds" };
+  }
+
+  if (shiftIds.length > 20) {
+    return { ok: false, error: "DELETE_LIMIT_EXCEEDED", limit: 20 };
+  }
+
+  const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const headers = getHeaderMap_(sheet);
+  const shiftIdCol = getRequiredColumn_(
+    headers,
+    ["ID משמרת", "ID דיווח"],
+    sheet.getName()
+  );
+  const values = sheet.getDataRange().getValues();
+
+  const target = {};
+  shiftIds.forEach(function (id) {
+    target[stringValue(id)] = true;
+  });
+
+  const rowsToDelete = [];
+  for (let i = 1; i < values.length; i++) {
+    const rowShiftId = stringValue(values[i][shiftIdCol - 1]);
+    if (target[rowShiftId]) {
+      rowsToDelete.push(i + 1); // 1-based row index
+    }
+  }
+
+  rowsToDelete.sort(function (a, b) {
+    return b - a;
+  });
+
+  rowsToDelete.forEach(function (rowIndex) {
+    sheet.deleteRow(rowIndex);
+  });
+
+  appendSystemLog_({
+    operation: "WORK_LOG_SAVE",
+    step: "delete-duplicates",
+    severity: "info",
+    errorCode: null,
+    details: {
+      deletedCount: rowsToDelete.length,
+      shiftIds: shiftIds,
+    },
+  });
+
+  return {
+    ok: true,
+    status: "deleted",
+    deletedCount: rowsToDelete.length,
   };
 }
 
