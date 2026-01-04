@@ -3297,6 +3297,218 @@ function onEdit(e) {
       // Non-blocking: rely on rebuildShiftsForRange_ logging and guards.
     }
   }
+
+  try {
+    checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows);
+  } catch (err) {
+    Logger.log("duplicate check failed: " + (err && err.message));
+  }
+}
+
+function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
+  const shiftIdCol = getRequiredColumn_(
+    headerMap,
+    ["ID משמרת", "ID דיווח"],
+    sheet.getName()
+  );
+  const empCol = getRequiredColumn_(
+    headerMap,
+    ["ID עובד", "מזהה עובד"],
+    sheet.getName()
+  );
+  const jobTypeIdCol = getOptionalColumn_(headerMap, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
+  const directionCol = getOptionalColumn_(headerMap, [
+    "כניסה / יציאה",
+    "דיווח שעות",
+  ]);
+  const workDateCol = getOptionalColumn_(headerMap, [
+    "תאריך משמרת",
+    "תיקון תאריך",
+    "חותמת זמן",
+  ]);
+  const tsCol = getOptionalColumn_(headerMap, ["חותמת זמן"]);
+
+  const values = sheet
+    .getRange(startRow, 1, numRows, sheet.getLastColumn())
+    .getValues();
+
+  const duplicatesByKey = {};
+
+  for (let i = 0; i < values.length; i++) {
+    const row = values[i];
+    const employeeId = stringValue(row[empCol - 1]);
+    if (!employeeId) continue;
+    const jobTypeId = jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "";
+    const direction = directionCol ? stringValue(row[directionCol - 1]) : "";
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const workDate = toIsoDate_(workDateRaw) || "";
+    if (!workDate) continue;
+
+    const shiftId = stringValue(row[shiftIdCol - 1]);
+    const key = buildDuplicateKey_(employeeId, jobTypeId, workDate, direction);
+    const dupList = findDuplicateWorkLogs_(
+      {
+        employeeId: employeeId,
+        jobTypeId: jobTypeId,
+        workDate: workDate,
+        direction: direction,
+      },
+      shiftId
+    );
+    if (dupList && dupList.length >= 2) {
+      duplicatesByKey[key] = dupList;
+    }
+  }
+
+  const aggregated = [];
+  const seenIds = {};
+  Object.keys(duplicatesByKey).forEach(function (k) {
+    duplicatesByKey[k].forEach(function (d) {
+      if (seenIds[d.shiftId]) return;
+      seenIds[d.shiftId] = true;
+      aggregated.push(d);
+    });
+  });
+
+  if (!aggregated.length) return;
+
+  showDuplicateDialog_(aggregated.slice(0, 20));
+}
+
+function showDuplicateDialog_(duplicates) {
+  try {
+    const html = HtmlService.createHtmlOutput(buildDuplicateDialogHtml_(duplicates))
+      .setWidth(520)
+      .setHeight(520);
+    SpreadsheetApp.getUi().showModalDialog(html, "דיווחים כפולים");
+  } catch (err) {
+    Logger.log("showDuplicateDialog_ failed: " + (err && err.message));
+  }
+}
+
+function buildDuplicateDialogHtml_(duplicates) {
+  const payload = JSON.stringify(duplicates || []);
+  return (
+    '<html dir="rtl"><head><style>' +
+    'body{font-family:Arial,sans-serif;background:#f7f7f7;margin:0;padding:16px;}' +
+    '.card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);padding:16px;}' +
+    '.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee;}' +
+    '.btn{border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;}' +
+    '.danger{background:#d32f2f;color:#fff;}' +
+    '.ghost{border:1px solid #ccc;background:#fff;color:#333;}' +
+    '.pill{width:32px;height:32px;border-radius:50%;border:2px solid #ccc;background:#fff;font-weight:700;cursor:pointer;}' +
+    '.pill.on{background:#fdecea;border-color:#b00020;color:#b00020;}' +
+    '.line-through{text-decoration:line-through;color:#888;}' +
+    '#confirm{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);justify-content:center;align-items:center;}' +
+    '#confirm .box{background:#fff;border-radius:12px;padding:16px;box-shadow:0 10px 32px rgba(0,0,0,0.2);width:340px;}' +
+    '</style></head><body>' +
+    '<div class="card">' +
+    '<h3 style="margin:0 0 8px;">בטוח שאין פה טעות?</h3>' +
+    '<p style="margin:0 0 12px;color:#555;">נמצאו דיווחים כפולים. סמנו ב-X למחיקה.</p>' +
+    '<div id="list"></div>' +
+    '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">' +
+    '<button class="btn ghost" id="noError">אין טעות</button>' +
+    '<button class="btn danger" id="done" style="display:none;">סיימתי</button>' +
+    '</div>' +
+    '</div>' +
+    '<div id="confirm"><div class="box">' +
+    '<h4 style="margin:0 0 10px;">אתה בטוח שאתה רוצה למחוק <span id="count"></span> דיווחים?</h4>' +
+    '<div id="status" style="margin:0 0 10px;font-weight:600;color:#1b5e20;"></div>' +
+    '<div style="display:flex;gap:8px;">' +
+    '<button class="btn ghost" id="back">חזרה</button>' +
+    '<button class="btn danger" id="yes">כן</button>' +
+    '</div>' +
+    '</div></div>' +
+    '<script>
+      const duplicates = ' + payload + ';
+      const list = document.getElementById("list");
+      const doneBtn = document.getElementById("done");
+      const noErr = document.getElementById("noError");
+      const confirm = document.getElementById("confirm");
+      const count = document.getElementById("count");
+      const status = document.getElementById("status");
+      const state = new Map();
+      duplicates.forEach(d => state.set(d.shiftId, false));
+
+      function render() {
+        list.innerHTML = '';
+        duplicates.forEach(d => {
+          const selected = state.get(d.shiftId);
+          const row = document.createElement('div');
+          row.className = 'row';
+          const btn = document.createElement('button');
+          btn.className = 'pill' + (selected ? ' on' : '');
+          btn.textContent = selected ? '↺' : 'X';
+          btn.onclick = () => {
+            state.set(d.shiftId, !selected);
+            render();
+          };
+          const info = document.createElement('div');
+          info.style.flex = '1';
+          const title = document.createElement('div');
+          title.textContent = d.jobName || 'ללא שם עבודה';
+          title.className = selected ? 'line-through' : '';
+          const meta = document.createElement('div');
+          meta.style.fontSize = '13px';
+          meta.style.color = '#666';
+          meta.className = selected ? 'line-through' : '';
+          meta.textContent = (d.workDate || 'תאריך חסר') + (d.direction ? ' · ' + d.direction : '') + (d.department ? ' · ' + d.department : '');
+          info.appendChild(title);
+          info.appendChild(meta);
+          const undo = document.createElement('span');
+          undo.style.fontSize = '12px';
+          undo.style.color = '#b00020';
+          undo.textContent = selected ? 'בטל את מחיקת הדיווח' : '';
+          row.appendChild(btn);
+          row.appendChild(info);
+          row.appendChild(undo);
+          list.appendChild(row);
+        });
+        const selectedCount = Array.from(state.values()).filter(Boolean).length;
+        doneBtn.style.display = selectedCount ? 'inline-block' : 'none';
+      }
+
+      render();
+
+      noErr.onclick = () => google.script.host.close();
+
+      doneBtn.onclick = () => {
+        const selected = Array.from(state.entries()).filter(([,v]) => v).map(([k]) => k);
+        if (!selected.length) return;
+        count.textContent = selected.length;
+        confirm.style.display = 'flex';
+        status.textContent = '';
+      };
+
+      document.getElementById('back').onclick = () => {
+        confirm.style.display = 'none';
+      };
+
+      document.getElementById('yes').onclick = () => {
+        const selected = Array.from(state.entries()).filter(([,v]) => v).map(([k]) => k);
+        if (!selected.length) return;
+        google.script.run.withSuccessHandler((res) => {
+          if (res && res.ok) {
+            status.textContent = 'השינויים נשמרו.';
+            setTimeout(() => google.script.host.close(), 1200);
+          } else {
+            status.style.color = '#b00020';
+            status.textContent = (res && res.error) || 'מחיקה נכשלה.';
+          }
+        }).withFailureHandler((err) => {
+          status.style.color = '#b00020';
+          status.textContent = err && err.message ? err.message : 'שגיאה במחיקה.';
+        }).shiftReport_deleteDuplicatesFromUi(selected);
+      };
+    </script></body></html>'
+  );
+}
+
+function shiftReport_deleteDuplicatesFromUi(shiftIds) {
+  return handleShiftReportDeleteByIds_({ shiftIds: shiftIds });
 }
 
 // UI helper: build shifts submenu (chunked refresh actions).
