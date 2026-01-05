@@ -3548,6 +3548,33 @@ function buildShiftsSubMenu_(ui) {
     .addItem("ריענון 30 ימים", "rebuildShiftsLast30MenuAction");
 }
 
+// Helper: add a menu item only when its handler exists to avoid breaking onOpen.
+function maybeAddMenuItem_(menu, caption, handlerName) {
+  try {
+    if (!menu || !handlerName) return;
+
+    var fn = null;
+    try {
+      if (typeof globalThis !== "undefined") {
+        fn = globalThis[handlerName];
+      } else {
+        // Apps Script global fallback
+        fn = this[handlerName];
+      }
+    } catch (_e) {
+      // ignore lookup errors
+    }
+
+    if (typeof fn === "function") {
+      menu.addItem(caption, handlerName);
+    }
+  } catch (err) {
+    try {
+      Logger.log("maybeAddMenuItem_ error: " + err);
+    } catch (_ignored) {}
+  }
+}
+
 function appendLegacyBoulderMenuItems_(menu) {
   // These handlers are added only if they exist, so we do not break missing functions.
   maybeAddMenuItem_(menu, "פתח סייד בר עובדים", "EMP_openSidebar");
