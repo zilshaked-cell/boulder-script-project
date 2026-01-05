@@ -3235,7 +3235,25 @@ function ensureDailyShiftsRebuildTrigger_() {
 }
 
 // Keep shifts up to date when work-log rows change directly in the sheet (limited scope to avoid heavy runs).
+// Also delegate to other domain handlers (employees/options/requests) so single onEdit covers all.
 function onEdit(e) {
+  // Delegate to other modules first (non-blocking)
+  try {
+    if (typeof EMP_onEdit === "function") EMP_onEdit(e || {});
+  } catch (errEmp) {
+    Logger.log("EMP_onEdit error: " + errEmp);
+  }
+  try {
+    if (typeof OPT_onEdit === "function") OPT_onEdit(e || {});
+  } catch (errOpt) {
+    Logger.log("OPT_onEdit error: " + errOpt);
+  }
+  try {
+    if (typeof REQ_onEdit === "function") REQ_onEdit(e || {});
+  } catch (errReq) {
+    Logger.log("REQ_onEdit error: " + errReq);
+  }
+
   if (!e || !e.range) return;
   const sheet = e.range.getSheet();
   if (!sheet || sheet.getName() !== WORK_LOGS_SHEET_NAME) return;
