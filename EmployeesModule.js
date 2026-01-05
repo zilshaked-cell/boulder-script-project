@@ -1276,6 +1276,17 @@ if (typeof CONFIG === "undefined" && typeof EMP !== "undefined" && EMP.CONFIG) {
 
 /** === עטיפות גלובליות לטריגרים ול-HTML === */
 
+// L3 entrypoint wired from index.gs:onEdit to run employee onEdit logic.
+function EMP_onEdit(e) {
+  try {
+    if (typeof EMP !== "undefined" && typeof EMP.handleEdit === "function") {
+      EMP.handleEdit(e || {});
+    }
+  } catch (err) {
+    Logger.log("EMP_onEdit error: " + err);
+  }
+}
+
 function EMP_onOpen(e) {
   // אם הפונקציה הזו מוגדרת בקובץ אחר - מצוין. אם לא, אפשר להסיר.
   if (typeof OPT_onOpen === "function") {
@@ -1290,32 +1301,6 @@ function EMP_onOpen(e) {
   }
   if (typeof EMP !== "undefined" && EMP.handleOpen) {
     EMP.handleOpen(e || {});
-  }
-}
-
-function onEdit(e) {
-  // עובדים
-  try {
-    if (typeof EMP !== "undefined" && EMP.handleEdit) {
-      EMP.handleEdit(e || {});
-    }
-  } catch (err) {
-    Logger.log("EMP.handleEdit error: " + err);
-  }
-
-  // קטלוגים
-  try {
-    OPT_onEdit(e || {});
-  } catch (err2) {
-    Logger.log("OPT_onEdit error: " + err2);
-  }
-  // בקשות עובדים
-  try {
-    if (typeof REQ_onEdit === "function") {
-      REQ_onEdit(e || {});
-    }
-  } catch (err3) {
-    Logger.log("REQ_onEdit error: " + err3);
   }
 }
 
