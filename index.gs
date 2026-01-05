@@ -3380,7 +3380,9 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
 
 function showDuplicateDialog_(duplicates) {
   try {
-    const html = HtmlService.createHtmlOutput(buildDuplicateDialogHtml_(duplicates))
+    const html = HtmlService.createHtmlOutput(
+      buildDuplicateDialogHtml_(duplicates)
+    )
       .setWidth(520)
       .setHeight(520);
     SpreadsheetApp.getUi().showModalDialog(html, "דיווחים כפולים");
@@ -3390,121 +3392,128 @@ function showDuplicateDialog_(duplicates) {
 }
 
 function buildDuplicateDialogHtml_(duplicates) {
-  const payload = JSON.stringify(duplicates || []);
-  return (
-    '<html dir="rtl"><head><style>' +
-    'body{font-family:Arial,sans-serif;background:#f7f7f7;margin:0;padding:16px;}' +
-    '.card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);padding:16px;}' +
-    '.row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee;}' +
-    '.btn{border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;}' +
-    '.danger{background:#d32f2f;color:#fff;}' +
-    '.ghost{border:1px solid #ccc;background:#fff;color:#333;}' +
-    '.pill{width:32px;height:32px;border-radius:50%;border:2px solid #ccc;background:#fff;font-weight:700;cursor:pointer;}' +
-    '.pill.on{background:#fdecea;border-color:#b00020;color:#b00020;}' +
-    '.line-through{text-decoration:line-through;color:#888;}' +
-    '#confirm{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);justify-content:center;align-items:center;}' +
-    '#confirm .box{background:#fff;border-radius:12px;padding:16px;box-shadow:0 10px 32px rgba(0,0,0,0.2);width:340px;}' +
-    '</style></head><body>' +
-    '<div class="card">' +
-    '<h3 style="margin:0 0 8px;">בטוח שאין פה טעות?</h3>' +
-    '<p style="margin:0 0 12px;color:#555;">נמצאו דיווחים כפולים. סמנו ב-X למחיקה.</p>' +
-    '<div id="list"></div>' +
-    '<div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">' +
-    '<button class="btn ghost" id="noError">אין טעות</button>' +
-    '<button class="btn danger" id="done" style="display:none;">סיימתי</button>' +
-    '</div>' +
-    '</div>' +
-    '<div id="confirm"><div class="box">' +
-    '<h4 style="margin:0 0 10px;">אתה בטוח שאתה רוצה למחוק <span id="count"></span> דיווחים?</h4>' +
-    '<div id="status" style="margin:0 0 10px;font-weight:600;color:#1b5e20;"></div>' +
-    '<div style="display:flex;gap:8px;">' +
-    '<button class="btn ghost" id="back">חזרה</button>' +
-    '<button class="btn danger" id="yes">כן</button>' +
-    '</div>' +
-    '</div></div>' +
-    '<script>
-      const duplicates = ' + payload + ';
-      const list = document.getElementById("list");
-      const doneBtn = document.getElementById("done");
-      const noErr = document.getElementById("noError");
-      const confirm = document.getElementById("confirm");
-      const count = document.getElementById("count");
-      const status = document.getElementById("status");
-      const state = new Map();
-      duplicates.forEach(d => state.set(d.shiftId, false));
+  const safePayload = JSON.stringify(duplicates || []).replace(/</g, "\\u003c");
+  return `
+<html dir="rtl">
+<head>
+  <style>
+    body{font-family:Arial,sans-serif;background:#f7f7f7;margin:0;padding:16px;}
+    .card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);padding:16px;}
+    .row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #eee;}
+    .btn{border:none;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer;}
+    .danger{background:#d32f2f;color:#fff;}
+    .ghost{border:1px solid #ccc;background:#fff;color:#333;}
+    .pill{width:32px;height:32px;border-radius:50%;border:2px solid #ccc;background:#fff;font-weight:700;cursor:pointer;}
+    .pill.on{background:#fdecea;border-color:#b00020;color:#b00020;}
+    .line-through{text-decoration:line-through;color:#888;}
+    #confirm{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);justify-content:center;align-items:center;}
+    #confirm .box{background:#fff;border-radius:12px;padding:16px;box-shadow:0 10px 32px rgba(0,0,0,0.2);width:340px;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h3 style="margin:0 0 8px;">בטוח שאין פה טעות?</h3>
+    <p style="margin:0 0 12px;color:#555;">נמצאו דיווחים כפולים. סמנו ב-X למחיקה.</p>
+    <div id="list"></div>
+    <div style="display:flex;justify-content:space-between;gap:8px;margin-top:14px;">
+      <button class="btn ghost" id="noError">אין טעות</button>
+      <button class="btn danger" id="done" style="display:none;">סיימתי</button>
+    </div>
+  </div>
+  <div id="confirm">
+    <div class="box">
+      <h4 style="margin:0 0 10px;">אתה בטוח שאתה רוצה למחוק <span id="count"></span> דיווחים?</h4>
+      <div id="status" style="margin:0 0 10px;font-weight:600;color:#1b5e20;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn ghost" id="back">חזרה</button>
+        <button class="btn danger" id="yes">כן</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const duplicates = ${safePayload};
+    const list = document.getElementById("list");
+    const doneBtn = document.getElementById("done");
+    const noErr = document.getElementById("noError");
+    const confirm = document.getElementById("confirm");
+    const count = document.getElementById("count");
+    const status = document.getElementById("status");
+    const state = new Map();
+    duplicates.forEach(d => state.set(d.shiftId, false));
 
-      function render() {
-        list.innerHTML = '';
-        duplicates.forEach(d => {
-          const selected = state.get(d.shiftId);
-          const row = document.createElement('div');
-          row.className = 'row';
-          const btn = document.createElement('button');
-          btn.className = 'pill' + (selected ? ' on' : '');
-          btn.textContent = selected ? '↺' : 'X';
-          btn.onclick = () => {
-            state.set(d.shiftId, !selected);
-            render();
-          };
-          const info = document.createElement('div');
-          info.style.flex = '1';
-          const title = document.createElement('div');
-          title.textContent = d.jobName || 'ללא שם עבודה';
-          title.className = selected ? 'line-through' : '';
-          const meta = document.createElement('div');
-          meta.style.fontSize = '13px';
-          meta.style.color = '#666';
-          meta.className = selected ? 'line-through' : '';
-          meta.textContent = (d.workDate || 'תאריך חסר') + (d.direction ? ' · ' + d.direction : '') + (d.department ? ' · ' + d.department : '');
-          info.appendChild(title);
-          info.appendChild(meta);
-          const undo = document.createElement('span');
-          undo.style.fontSize = '12px';
-          undo.style.color = '#b00020';
-          undo.textContent = selected ? 'בטל את מחיקת הדיווח' : '';
-          row.appendChild(btn);
-          row.appendChild(info);
-          row.appendChild(undo);
-          list.appendChild(row);
-        });
-        const selectedCount = Array.from(state.values()).filter(Boolean).length;
-        doneBtn.style.display = selectedCount ? 'inline-block' : 'none';
-      }
+    function render() {
+      list.innerHTML = '';
+      duplicates.forEach(d => {
+        const selected = state.get(d.shiftId);
+        const row = document.createElement('div');
+        row.className = 'row';
+        const btn = document.createElement('button');
+        btn.className = 'pill' + (selected ? ' on' : '');
+        btn.textContent = selected ? '↺' : 'X';
+        btn.onclick = () => {
+          state.set(d.shiftId, !selected);
+          render();
+        };
+        const info = document.createElement('div');
+        info.style.flex = '1';
+        const title = document.createElement('div');
+        title.textContent = d.jobName || 'ללא שם עבודה';
+        title.className = selected ? 'line-through' : '';
+        const meta = document.createElement('div');
+        meta.style.fontSize = '13px';
+        meta.style.color = '#666';
+        meta.className = selected ? 'line-through' : '';
+        meta.textContent = (d.workDate || 'תאריך חסר') + (d.direction ? ' · ' + d.direction : '') + (d.department ? ' · ' + d.department : '');
+        info.appendChild(title);
+        info.appendChild(meta);
+        const undo = document.createElement('span');
+        undo.style.fontSize = '12px';
+        undo.style.color = '#b00020';
+        undo.textContent = selected ? 'בטל את מחיקת הדיווח' : '';
+        row.appendChild(btn);
+        row.appendChild(info);
+        row.appendChild(undo);
+        list.appendChild(row);
+      });
+      const selectedCount = Array.from(state.values()).filter(Boolean).length;
+      doneBtn.style.display = selectedCount ? 'inline-block' : 'none';
+    }
 
-      render();
+    render();
 
-      noErr.onclick = () => google.script.host.close();
+    noErr.onclick = () => google.script.host.close();
 
-      doneBtn.onclick = () => {
-        const selected = Array.from(state.entries()).filter(([,v]) => v).map(([k]) => k);
-        if (!selected.length) return;
-        count.textContent = selected.length;
-        confirm.style.display = 'flex';
-        status.textContent = '';
-      };
+    doneBtn.onclick = () => {
+      const selected = Array.from(state.entries()).filter(([,v]) => v).map(([k]) => k);
+      if (!selected.length) return;
+      count.textContent = selected.length;
+      confirm.style.display = 'flex';
+      status.textContent = '';
+    };
 
-      document.getElementById('back').onclick = () => {
-        confirm.style.display = 'none';
-      };
+    document.getElementById('back').onclick = () => {
+      confirm.style.display = 'none';
+    };
 
-      document.getElementById('yes').onclick = () => {
-        const selected = Array.from(state.entries()).filter(([,v]) => v).map(([k]) => k);
-        if (!selected.length) return;
-        google.script.run.withSuccessHandler((res) => {
-          if (res && res.ok) {
-            status.textContent = 'השינויים נשמרו.';
-            setTimeout(() => google.script.host.close(), 1200);
-          } else {
-            status.style.color = '#b00020';
-            status.textContent = (res && res.error) || 'מחיקה נכשלה.';
-          }
-        }).withFailureHandler((err) => {
+    document.getElementById('yes').onclick = () => {
+      const selected = Array.from(state.entries()).filter(([,v]) => v).map(([k]) => k);
+      if (!selected.length) return;
+      google.script.run.withSuccessHandler((res) => {
+        if (res && res.ok) {
+          status.textContent = 'השינויים נשמרו.';
+          setTimeout(() => google.script.host.close(), 1200);
+        } else {
           status.style.color = '#b00020';
-          status.textContent = err && err.message ? err.message : 'שגיאה במחיקה.';
-        }).shiftReport_deleteDuplicatesFromUi(selected);
-      };
-    </script></body></html>'
-  );
+          status.textContent = (res && res.error) || 'מחיקה נכשלה.';
+        }
+      }).withFailureHandler((err) => {
+        status.style.color = '#b00020';
+        status.textContent = err && err.message ? err.message : 'שגיאה במחיקה.';
+      }).shiftReport_deleteDuplicatesFromUi(selected);
+    };
+  </script>
+</body>
+</html>`;
 }
 
 function shiftReport_deleteDuplicatesFromUi(shiftIds) {
