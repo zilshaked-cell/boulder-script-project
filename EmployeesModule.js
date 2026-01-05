@@ -269,14 +269,31 @@ var EMP = EMP || {};
     }
 
     var jobName = sh.getRange(rowIndex, colsResult.jobTypeNameCol).getValue();
+    var deptVal = null;
+    if (colsResult.departmentCol) {
+      deptVal = sh.getRange(rowIndex, colsResult.departmentCol).getValue();
+    }
     var key = normalizeKey_(jobName);
     if (!key) return false;
 
     var targetId = lookup[key];
+    if (!targetId && typeof OPT !== "undefined") {
+      var jobRec = null;
+      if (OPT.getJobByNameAndDepartment) {
+        jobRec = OPT.getJobByNameAndDepartment(jobName, deptVal);
+      }
+      if (!jobRec && OPT.getJobByName) {
+        jobRec = OPT.getJobByName(jobName);
+      }
+      if (jobRec && jobRec.id) {
+        targetId = jobRec.id;
+      }
+    }
+
     if (!targetId) {
       try {
         Logger.log("[EMP_fillJobIdForRow_] missing job type: " + jobName);
-      } catch (_ignored) {}
+      } catch (_ignored2) {}
       return false;
     }
 
