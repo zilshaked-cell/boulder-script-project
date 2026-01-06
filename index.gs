@@ -11,6 +11,8 @@ const EMPLOYEES_SHEET_NAMES = [
 const WORK_LOGS_SHEET_NAME = "דיווח שעות עבודה";
 const REQUESTS_SHEET_NAMES = ["בקשות עובדים"];
 const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציות בחירה ו ID_S"];
+const LEADERBOARD_SHEET_NAME = "leaderboard";
+const LEADERBOARD_MAX_ROWS = 500;
 
 const EMAIL_HEADER_CANDIDATES = [
   "מייל",
@@ -211,6 +213,8 @@ function mapActionToOperation_(action) {
     getCurrentEmployee: "PROFILE_LOAD",
     getWorkLogs: "WORK_LOG_LOAD",
     getEmployeeRequests: "REQUEST_LIST",
+    "gameLeaderboard.list": "LEADERBOARD_LIST",
+    "gameLeaderboard.submit": "LEADERBOARD_SAVE",
   };
   return map[action] || "APPS_SCRIPT_PROXY_GENERIC";
 }
@@ -279,6 +283,12 @@ function getActionRegistry_() {
     },
     getEmployeeRequests: function (_payload, _logger) {
       return { requests: [] };
+    },
+    "gameLeaderboard.list": function (_payload, _logger) {
+      return listGameLeaderboard_();
+    },
+    "gameLeaderboard.submit": function (payload, _logger) {
+      return submitGameLeaderboard_(payload || {});
     },
   };
 }
@@ -3660,6 +3670,212 @@ function appendLegacyBoulderMenuItems_(menu) {
     "באקפיל IDs לכל העובדים (EXECUTE)",
     "EMP_menuBackfillIdsExecute"
   );
+}
+
+// --- Game leaderboard (best-per-employee, capped) ---
+
+function ensureLeaderboardSheet_() {
+  const ss = getSpreadsheet_();
+  const headers = [
+    "timestamp",
+    "employeeId",
+    "employeeName",
+    "email",
+    "score",
+    "bestTimeMs",
+  ];
+
+  let sheet = ss.getSheetByName(LEADERBOARD_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(LEADERBOARD_SHEET_NAME);
+    sheet.appendRow(headers);
+    sheet.hideSheet();
+    return { sheet: sheet, headers: headers };
+  }
+
+  // Normalize header row and keep the sheet hidden.
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (!sheet.isSheetHidden()) {
+    try {
+      sheet.hideSheet();
+    } catch (_err) {
+      // Ignore hide errors.
+    }
+  }
+  return { sheet: sheet, headers: headers };
+}
+
+function readLeaderboardRows_(sheet, headers) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+
+  return values
+    .map(function (row) {
+      return {
+        timestamp: stringValue(row[0]) || new Date().toISOString(),
+        employeeId: stringValue(row[1]),
+        employeeName: stringValue(row[2]),
+        email: stringValue(row[3]),
+        score: Number(row[4]) || 0,
+        bestTimeMs: Number(row[5]) || 0,
+      };
+    })
+    .filter(function (item) {
+      return item.employeeId;
+    });
+}
+
+function sortLeaderboardRows_(rows) {
+  return rows.sort(function (a, b) {
+    const scoreDiff =
+      (b && b.score ? b.score : 0) - (a && a.score ? a.score : 0);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const timeA = a && a.bestTimeMs ? a.bestTimeMs : Number.POSITIVE_INFINITY;
+    const timeB = b && b.bestTimeMs ? b.bestTimeMs : Number.POSITIVE_INFINITY;
+    if (timeA !== timeB) return timeA - timeB;
+
+    const tsA = a && a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const tsB = b && b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return tsB - tsA;
+  });
+}
+
+function writeLeaderboardRows_(sheet, headers, rows) {
+  // Clear existing body and rewrite to keep things compact.
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
+  }
+  if (!rows || !rows.length) return;
+  const matrix = rows.map(function (r) {
+    return [
+      r.timestamp || new Date().toISOString(),
+      r.employeeId || "",
+      r.employeeName || "",
+      r.email || "",
+      Number(r.score) || 0,
+      Number(r.bestTimeMs) || 0,
+    ];
+  });
+  sheet.getRange(2, 1, matrix.length, headers.length).setValues(matrix);
+}
+
+function listGameLeaderboard_() {
+  const logger = ensureModuleLoggerDefined_("LEADERBOARD_LIST");
+  const meta = ensureLeaderboardSheet_();
+  const rows = sortLeaderboardRows_(
+    readLeaderboardRows_(meta.sheet, meta.headers)
+  );
+  const top5 = rows.slice(0, 5).map(function (row, idx) {
+    return {
+      rank: idx + 1,
+      name: row.employeeName || row.email || "Unknown",
+      score: row.score,
+      bestTimeMs: row.bestTimeMs,
+      employeeId: row.employeeId,
+      email: row.email,
+      timestamp: row.timestamp,
+    };
+  });
+
+  logger.info("leaderboard.list", { rows: rows.length, top: top5.length });
+  return { ok: true, entries: top5 };
+}
+
+function submitGameLeaderboard_(payload) {
+  const logger = ensureModuleLoggerDefined_("LEADERBOARD_SAVE");
+  const employeeId = stringValue(payload.employeeId);
+  const employeeName = stringValue(payload.employeeName);
+  const email = stringValue(payload.email);
+  const score = Number(payload.score);
+  const bestTimeMs = Number(payload.bestTimeMs || payload.timeMs || 0);
+
+  if (!employeeId || !employeeName || !email) {
+    return {
+      ok: false,
+      error: "missing required fields",
+      errorCode: "VALIDATION_FAILED",
+    };
+  }
+  if (!isFinite(score) || score < 0) {
+    return {
+      ok: false,
+      error: "invalid score",
+      errorCode: "VALIDATION_FAILED",
+    };
+  }
+
+  const meta = ensureLeaderboardSheet_();
+  const existing = sortLeaderboardRows_(
+    readLeaderboardRows_(meta.sheet, meta.headers)
+  );
+
+  let changed = false;
+  const nowIso = new Date().toISOString();
+  const updatedRows = existing.map(function (row) {
+    if (row.employeeId !== employeeId) return row;
+    const priorTime =
+      row.bestTimeMs > 0 ? row.bestTimeMs : Number.POSITIVE_INFINITY;
+    const candidateTime =
+      bestTimeMs > 0 ? bestTimeMs : Number.POSITIVE_INFINITY;
+    const isBetter =
+      score > row.score ||
+      (Math.abs(score - row.score) < 1e-9 && candidateTime < priorTime);
+    if (!isBetter) return row;
+    changed = true;
+    return {
+      timestamp: nowIso,
+      employeeId: employeeId,
+      employeeName: employeeName,
+      email: email,
+      score: score,
+      bestTimeMs: bestTimeMs,
+    };
+  });
+
+  if (
+    !existing.some(function (r) {
+      return r.employeeId === employeeId;
+    })
+  ) {
+    changed = true;
+    updatedRows.push({
+      timestamp: nowIso,
+      employeeId: employeeId,
+      employeeName: employeeName,
+      email: email,
+      score: score,
+      bestTimeMs: bestTimeMs,
+    });
+  }
+
+  if (!changed) {
+    return { ok: true, updated: false };
+  }
+
+  const sorted = sortLeaderboardRows_(updatedRows);
+  const pruned = sorted.slice(0, LEADERBOARD_MAX_ROWS);
+  writeLeaderboardRows_(meta.sheet, meta.headers, pruned);
+  logger.info("leaderboard.upsert", {
+    employeeId: employeeId,
+    total: pruned.length,
+  });
+
+  const top5 = pruned.slice(0, 5).map(function (row, idx) {
+    return {
+      rank: idx + 1,
+      name: row.employeeName || row.email || "Unknown",
+      score: row.score,
+      bestTimeMs: row.bestTimeMs,
+      employeeId: row.employeeId,
+      email: row.email,
+      timestamp: row.timestamp,
+    };
+  });
+
+  return { ok: true, updated: true, entries: top5 };
 }
 
 function rebuildShiftsTodayMenuAction() {

@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+  <head>
+    <base target="_top" />
+    <style>
+      body.boulder-dialog {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background: #f7f7f7;
+        color: #111;
+      }
+
+      #dialog-root {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+        background: #e6e6e6;
+        border-bottom: 1px solid #d0d0d0;
+        gap: 8px;
+      }
+
+      .dialog-title {
+        font-weight: 600;
+        font-size: 15px;
+      }
+
+      .dialog-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .dialog-actions button {
+        padding: 4px 10px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .dialog-body {
+        flex: 1;
+        padding: 16px;
+        box-sizing: border-box;
+        overflow: auto;
+        background: #ffffff;
+      }
+
+      .compact .dialog-body {
+        padding: 8px;
+        font-size: 13px;
+      }
+
+      .dialog-errors {
+        background: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #6b5a00;
+        padding: 8px 10px;
+        margin-bottom: 12px;
+        border-radius: 4px;
+      }
+
+      .field {
+        margin-bottom: 12px;
+      }
+
+      .field label {
+        display: block;
+        font-size: 13px;
+        margin-bottom: 4px;
+        color: #333;
+      }
+
+      .field input,
+      .field select {
+        width: 100%;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+
+      .jobs-section {
+        margin-top: 16px;
+        border-top: 1px solid #e2e2e2;
+        padding-top: 12px;
+      }
+
+      .jobs-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .jobs-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .job-row {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 10px;
+        background: #fafafa;
+      }
+
+      .job-row-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .job-row-title {
+        font-weight: 600;
+      }
+
+      .job-active-toggle {
+        padding: 4px 8px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+
+      .job-active-toggle.inactive {
+        background: #f5f5f5;
+        color: #555;
+      }
+
+      .job-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 8px 12px;
+      }
+
+      .dialog-footer-actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .dialog-footer-actions button {
+        padding: 8px 12px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      .placeholder {
+        color: #666;
+      }
+    </style>
+  </head>
+  <body class="boulder-dialog">
+    <div id="dialog-root" data-mode="<?= mode ?>" dir="rtl">
+      <div id="dialog-header"></div>
+      <div id="dialog-body">
+        <div class="placeholder">טוען נתונים...</div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        window.DIALOG_PARAMS = window.DIALOG_PARAMS || {};
+
+        var rootEl = document.getElementById("dialog-root");
+        var dialogState = {
+          mode: rootEl ? rootEl.getAttribute("data-mode") : "",
+          params: window.DIALOG_PARAMS || {},
+          lastResponse: null,
+          isCompact: false,
+        };
+
+        window.addEventListener("load", initExtendedDialog);
+
+        function initExtendedDialog() {
+          attachHeaderButtons();
+          loadDialogData();
+        }
+
+        function attachHeaderButtons() {
+          var header = document.getElementById("dialog-header");
+          if (!header) return;
+
+          header.innerHTML = "";
+
+          var title = document.createElement("div");
+          title.className = "dialog-title";
+          title.textContent = getDialogTitle();
+
+          var actions = document.createElement("div");
+          actions.className = "dialog-actions";
+
+          var refreshBtn = document.createElement("button");
+          refreshBtn.type = "button";
+          refreshBtn.textContent = "רענן";
+          refreshBtn.onclick = function () {
+            loadDialogData();
+          };
+
+          var compactBtn = document.createElement("button");
+          compactBtn.type = "button";
+          compactBtn.textContent = dialogState.isCompact
+            ? "מצב מלא"
+            : "מצב קומפקטי";
+          compactBtn.onclick = function () {
+            toggleCompactMode();
+          };
+
+          var closeBtn = document.createElement("button");
+          closeBtn.type = "button";
+          closeBtn.textContent = "✕";
+          closeBtn.onclick = function () {
+            google.script.host.close();
+          };
+
+          actions.appendChild(refreshBtn);
+          actions.appendChild(compactBtn);
+          actions.appendChild(closeBtn);
+
+          header.appendChild(title);
+          header.appendChild(actions);
+        }
+
+        function getDialogTitle() {
+          switch (dialogState.mode) {
+            case "employee":
+              return "כרטיס עובד";
+            case "shifts":
+              return "משמרות";
+            case "requests":
+              return "בקשות";
+            default:
+              return "בולדר – חלון מורחב";
+          }
+        }
+
+        function toggleCompactMode() {
+          dialogState.isCompact = !dialogState.isCompact;
+          if (rootEl) {
+            if (dialogState.isCompact) {
+              rootEl.classList.add("compact");
+            } else {
+              rootEl.classList.remove("compact");
+            }
+          }
+          attachHeaderButtons();
+        }
+
+        function loadDialogData() {
+          if (dialogState.mode === "employee") {
+            loadEmployeeDialogData();
+          } else if (dialogState.mode === "shifts") {
+            renderError("תצוגת משמרות תתווסף בשלב הבא.");
+          } else if (dialogState.mode === "requests") {
+            renderError("תצוגת בקשות תתווסף בשלב הבא.");
+          } else {
+            renderError("מצב דיאלוג לא ידוע: " + dialogState.mode);
+          }
+        }
+
+        function loadEmployeeDialogData() {
+          var params = dialogState.params || {};
+          if (!params.employeeId) {
+            renderError("לא נבחר עובד להצגה.");
+            return;
+          }
+
+          setBodyLoading("טוען נתוני עובד...");
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              renderError("שגיאה בטעינת כרטיס העובד: " + err);
+            })
+            .withSuccessHandler(function (response) {
+              dialogState.lastResponse = response || null;
+              renderEmployeeView(response || {});
+            })
+            .UI_getEmployeeDialogData({
+              employeeId: String(params.employeeId),
+            });
+        }
+
+        function renderEmployeeView(response) {
+          var body = document.getElementById("dialog-body");
+          if (!body) return;
+          body.innerHTML = "";
+
+          var errors = (response && response.errors) || [];
+          var data = (response && response.data) || {};
+          var employee = data.employee || null;
+          var employeeJobs = data.employeeJobs || [];
+          var allJobTypes = data.allJobTypes || [];
+
+          if (errors.length) {
+            var errBox = document.createElement("div");
+            errBox.className = "dialog-errors";
+            errors.forEach(function (err) {
+              var line = document.createElement("div");
+              line.textContent = err && err.message ? err.message : String(err);
+              errBox.appendChild(line);
+            });
+            body.appendChild(errBox);
+          }
+
+          if (!employee) {
+            var info = document.createElement("div");
+            info.className = "placeholder";
+            info.textContent = "לא נמצאו נתוני עובד.";
+            body.appendChild(info);
+            return;
+          }
+
+          var form = document.createElement("form");
+          form.id = "employee-form";
+          form.onsubmit = function (e) {
+            e.preventDefault();
+            saveEmployeeFromForm();
+          };
+
+          form.appendChild(
+            createLabeledInput(
+              "שם מלא",
+              "employee-name",
+              employee.name || "",
+              true
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "אימייל",
+              "employee-email",
+              employee.email || "",
+              false
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "טלפון",
+              "employee-phone",
+              employee.phone || "",
+              false
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "ת.ז",
+              "employee-idnum",
+              employee.idNumber || employee.teudatZehut || "",
+              false
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "מין",
+              "employee-gender",
+              employee.gender || "",
+              false
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "תאריך לידה",
+              "employee-birthdate",
+              employee.birthdate || "",
+              false
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "מידת חולצה",
+              "employee-shirt",
+              employee.shirtSize || "",
+              false
+            )
+          );
+          form.appendChild(
+            createLabeledInput(
+              "עלות החזרי נסיעות יומי",
+              "employee-travel",
+              employee.travelCost || "",
+              false
+            )
+          );
+
+          var jobsSection = document.createElement("div");
+          jobsSection.className = "jobs-section";
+
+          var jobsHeader = document.createElement("div");
+          jobsHeader.className = "jobs-header";
+
+          var jobsTitle = document.createElement("div");
+          jobsTitle.textContent = "סוגי עבודה משויכים";
+
+          var addJobBtn = document.createElement("button");
+          addJobBtn.type = "button";
+          addJobBtn.textContent = "הוסף שורה";
+          addJobBtn.onclick = function () {
+            appendJobRow(jobsList, {}, allJobTypes);
+          };
+
+          jobsHeader.appendChild(jobsTitle);
+          jobsHeader.appendChild(addJobBtn);
+          jobsSection.appendChild(jobsHeader);
+
+          var jobsList = document.createElement("div");
+          jobsList.className = "jobs-list";
+          var rowsToRender =
+            employeeJobs && employeeJobs.length
+              ? employeeJobs
+              : [
+                  {
+                    active: true,
+                    jobType: "",
+                    department: "",
+                    amount: "",
+                    paymentMode: "",
+                    notes: "",
+                  },
+                ];
+          rowsToRender.forEach(function (job) {
+            appendJobRow(jobsList, job, allJobTypes);
+          });
+          jobsSection.appendChild(jobsList);
+          form.appendChild(jobsSection);
+
+          var hiddenId = document.createElement("input");
+          hiddenId.type = "hidden";
+          hiddenId.id = "employee-id";
+          hiddenId.value = employee.id || "";
+          form.appendChild(hiddenId);
+
+          var actions = document.createElement("div");
+          actions.className = "dialog-footer-actions";
+
+          var saveBtn = document.createElement("button");
+          saveBtn.type = "submit";
+          saveBtn.textContent = "שמור";
+
+          var cancelBtn = document.createElement("button");
+          cancelBtn.type = "button";
+          cancelBtn.textContent = "סגור";
+          cancelBtn.onclick = function () {
+            google.script.host.close();
+          };
+
+          actions.appendChild(saveBtn);
+          actions.appendChild(cancelBtn);
+          form.appendChild(actions);
+
+          body.appendChild(form);
+        }
+
+        function createLabeledInput(labelText, inputId, value, required) {
+          var wrapper = document.createElement("div");
+          wrapper.className = "field";
+
+          var label = document.createElement("label");
+          label.htmlFor = inputId;
+          label.textContent = labelText;
+
+          var input = document.createElement("input");
+          input.id = inputId;
+          input.type = "text";
+          input.value = value || "";
+          if (required) {
+            input.required = true;
+          }
+
+          wrapper.appendChild(label);
+          wrapper.appendChild(input);
+          return wrapper;
+        }
+
+        function appendJobRow(container, job, allJobTypes) {
+          if (!container) return;
+          var row = document.createElement("div");
+          row.className = "job-row";
+          row.setAttribute("data-row-index", job.rowIndex || "");
+
+          var header = document.createElement("div");
+          header.className = "job-row-header";
+
+          var title = document.createElement("span");
+          title.className = "job-row-title";
+          title.textContent = job.jobType || "סוג עבודה";
+
+          var activeBtn = document.createElement("button");
+          activeBtn.type = "button";
+          activeBtn.className = "job-active-toggle";
+          setActiveButton(
+            activeBtn,
+            job.active !== false && job.rowActive !== false
+          );
+          activeBtn.onclick = function () {
+            var nowActive = activeBtn.getAttribute("data-active") === "true";
+            setActiveButton(activeBtn, !nowActive);
+          };
+
+          header.appendChild(title);
+          header.appendChild(activeBtn);
+          row.appendChild(header);
+
+          var grid = document.createElement("div");
+          grid.className = "job-grid";
+
+          var jobSelect = document.createElement("select");
+          jobSelect.className = "job-type";
+          var optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "-- בחר סוג עבודה --";
+          jobSelect.appendChild(optEmpty);
+
+          var matched = false;
+          allJobTypes.forEach(function (j) {
+            var opt = document.createElement("option");
+            opt.value = j.name || "";
+            opt.textContent = j.name || "";
+            if (job.jobType && j.name === job.jobType) {
+              opt.selected = true;
+              matched = true;
+            }
+            if (j.isActive === false) {
+              opt.textContent += " (לא פעיל)";
+            }
+            jobSelect.appendChild(opt);
+          });
+
+          if (job.jobType && !matched) {
+            var customOpt = document.createElement("option");
+            customOpt.value = job.jobType;
+            customOpt.textContent = job.jobType + " (לא בטבלת אופציות)";
+            customOpt.selected = true;
+            jobSelect.insertBefore(customOpt, jobSelect.children[1] || null);
+          }
+
+          var deptInput = document.createElement("input");
+          deptInput.className = "job-department";
+          deptInput.type = "text";
+          deptInput.value = job.department || "";
+
+          jobSelect.addEventListener("change", function () {
+            var selectedName = jobSelect.value || "";
+            var matchedJob = allJobTypes.find(function (j) {
+              return j.name === selectedName;
+            });
+            title.textContent = selectedName || "סוג עבודה";
+            if (matchedJob && matchedJob.department) {
+              deptInput.value = matchedJob.department;
+            }
+          });
+
+          var amountInput = document.createElement("input");
+          amountInput.className = "job-amount";
+          amountInput.type = "number";
+          amountInput.value = job.amount || "";
+
+          var paymentInput = document.createElement("input");
+          paymentInput.className = "job-payment";
+          paymentInput.type = "text";
+          paymentInput.value = job.paymentMode || "";
+
+          var notesInput = document.createElement("input");
+          notesInput.className = "job-notes";
+          notesInput.type = "text";
+          notesInput.value = job.notes || "";
+
+          grid.appendChild(wrapField("סוג עבודה", jobSelect));
+          grid.appendChild(wrapField("מחלקה", deptInput));
+          grid.appendChild(wrapField("סכום", amountInput));
+          grid.appendChild(wrapField("אופן תשלום", paymentInput));
+          grid.appendChild(wrapField("הערות", notesInput));
+
+          row.appendChild(grid);
+          container.appendChild(row);
+        }
+
+        function wrapField(labelText, element) {
+          var wrap = document.createElement("div");
+          wrap.className = "field";
+          var label = document.createElement("label");
+          label.textContent = labelText;
+          wrap.appendChild(label);
+          wrap.appendChild(element);
+          return wrap;
+        }
+
+        function setActiveButton(btn, isActive) {
+          btn.setAttribute("data-active", isActive ? "true" : "false");
+          btn.textContent = isActive ? "פעיל" : "לא פעיל";
+          btn.classList.toggle("inactive", !isActive);
+        }
+
+        function saveEmployeeFromForm() {
+          var idEl = document.getElementById("employee-id");
+          if (!idEl || !idEl.value) {
+            alert("חסר מזהה עובד – אי אפשר לשמור.");
+            return;
+          }
+
+          var rows = [];
+          var jobRows = document.querySelectorAll(".job-row");
+          jobRows.forEach(function (row) {
+            var jobType = (
+              row.querySelector(".job-type") || { value: "" }
+            ).value.trim();
+            var department = (
+              row.querySelector(".job-department") || { value: "" }
+            ).value.trim();
+            var amount = (
+              row.querySelector(".job-amount") || { value: "" }
+            ).value.trim();
+            var paymentMode = (
+              row.querySelector(".job-payment") || { value: "" }
+            ).value.trim();
+            var notes = (
+              row.querySelector(".job-notes") || { value: "" }
+            ).value.trim();
+            var activeBtn = row.querySelector(".job-active-toggle");
+            var rowActive = activeBtn
+              ? activeBtn.getAttribute("data-active") === "true"
+              : true;
+            var rowIndex = row.getAttribute("data-row-index") || null;
+
+            var allEmpty =
+              !jobType && !department && !amount && !paymentMode && !notes;
+            if (allEmpty) return;
+
+            rows.push({
+              rowIndex: rowIndex,
+              rowActive: rowActive,
+              jobType: jobType,
+              department: department,
+              amount: amount,
+              paymentMode: paymentMode,
+              notes: notes,
+            });
+          });
+
+          if (!rows.length) {
+            alert("לפחות סוג עבודה אחד חייב להיות מוגדר.");
+            return;
+          }
+
+          var payload = {
+            payload: {
+              id: String(idEl.value),
+              name:
+                (document.getElementById("employee-name") || { value: "" })
+                  .value || "",
+              email:
+                (document.getElementById("employee-email") || { value: "" })
+                  .value || "",
+              phone:
+                (document.getElementById("employee-phone") || { value: "" })
+                  .value || "",
+              idNumber:
+                (document.getElementById("employee-idnum") || { value: "" })
+                  .value || "",
+              gender:
+                (document.getElementById("employee-gender") || { value: "" })
+                  .value || "",
+              birthdate:
+                (document.getElementById("employee-birthdate") || { value: "" })
+                  .value || "",
+              shirtSize:
+                (document.getElementById("employee-shirt") || { value: "" })
+                  .value || "",
+              travelCost:
+                (document.getElementById("employee-travel") || { value: "" })
+                  .value || "",
+              rows: rows,
+            },
+          };
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              alert("שמירת העובד נכשלה: " + err);
+            })
+            .withSuccessHandler(function (response) {
+              dialogState.lastResponse = response || null;
+              if (!response) {
+                alert("לא התקבלה תשובה מהשרת לאחר שמירה.");
+                return;
+              }
+
+              if (response.errors && response.errors.length) {
+                renderEmployeeView(response);
+                return;
+              }
+
+              renderEmployeeView(response);
+            })
+            .UI_saveEmployeeDialogChanges(payload);
+        }
+
+        function setBodyLoading(text) {
+          var body = document.getElementById("dialog-body");
+          if (!body) return;
+          body.innerHTML = "";
+          var box = document.createElement("div");
+          box.className = "placeholder";
+          box.textContent = text || "טוען...";
+          body.appendChild(box);
+        }
+
+        function renderError(message) {
+          var body = document.getElementById("dialog-body");
+          if (!body) return;
+          body.innerHTML = "";
+          var box = document.createElement("div");
+          box.className = "dialog-errors";
+          var line = document.createElement("div");
+          line.textContent = message;
+          box.appendChild(line);
+          body.appendChild(box);
+        }
+      })();
+    </script>
+  </body>
+</html>

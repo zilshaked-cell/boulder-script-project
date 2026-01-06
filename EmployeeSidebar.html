@@ -1026,7 +1026,17 @@
           style="display: none"
           data-tab-section="employees"
         >
-          <h2 class="section-title">כרטיס עובד</h2>
+          <div class="shifts-header">
+            <h2 class="section-title">כרטיס עובד</h2>
+            <button
+              class="btn-secondary"
+              type="button"
+              onclick="openEmployeeDialogFromSidebar()"
+              style="padding: 6px 10px; font-size: 11px"
+            >
+              פתח כרטיס בחלון גדול
+            </button>
+          </div>
           <!-- כותרת פרטי עובד: סטטוס + שם -->
           <div class="section employee-header">
             <div class="status-row">
@@ -1157,6 +1167,14 @@
         <div class="section tab-hidden" data-tab-section="requests">
           <div class="shifts-header">
             <h2 class="section-title">בקשות עובדים</h2>
+            <button
+              class="btn-secondary"
+              type="button"
+              onclick="openRequestsDialogFromSidebar()"
+              style="padding: 6px 10px; font-size: 11px"
+            >
+              פתח בקשות בחלון גדול
+            </button>
             <div id="requests-message" class="requests-message"></div>
           </div>
 
@@ -1214,6 +1232,14 @@
         <div class="section tab-hidden" data-tab-section="shifts">
           <div class="shifts-header">
             <h2 class="section-title">משמרות</h2>
+            <button
+              class="btn-secondary"
+              type="button"
+              onclick="openShiftsDialogFromSidebar()"
+              style="padding: 6px 10px; font-size: 11px"
+            >
+              פתח משמרות בחלון גדול
+            </button>
             <div id="shifts-message" class="shifts-message"></div>
           </div>
 
@@ -3589,6 +3615,92 @@
             setOverlapSummaryStatus("שגיאה בפתיחת חלון החפיפות", true);
           })
           .showHourlyOverlapsDialog();
+      }
+
+      // ----- Extended dialog openers -----
+      function openEmployeeDialogFromSidebar() {
+        var employeeId = selectedEmployeeId || "";
+        if (!employeeId) {
+          alert("לא נבחר עובד להצגה בחלון גדול.");
+          return;
+        }
+
+        google.script.run
+          .withFailureHandler(function (err) {
+            try {
+              alert("שגיאה בפתיחת כרטיס העובד בחלון גדול: " + err);
+            } catch (_e) {}
+          })
+          .UI_openEmployeeDialog({ employeeId: String(employeeId) });
+      }
+
+      function openShiftsDialogFromSidebar() {
+        var params = {};
+        var filters = {};
+        if (typeof collectShiftFilters === "function") {
+          filters = collectShiftFilters(false) || {};
+        } else if (shiftsState && shiftsState.filters) {
+          filters = shiftsState.filters;
+        }
+
+        params.fromDate = (filters && filters.dateFrom) || "";
+        params.toDate = (filters && filters.dateTo) || "";
+        params.employeeId = (filters && filters.employeeId) || "";
+
+        var statusList = [];
+        if (
+          filters &&
+          Array.isArray(filters.statuses) &&
+          filters.statuses.length
+        ) {
+          statusList = filters.statuses;
+        } else if (typeof getSelectedStatuses === "function") {
+          statusList = getSelectedStatuses();
+        }
+        if (statusList && statusList.length === 1) {
+          params.status = statusList[0];
+        }
+
+        google.script.run
+          .withFailureHandler(function (err) {
+            try {
+              alert("שגיאה בפתיחת חלון המשמרות: " + err);
+            } catch (_e) {}
+          })
+          .UI_openShiftsDialog(params);
+      }
+
+      function openRequestsDialogFromSidebar() {
+        var params = {};
+        var filters = {};
+        if (typeof collectRequestFilters === "function") {
+          filters = collectRequestFilters(false) || {};
+        } else if (requestsState && requestsState.filters) {
+          filters = requestsState.filters;
+        }
+
+        params.fromDate = (filters && filters.dateFrom) || "";
+        params.toDate = (filters && filters.dateTo) || "";
+        params.employeeId = (filters && filters.employeeId) || "";
+        params.jobId = (filters && filters.jobId) || "";
+        params.requestType = (filters && filters.requestType) || "";
+
+        var reqStatuses =
+          (filters && Array.isArray(filters.statuses) && filters.statuses) ||
+          [];
+        if (reqStatuses.length === 1) {
+          params.status = reqStatuses[0];
+        }
+
+        params.includeCancelled = !!(filters && filters.includeClosed);
+
+        google.script.run
+          .withFailureHandler(function (err) {
+            try {
+              alert("שגיאה בפתיחת חלון הבקשות: " + err);
+            } catch (_e) {}
+          })
+          .UI_openRequestsDialog(params);
       }
 
       // ----- Requests tab helpers -----
