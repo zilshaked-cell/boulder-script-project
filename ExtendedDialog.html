@@ -240,6 +240,19 @@
           isCompact: false,
         };
 
+        var requestsState = {
+          filters: {},
+          requests: [],
+          employees: [],
+          statuses: [],
+          requestTypes: [],
+          rules: {},
+          selectedId: "",
+          selection: {},
+          canEdit: false,
+          message: "",
+        };
+
         window.addEventListener("load", initExtendedDialog);
 
         function initExtendedDialog() {
@@ -322,7 +335,7 @@
           } else if (dialogState.mode === "shifts") {
             loadShiftsDialogData();
           } else if (dialogState.mode === "requests") {
-            renderError("תצוגת בקשות תתווסף בשלב הבא.");
+            loadRequestsDialogData();
           } else {
             renderError("מצב דיאלוג לא ידוע: " + dialogState.mode);
           }
@@ -783,6 +796,617 @@
           line.textContent = message;
           box.appendChild(line);
           body.appendChild(box);
+        }
+
+        // ----- Requests (new tab) -----
+        function loadRequestsDialogData(filters) {
+          var params = Object.assign(
+            {},
+            dialogState.params || {},
+            filters || {}
+          );
+          setBodyLoading("טוען נתוני בקשות...");
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              renderError("שגיאה בטעינת הבקשות: " + err);
+            })
+            .withSuccessHandler(function (response) {
+              dialogState.lastResponse = response || null;
+              renderRequestsView(response || {});
+            })
+            .UI_getRequestsDialogData(params);
+        }
+
+        function renderRequestsView(response) {
+          var body = document.getElementById("dialog-body");
+          if (!body) return;
+          body.innerHTML = "";
+
+          var errors = (response && response.errors) || [];
+          var data = (response && response.data) || null;
+          var meta = (response && response.meta) || {};
+
+          if (errors.length) {
+            var errBox = document.createElement("div");
+            errBox.className = "dialog-errors";
+            errors.forEach(function (err) {
+              var line = document.createElement("div");
+              line.textContent = err && err.message ? err.message : String(err);
+              errBox.appendChild(line);
+            });
+            body.appendChild(errBox);
+          }
+
+          if (!data) {
+            var info = document.createElement("div");
+            info.className = "placeholder";
+            info.textContent = "לא נמצאו נתוני בקשות.";
+            body.appendChild(info);
+            return;
+          }
+
+          // Refresh state
+          requestsState.filters = data.filtersEcho || {};
+          requestsState.requests = data.requests || [];
+          requestsState.employees = data.employeesLookup || [];
+          requestsState.statuses = data.statuses || [];
+          requestsState.requestTypes = data.requestTypes || [];
+          requestsState.rules = data.rules || {};
+          requestsState.canEdit = meta.canEdit !== false;
+
+          if (!requestsState.selectedId && requestsState.requests.length) {
+            requestsState.selectedId = requestsState.requests[0].id || "";
+          }
+
+          var filtersRow = document.createElement("div");
+          filtersRow.className = "filters-row";
+
+          filtersRow.appendChild(
+            wrapField(
+              "מתאריך",
+              createInputWithValue(
+                "req-from-date",
+                "date",
+                requestsState.filters.fromDate || ""
+              )
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "עד תאריך",
+              createInputWithValue(
+                "req-to-date",
+                "date",
+                requestsState.filters.toDate || ""
+              )
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "עובד",
+              buildEmployeeSelect(
+                "req-filter-employee",
+                requestsState.employees,
+                requestsState.filters.employeeId || ""
+              )
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "סוג בקשה",
+              buildRequestTypeSelect(
+                "req-filter-requestType",
+                requestsState.requestTypes,
+                requestsState.filters.requestType || ""
+              )
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "סטטוסים",
+              buildStatusMultiSelect(
+                "req-filter-statuses",
+                requestsState.statuses,
+                requestsState.filters.statuses ||
+                  (requestsState.filters.status
+                    ? [requestsState.filters.status]
+                    : [])
+              )
+            )
+          );
+
+          var includeCancelledField = document.createElement("div");
+          includeCancelledField.className = "field";
+          var incLabel = document.createElement("label");
+          incLabel.textContent = "הצג מבוטלות";
+          var incCb = document.createElement("input");
+          incCb.type = "checkbox";
+          incCb.id = "req-include-cancelled";
+          incCb.checked = !!requestsState.filters.includeCancelled;
+          includeCancelledField.appendChild(incLabel);
+          includeCancelledField.appendChild(incCb);
+          filtersRow.appendChild(includeCancelledField);
+
+          var filterActions = document.createElement("div");
+          filterActions.className = "dialog-actions";
+
+          var applyBtn = document.createElement("button");
+          applyBtn.type = "button";
+          applyBtn.textContent = "סינון";
+          applyBtn.onclick = function () {
+            loadRequestsDialogData(readCurrentRequestFilters());
+          };
+
+          var refreshBtn = document.createElement("button");
+          refreshBtn.type = "button";
+          refreshBtn.textContent = "רענון";
+          refreshBtn.onclick = function () {
+            loadRequestsDialogData(requestsState.filters);
+          };
+
+          filterActions.appendChild(applyBtn);
+          filterActions.appendChild(refreshBtn);
+
+          body.appendChild(filtersRow);
+          body.appendChild(filterActions);
+
+          var msg = document.createElement("div");
+          msg.id = "requests-message";
+          msg.className = "placeholder";
+          msg.textContent = requestsState.message || "";
+          body.appendChild(msg);
+
+          var layout = document.createElement("div");
+          layout.className = "shifts-layout";
+
+          // Table column
+          var tableWrap = document.createElement("div");
+          tableWrap.appendChild(buildRequestsTable());
+          tableWrap.appendChild(buildBulkActions());
+          layout.appendChild(tableWrap);
+
+          // Edit panel column
+          var editWrap = document.createElement("div");
+          editWrap.className = "shifts-form";
+          editWrap.appendChild(buildRequestEditPanel());
+          layout.appendChild(editWrap);
+
+          body.appendChild(layout);
+        }
+
+        function buildRequestsTable() {
+          var table = document.createElement("table");
+          table.className = "shifts-table";
+          var thead = document.createElement("thead");
+          var headerRow = document.createElement("tr");
+          [
+            "",
+            "תאריך",
+            "עובד",
+            "סוג בקשה",
+            "סטטוס",
+            "הערת עובד",
+            "הערת מנהל",
+            "תאריך מבוקש",
+          ].forEach(function (label) {
+            var th = document.createElement("th");
+            th.textContent = label;
+            headerRow.appendChild(th);
+          });
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          var tbody = document.createElement("tbody");
+          (requestsState.requests || []).forEach(function (r) {
+            var tr = document.createElement("tr");
+            var selected = requestsState.selection[r.id];
+            tr.className = selected ? "row-selected" : "";
+
+            var tdCheck = document.createElement("td");
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = !!selected;
+            cb.onclick = function (e) {
+              e.stopPropagation();
+              toggleRequestSelection(r.id, e.target.checked);
+            };
+            tdCheck.appendChild(cb);
+            tr.appendChild(tdCheck);
+
+            [
+              r.createdAt || "",
+              r.employeeName || r.employeeId || "",
+              r.requestType || "",
+              r.status || "",
+              r.notes || "",
+              r.managerNotes || "",
+              r.fromDate || r.toDate || "",
+            ].forEach(function (val) {
+              var td = document.createElement("td");
+              td.textContent = val;
+              tr.appendChild(td);
+            });
+
+            tr.onclick = function () {
+              requestsState.selectedId = r.id || "";
+              renderRequestsView({
+                data: {
+                  filtersEcho: requestsState.filters,
+                  requests: requestsState.requests,
+                  employeesLookup: requestsState.employees,
+                  requestTypes: requestsState.requestTypes,
+                  statuses: requestsState.statuses,
+                  rules: requestsState.rules,
+                },
+                meta: { canEdit: requestsState.canEdit },
+                errors: [],
+              });
+            };
+
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          return table;
+        }
+
+        function buildRequestEditPanel() {
+          var panel = document.createElement("div");
+          var title = document.createElement("div");
+          title.className = "job-row-title";
+          title.textContent = "עריכת בקשה";
+          panel.appendChild(title);
+
+          var current = (requestsState.requests || []).find(function (r) {
+            return r.id === requestsState.selectedId;
+          });
+
+          if (!current) {
+            var placeholder = document.createElement("div");
+            placeholder.className = "placeholder";
+            placeholder.textContent = "בחר בקשה מתוך הטבלה";
+            panel.appendChild(placeholder);
+            return panel;
+          }
+
+          var createdInput = createInputWithValue(
+            "req-created",
+            "text",
+            current.createdAt || ""
+          );
+          createdInput.readOnly = true;
+          panel.appendChild(wrapField("תאריך בקשה", createdInput));
+
+          var empInput = createInputWithValue(
+            "req-employee",
+            "text",
+            current.employeeName || current.employeeId || ""
+          );
+          empInput.readOnly = true;
+          panel.appendChild(wrapField("עובד", empInput));
+
+          var typeInput = createInputWithValue(
+            "req-type",
+            "text",
+            current.requestType || ""
+          );
+          typeInput.readOnly = true;
+          panel.appendChild(wrapField("סוג בקשה", typeInput));
+          panel.appendChild(
+            wrapField(
+              "סטטוס",
+              buildStatusSelect(
+                "req-status",
+                requestsState.statuses.map(function (s) {
+                  return s.value || s;
+                }),
+                current.status || ""
+              )
+            )
+          );
+          var empNotes = createTextarea("req-notes", current.notes || "");
+          empNotes.readOnly = true;
+          panel.appendChild(wrapField("הערת עובד", empNotes));
+          panel.appendChild(
+            wrapField(
+              "הערת מנהל",
+              createTextarea("req-manager-notes", current.managerNotes || "")
+            )
+          );
+
+          var hiddenId = document.createElement("input");
+          hiddenId.type = "hidden";
+          hiddenId.id = "req-id";
+          hiddenId.value = current.id || "";
+          panel.appendChild(hiddenId);
+
+          var actions = document.createElement("div");
+          actions.className = "dialog-footer-actions";
+          var saveBtn = document.createElement("button");
+          saveBtn.type = "button";
+          saveBtn.textContent = "שמור";
+          saveBtn.disabled = !requestsState.canEdit;
+          saveBtn.onclick = function () {
+            saveSingleRequest(current);
+          };
+          var closeBtn = document.createElement("button");
+          closeBtn.type = "button";
+          closeBtn.textContent = "סגור";
+          closeBtn.onclick = function () {
+            google.script.host.close();
+          };
+          actions.appendChild(saveBtn);
+          actions.appendChild(closeBtn);
+          panel.appendChild(actions);
+
+          return panel;
+        }
+
+        function buildBulkActions() {
+          var box = document.createElement("div");
+          box.className = "shifts-form";
+          var title = document.createElement("div");
+          title.className = "job-row-title";
+          title.textContent = "פעולות על נבחרות";
+          box.appendChild(title);
+
+          var selectedCount = Object.keys(requestsState.selection).filter(
+            function (id) {
+              return requestsState.selection[id];
+            }
+          ).length;
+
+          var info = document.createElement("div");
+          info.className = "placeholder";
+          info.textContent = selectedCount
+            ? "נבחרו " + selectedCount + " בקשות"
+            : "אין בקשות נבחרות";
+          box.appendChild(info);
+
+          var actionRow = document.createElement("div");
+          actionRow.className = "filters-row";
+
+          var actionSelect = document.createElement("select");
+          actionSelect.id = "req-bulk-action";
+          var optNone = document.createElement("option");
+          optNone.value = "";
+          optNone.textContent = "בחר פעולה";
+          actionSelect.appendChild(optNone);
+          var optStatus = document.createElement("option");
+          optStatus.value = "set-status";
+          optStatus.textContent = "שנה סטטוס";
+          actionSelect.appendChild(optStatus);
+
+          var statusSelect = buildStatusSelect(
+            "req-bulk-status",
+            requestsState.statuses.map(function (s) {
+              return s.value || s;
+            }),
+            ""
+          );
+
+          actionRow.appendChild(wrapField("פעולה", actionSelect));
+          actionRow.appendChild(wrapField("סטטוס", statusSelect));
+          box.appendChild(actionRow);
+
+          var actions = document.createElement("div");
+          actions.className = "dialog-footer-actions";
+          var applyBtn = document.createElement("button");
+          applyBtn.type = "button";
+          applyBtn.textContent = "החל על נבחרות";
+          applyBtn.disabled = !selectedCount || !requestsState.canEdit;
+          applyBtn.onclick = function () {
+            applyBulkAction();
+          };
+          actions.appendChild(applyBtn);
+          box.appendChild(actions);
+
+          return box;
+        }
+
+        function readCurrentRequestFilters() {
+          var statusesSel = document.getElementById("req-filter-statuses");
+          var statusList = [];
+          if (statusesSel && statusesSel.options) {
+            Array.prototype.forEach.call(statusesSel.options, function (opt) {
+              if (opt.selected && opt.value) statusList.push(opt.value);
+            });
+          }
+
+          return {
+            fromDate: (
+              document.getElementById("req-from-date") || { value: "" }
+            ).value,
+            toDate: (document.getElementById("req-to-date") || { value: "" })
+              .value,
+            employeeId: (
+              document.getElementById("req-filter-employee") || { value: "" }
+            ).value,
+            requestType: (
+              document.getElementById("req-filter-requestType") || { value: "" }
+            ).value,
+            statuses: statusList,
+            includeCancelled: !!(
+              document.getElementById("req-include-cancelled") || {
+                checked: false,
+              }
+            ).checked,
+          };
+        }
+
+        function buildStatusMultiSelect(id, statuses, selectedValues) {
+          var select = document.createElement("select");
+          select.id = id;
+          select.multiple = true;
+          var selectedSet = {};
+          (selectedValues || []).forEach(function (v) {
+            selectedSet[v] = true;
+          });
+          (statuses || []).forEach(function (s) {
+            var value = s && s.value !== undefined ? s.value : s;
+            var label = s && s.label !== undefined ? s.label : value;
+            var opt = document.createElement("option");
+            opt.value = value || "";
+            opt.textContent = label || value || "";
+            if (selectedSet[opt.value]) opt.selected = true;
+            select.appendChild(opt);
+          });
+          return select;
+        }
+
+        function buildRequestTypeSelect(id, types, selected) {
+          var select = document.createElement("select");
+          select.id = id;
+          var optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "-- סוג בקשה --";
+          select.appendChild(optEmpty);
+          (types || []).forEach(function (t) {
+            var value = t && t.value !== undefined ? t.value : t;
+            var label = t && t.label !== undefined ? t.label : value;
+            var opt = document.createElement("option");
+            opt.value = value || "";
+            opt.textContent = label || value || "";
+            if (selected && selected === opt.value) opt.selected = true;
+            select.appendChild(opt);
+          });
+          return select;
+        }
+
+        function toggleRequestSelection(requestId, checked) {
+          if (!requestId) return;
+          if (checked) {
+            requestsState.selection[requestId] = true;
+          } else {
+            delete requestsState.selection[requestId];
+          }
+          renderRequestsView({
+            data: {
+              filtersEcho: requestsState.filters,
+              requests: requestsState.requests,
+              employeesLookup: requestsState.employees,
+              requestTypes: requestsState.requestTypes,
+              statuses: requestsState.statuses,
+              rules: requestsState.rules,
+            },
+            meta: { canEdit: requestsState.canEdit },
+            errors: [],
+          });
+        }
+
+        function saveSingleRequest(current) {
+          if (!current || !current.id) return;
+          var statusVal = (
+            document.getElementById("req-status") || { value: "" }
+          ).value;
+          var managerNote = (
+            document.getElementById("req-manager-notes") || { value: "" }
+          ).value;
+          if (!statusVal) {
+            alert("יש לבחור סטטוס לשמירה.");
+            return;
+          }
+
+          var payload = {
+            requestId: current.id,
+            status: statusVal,
+            managerNotes: managerNote,
+            employeeId: current.employeeId || "",
+            jobId: current.jobId || "",
+            fixDate: current.fromDate || current.toDate || "",
+            direction: current.requestType || "",
+          };
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              alert("שמירת הבקשה נכשלה: " + err);
+            })
+            .withSuccessHandler(function (res) {
+              requestsState.message = summaryMessageFromSave(res);
+              loadRequestsDialogData(requestsState.filters);
+            })
+            .UI_saveRequestChanges({
+              request: payload,
+              rules: requestsState.rules,
+            });
+        }
+
+        function applyBulkAction() {
+          var action = (
+            document.getElementById("req-bulk-action") || { value: "" }
+          ).value;
+          var statusVal = (
+            document.getElementById("req-bulk-status") || { value: "" }
+          ).value;
+          var selectedIds = Object.keys(requestsState.selection).filter(
+            function (id) {
+              return requestsState.selection[id];
+            }
+          );
+
+          if (!selectedIds.length) {
+            alert("לא נבחרו בקשות.");
+            return;
+          }
+          if (action !== "set-status" || !statusVal) {
+            alert("בחר פעולה וסטטוס לעדכון.");
+            return;
+          }
+
+          var requestMap = {};
+          (requestsState.requests || []).forEach(function (r) {
+            requestMap[r.id] = r;
+          });
+
+          var updates = selectedIds.map(function (id) {
+            var base = requestMap[id] || {};
+            return {
+              requestId: id,
+              status: statusVal,
+              employeeId: base.employeeId || "",
+              jobId: base.jobId || "",
+              fixDate: base.fromDate || base.toDate || "",
+              direction: base.requestType || "",
+            };
+          });
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              alert("שמירת הבקשות נכשלה: " + err);
+            })
+            .withSuccessHandler(function (res) {
+              requestsState.message = summaryMessageFromSave(res);
+              loadRequestsDialogData(requestsState.filters);
+            })
+            .UI_saveRequestChanges({
+              requests: updates,
+              rules: requestsState.rules,
+            });
+        }
+
+        function summaryMessageFromSave(res) {
+          if (!res) return "";
+          var errors = (res && res.errors) || [];
+          var saves =
+            res && res.data && res.data.saveResults
+              ? res.data.saveResults.length
+              : 0;
+          if (errors.length && !saves) {
+            return (
+              "שמירה נכשלה: " + (errors[0].message || errors[0].code || "")
+            );
+          }
+          if (errors.length && saves) {
+            return (
+              "חלק מהשמירות הצליחו (" +
+              saves +
+              ") וחלק נכשלו (" +
+              errors.length +
+              ")."
+            );
+          }
+          if (saves) return "נשמרו " + saves + " בקשות.";
+          return "";
         }
 
         function loadShiftsDialogData(filters) {

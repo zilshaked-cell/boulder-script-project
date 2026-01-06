@@ -242,14 +242,14 @@ function getActionRegistry_() {
     reportAccessIssue: function (payload, _logger) {
       return reportAccessIssue_(payload || {});
     },
-    "shiftReport.submit": function (payload, _logger) {
-      return handleShiftReportSubmit_(payload);
+    "shiftReport.submit": function (payload, logger) {
+      return handleShiftReportSubmit_(payload, logger);
     },
-    "shiftReport.deleteByIds": function (payload, _logger) {
-      return handleShiftReportDeleteByIds_(payload);
+    "shiftReport.deleteByIds": function (payload, logger) {
+      return handleShiftReportDeleteByIds_(payload, logger);
     },
-    "shiftCorrection.submit": function (payload, _logger) {
-      return handleShiftCorrectionSubmit_(payload);
+    "shiftCorrection.submit": function (payload, logger) {
+      return handleShiftCorrectionSubmit_(payload, logger);
     },
     "shiftReport.monthlyErrorNotify": function (payload, _logger) {
       return handleShiftReportMonthlyErrorNotify_(payload);
@@ -539,6 +539,30 @@ function createScriptLogger_(traceContext) {
   };
 }
 
+function safeDurationMs_(startMs) {
+  var now = new Date().getTime();
+  if (!startMs || isNaN(startMs)) return 0;
+  var diff = now - startMs;
+  return diff < 0 ? 0 : diff;
+}
+
+function logDuration_(logger, step, startMs, details, severity, errorCode, err) {
+  if (!logger || typeof logger.info !== "function") return;
+  var payload = details && typeof details === "object" ? Object.assign({}, details) : {};
+  payload.durationMs = safeDurationMs_(startMs);
+
+  var level = (severity || "info").toLowerCase();
+  if (level === "error" && typeof logger.error === "function") {
+    logger.error(step, payload, errorCode, err);
+  } else if (level === "warn" && typeof logger.warn === "function") {
+    logger.warn(step, payload, errorCode);
+  } else if (level === "debug" && typeof logger.debug === "function") {
+    logger.debug(step, payload);
+  } else {
+    logger.info(step, payload);
+  }
+}
+
 // Lightweight module logger helper to avoid undefined crashes.
 function getModuleLogger_(operation) {
   var ctx = __activeTraceContext || {
@@ -553,6 +577,8 @@ function getModuleLogger_(operation) {
 function doPost(e) {
   var logger = null;
   var action = "";
+  var requestStartMs = new Date().getTime();
+  var parseStartMs = requestStartMs;
 
   try {
     const parsed = parseBody(e);
@@ -562,6 +588,19 @@ function doPost(e) {
     const traceContext = createScriptTraceContext_(body.meta, action);
     __activeTraceContext = traceContext;
     logger = createScriptLogger_(traceContext);
+
+    var parseDetails = { hasPayload: !!(body && body.payload) };
+    if (parsed.error) {
+      parseDetails.parseError = String(parsed.error).slice(0, 120);
+    }
+    logDuration_(
+      logger,
+      "parse-body",
+      parseStartMs,
+      parseDetails,
+      parsed.error ? "warn" : "debug",
+      parsed.error ? "VALIDATION_FAILED" : null
+    );
 
     if (!body.meta || !body.meta.traceId) {
       logger.warn(
@@ -598,8 +637,9 @@ function doPost(e) {
     }
 
     logger.info("dispatch", { action: action });
+    var dispatchStartMs = new Date().getTime();
     const response = handleNewPost_(action, payload, logger);
-    logger.info("response", { action: action });
+    logDuration_(logger, "response", dispatchStartMs, { action: action });
     return response;
   } catch (err) {
     if (logger && logger.error) {
@@ -626,6 +666,11 @@ function doPost(e) {
       500
     );
   } finally {
+    if (logger) {
+      logDuration_(logger, "request-total", requestStartMs, {
+        action: action || "legacy",
+      });
+    }
     __activeTraceContext = null;
   }
 }
@@ -640,8 +685,9 @@ function handleNewPost_(action, payload, logger) {
     return jsonResponse({ ok: false, error: "Unknown action" }, 400);
   }
 
+  var handlerStartMs = new Date().getTime();
   var result = handler(payload || {}, logger);
-  if (logger) logger.info("response", { action: action });
+  logDuration_(logger, "handler", handlerStartMs, { action: action });
   return jsonResponse(withOk_(result));
 }
 
@@ -845,7 +891,7 @@ function handleLegacyPost_(e, body, _logger) {
   }
 
   const legacyPayload = normalizeLegacyShiftPayload_(body);
-  return jsonResponse(withOk_(handleShiftReportSubmit_(legacyPayload)));
+  return jsonResponse(withOk_(handleShiftReportSubmit_(legacyPayload, _logger)));
 }
 
 function parseBody(e) {
@@ -1361,8 +1407,9 @@ function findRequestById_(requestId) {
   return null;
 }
 
-function handleShiftReportSubmit_(payload) {
+function handleShiftReportSubmit_(payload, logger) {
   if (!payload) throw new Error("Missing payload for shiftReport.submit");
+  var fnStartMs = new Date().getTime();
   const nowIso = new Date().toISOString();
   const shiftId = payload.shiftId || Utilities.getUuid();
   const employeeId = stringValue(payload.employeeId);
@@ -1379,6 +1426,7 @@ function handleShiftReportSubmit_(payload) {
   const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
   const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
   const emailCol = getOptionalColumn_(empHeaders, EMAIL_HEADER_CANDIDATES);
+  var employeeScanStartMs = new Date().getTime();
   const empValues = employeesSheet.getDataRange().getValues();
   let employeeName = "";
   let employeeTz = "";
@@ -1395,10 +1443,15 @@ function handleShiftReportSubmit_(payload) {
     }
   }
   if (!employeeName) throw new Error("Employee not found: " + employeeId);
+  logDuration_(logger, "shift.submit.resolve-employee", employeeScanStartMs, {
+    sheet: empSheetName,
+    found: !!employeeName,
+  });
 
   const jobTypes = listJobTypes_();
   const jobMap = {};
   jobTypes.forEach((j) => (jobMap[j.id] = j));
+  var linkedStartMs = new Date().getTime();
   const linked = listEmployeeLinkedJobIds_({ employeeId }).jobTypeIds;
 
   const isOther = payload.jobId === "__other__";
@@ -1441,6 +1494,12 @@ function handleShiftReportSubmit_(payload) {
     : "";
   const payType = normalizePayType_(payTypeName);
   const payTypeForRequestRow = payType || payTypeName;
+  logDuration_(logger, "shift.submit.resolve-job", linkedStartMs, {
+    jobTypeCount: jobTypes.length,
+    linkedCount: linked.length,
+    isOther: isOther,
+    payType: payType || payTypeName,
+  });
 
   if (payType === "monthly") {
     return {
@@ -1462,6 +1521,7 @@ function handleShiftReportSubmit_(payload) {
     payType === "hourly" &&
     (reportMode.toLowerCase() === "manual" || !!manualDate || !!manualTime);
 
+  var normalizeStartMs = new Date().getTime();
   let normalized = {
     workDate: workDate || timestampDate,
     direction: direction,
@@ -1498,6 +1558,11 @@ function handleShiftReportSubmit_(payload) {
     const parsedUnits = Number(normalized.units);
     normalized.units = isNaN(parsedUnits) ? normalized.units : parsedUnits;
   }
+  logDuration_(logger, "shift.submit.normalize", normalizeStartMs, {
+    payType: payType || payTypeName,
+    isManualHourly: isManualHourly,
+    mode: reportMode.toLowerCase ? reportMode.toLowerCase() : reportMode,
+  });
 
   const explicitRequestType = stringValue(payload.requestType);
   let requestType =
@@ -1546,6 +1611,7 @@ function handleShiftReportSubmit_(payload) {
     getOptionalColumn_(headers, ["הערה למנהל", "הערות", "הערות למשמרת"]);
     getOptionalColumn_(headers, ["סוג בקשה"]);
     getRequiredColumn_(headers, ["סוג בקשה"], reqSheetName);
+    var requestAppendStartMs = new Date().getTime();
     const row = buildRowFromHeaders_(headers, {
       shiftId: shiftId,
       status: "ממתין",
@@ -1570,6 +1636,15 @@ function handleShiftReportSubmit_(payload) {
       payType: payTypeForRequestRow,
     });
     reqSheet.appendRow(row);
+    logDuration_(logger, "shift.submit.request-append", requestAppendStartMs, {
+      sheet: reqSheetName,
+      requestType: requestType,
+    });
+    logDuration_(logger, "shift.submit.total", fnStartMs, {
+      requiresApproval: true,
+      jobTypeId: jobTypeId,
+      payType: payType || payTypeName,
+    });
     return {
       ok: true,
       success: true,
@@ -1586,13 +1661,24 @@ function handleShiftReportSubmit_(payload) {
   normalized.department = department;
   normalized.timestamp = timestamp;
 
-  const writeResult = writeWorkLogFromNormalizedShift_(normalized, {
-    employeeId: employeeId,
-    employeeName: employeeName,
-    note: payload.note,
+  var writeStartMs = new Date().getTime();
+  const writeResult = writeWorkLogFromNormalizedShift_(
+    normalized,
+    {
+      employeeId: employeeId,
+      employeeName: employeeName,
+      note: payload.note,
+    },
+    logger
+  );
+  logDuration_(logger, "shift.submit.write-worklog", writeStartMs, {
+    jobTypeId: jobTypeId,
+    payType: payType || payTypeName,
+    direction: normalized.direction,
   });
 
   // Detect duplicates after writing (to include the new row in the list).
+  var duplicateScanStartMs = new Date().getTime();
   const duplicates = findDuplicateWorkLogs_(
     {
       employeeId: employeeId,
@@ -1604,9 +1690,18 @@ function handleShiftReportSubmit_(payload) {
     },
     shiftId
   );
+  logDuration_(logger, "shift.submit.duplicates-scan", duplicateScanStartMs, {
+    count: duplicates.length,
+  });
   const duplicatesFound = duplicates.length >= 2;
 
   if (duplicatesFound) {
+    logDuration_(logger, "shift.submit.total", fnStartMs, {
+      requiresApproval: false,
+      duplicatesFound: true,
+      jobTypeId: jobTypeId,
+      payType: payType || payTypeName,
+    });
     return {
       ok: true,
       status: "duplicate_found",
@@ -1614,6 +1709,13 @@ function handleShiftReportSubmit_(payload) {
       duplicates: duplicates,
     };
   }
+
+  logDuration_(logger, "shift.submit.total", fnStartMs, {
+    requiresApproval: false,
+    duplicatesFound: false,
+    jobTypeId: jobTypeId,
+    payType: payType || payTypeName,
+  });
 
   return writeResult;
 }
@@ -1681,8 +1783,9 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
   return { ok: true, status: "monthly_error_notified" };
 }
 
-function handleShiftCorrectionSubmit_(payload) {
+function handleShiftCorrectionSubmit_(payload, logger) {
   if (!payload) throw new Error("Missing payload for shiftCorrection.submit");
+  var fnStartMs = new Date().getTime();
   const nowIso = new Date().toISOString();
   const employeeId = stringValue(payload.employeeId);
   if (!employeeId) throw new Error("Missing employeeId");
@@ -1697,6 +1800,7 @@ function handleShiftCorrectionSubmit_(payload) {
   );
   const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
   const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
+  var employeeScanStartMs = new Date().getTime();
   const empValues = employeesSheet.getDataRange().getValues();
   let employeeName = "";
   let employeeTz = "";
@@ -1709,6 +1813,10 @@ function handleShiftCorrectionSubmit_(payload) {
     }
   }
   if (!employeeName) throw new Error("Employee not found: " + employeeId);
+  logDuration_(logger, "shift.correction.resolve-employee", employeeScanStartMs, {
+    sheet: empSheetName,
+    found: !!employeeName,
+  });
 
   const original = {
     workDate: stringValue(payload.originalWorkDate || payload.workDate),
@@ -1807,7 +1915,16 @@ function handleShiftCorrectionSubmit_(payload) {
     newJobTypeId: updated.jobTypeId,
   });
 
+  var requestAppendStartMs = new Date().getTime();
   reqSheet.appendRow(row);
+
+  logDuration_(logger, "shift.correction.append-request", requestAppendStartMs, {
+    sheet: reqSheetName,
+  });
+  logDuration_(logger, "shift.correction.total", fnStartMs, {
+    requestType: "shift_correction",
+    jobTypeId: jobTypeId,
+  });
 
   return {
     ok: true,
@@ -2359,8 +2476,10 @@ function sendMonthlyBlockEmail_(details) {
   });
 }
 
-function writeWorkLogFromNormalizedShift_(normalized, meta) {
+function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
+  var fnStartMs = new Date().getTime();
   const logsSheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  var headerStartMs = new Date().getTime();
   const headers = getHeaderMap_(logsSheet);
   const logsSheetName = logsSheet.getName();
   getRequiredColumn_(headers, ["ID משמרת", "ID דיווח"], logsSheetName);
@@ -2375,6 +2494,9 @@ function writeWorkLogFromNormalizedShift_(normalized, meta) {
   getRequiredColumn_(headers, ["מחלקה", "מחלקות"], logsSheetName);
   getRequiredColumn_(headers, ["כמות היחידות", "דיווח יחידות"], logsSheetName);
   getRequiredColumn_(headers, ["הערות", "הערה"], logsSheetName);
+  logDuration_(logger, "shift.worklog.headers", headerStartMs, {
+    sheet: logsSheetName,
+  });
 
   const row = buildRowFromHeaders_(headers, {
     note: stringValue(meta.note),
@@ -2392,9 +2514,14 @@ function writeWorkLogFromNormalizedShift_(normalized, meta) {
     workDate: normalized.workDate,
   });
 
+  var appendStartMs = new Date().getTime();
   logsSheet.appendRow(row);
+  logDuration_(logger, "shift.worklog.append", appendStartMs, {
+    sheet: logsSheetName,
+  });
 
   try {
+    var upsertStartMs = new Date().getTime();
     var workDateForUpsert = buildWorkDateForUpsert_(normalized);
     if (workDateForUpsert) {
       SHIFTS_upsertAroundWorkLog_(
@@ -2403,9 +2530,15 @@ function writeWorkLogFromNormalizedShift_(normalized, meta) {
         workDateForUpsert
       );
     }
+    logDuration_(logger, "shift.worklog.upsert-shifts", upsertStartMs, {
+      hasWorkDate: !!workDateForUpsert,
+    });
   } catch (e) {
     Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + e);
   }
+  logDuration_(logger, "shift.worklog.total", fnStartMs, {
+    sheet: logsSheetName,
+  });
   return {
     ok: true,
     success: true,
@@ -2500,7 +2633,8 @@ function buildDuplicateKey_(employeeId, jobTypeId, workDate, direction) {
   return [stringValue(employeeId), stringValue(jobTypeId), w, dir].join("__");
 }
 
-function handleShiftReportDeleteByIds_(payload) {
+function handleShiftReportDeleteByIds_(payload, logger) {
+  var fnStartMs = new Date().getTime();
   const shiftIds = (payload && payload.shiftIds) || [];
   if (!Array.isArray(shiftIds) || !shiftIds.length) {
     return { ok: false, error: "missing_shiftIds" };
@@ -2549,6 +2683,10 @@ function handleShiftReportDeleteByIds_(payload) {
       deletedCount: rowsToDelete.length,
       shiftIds: shiftIds,
     },
+  });
+
+  logDuration_(logger, "shift.delete-by-ids", fnStartMs, {
+    deletedCount: rowsToDelete.length,
   });
 
   return {
