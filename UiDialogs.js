@@ -310,6 +310,10 @@ function UI_getShiftsDialogData(params) {
   var shifts = [];
   var employeesLookup = [];
   var jobTypesLookup = [];
+  var statusesLookup = [];
+  var totalShifts = 0;
+  var returnedShifts = 0;
+  var hasMore = false;
 
   if (errors.length === 0) {
     var filters = {
@@ -336,6 +340,13 @@ function UI_getShiftsDialogData(params) {
           (shiftsRes && shiftsRes.error ? ": " + shiftsRes.error : ""),
       });
     } else {
+      totalShifts = shiftsRes.total || 0;
+      returnedShifts = shiftsRes.returned || 0;
+      hasMore = !!shiftsRes.hasMore;
+      statusesLookup = Array.isArray(shiftsRes.statuses)
+        ? shiftsRes.statuses
+        : [];
+
       shifts = (shiftsRes.shifts || []).map(function (s) {
         var logicalDate = buildLogicalDate_(s);
         return {
@@ -357,6 +368,7 @@ function UI_getShiftsDialogData(params) {
           bonusIds: s.bonusIds || [],
           manualNote: s.manualNote || "",
           durationHours: s.spanHours !== undefined ? s.spanHours : null,
+          payHours: s.payHours !== undefined ? s.payHours : null,
           source: s.source || "",
         };
       });
@@ -423,6 +435,12 @@ function UI_getShiftsDialogData(params) {
         shifts: shifts,
         employeesLookup: employeesLookup,
         jobTypesLookup: jobTypesLookup,
+        statuses: statusesLookup,
+        metaStats: {
+          total: totalShifts,
+          returned: returnedShifts,
+          hasMore: hasMore,
+        },
         rules: { crossMidnightCutoffHour: 4 },
       };
 
@@ -570,19 +588,302 @@ function buildUniqueValuePairs_(items, key) {
   return out;
 }
 
-/** Saves changes made in the extended shifts dialog (placeholder). */
+/** Saves changes made in the extended shifts dialog. */
 function UI_saveShiftChanges(envelope) {
-  void envelope;
+  var traceId =
+    (typeof Utilities !== "undefined" &&
+      Utilities.getUuid &&
+      Utilities.getUuid()) ||
+    "";
+  var requestedAt = new Date();
+  var actorEmail = "";
+  try {
+    actorEmail = Session.getActiveUser().getEmail() || "";
+  } catch (_e) {
+    actorEmail = "";
+  }
+  var actorRole = "MANAGER"; // placeholder until role logic is added
+
+  var errors = [];
+  var safeEnvelope = envelope && typeof envelope === "object" ? envelope : {};
+  var candidate =
+    safeEnvelope.payload ||
+    safeEnvelope.shift ||
+    safeEnvelope.data ||
+    safeEnvelope;
+
+  var shiftPayload =
+    candidate && typeof candidate === "object" && candidate.shift
+      ? candidate.shift
+      : candidate;
+
+  var filtersEcho =
+    safeEnvelope.filters && typeof safeEnvelope.filters === "object"
+      ? safeEnvelope.filters
+      : {};
+
+  function normStr_(v) {
+    if (v === null || v === undefined) return "";
+    return String(v).trim();
+  }
+
+  function parseTimeToParts_(val) {
+    var s = normStr_(val);
+    if (!s) return null;
+    var parts = s.split(":");
+    var hh = parseInt(parts[0], 10);
+    var mm = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+    if (isNaN(hh) || isNaN(mm)) return null;
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+    return { hours: hh, minutes: mm };
+  }
+
+  function buildDateTime_(dateIso, timeStr) {
+    var dt = parseIsoDate_(dateIso);
+    var t = parseTimeToParts_(timeStr);
+    if (!dt || !t) return null;
+    var out = new Date(dt.getTime());
+    out.setHours(t.hours);
+    out.setMinutes(t.minutes);
+    out.setSeconds(0);
+    out.setMilliseconds(0);
+    return out;
+  }
+
+  function timeStr_(dt) {
+    if (!(dt instanceof Date) || isNaN(dt)) return "";
+    var h = dt.getHours();
+    var m = dt.getMinutes();
+    return (
+      (h < 10 ? "0" + h : String(h)) + ":" + (m < 10 ? "0" + m : String(m))
+    );
+  }
+
+  if (!shiftPayload || typeof shiftPayload !== "object") {
+    errors.push({
+      code: "INVALID_PAYLOAD",
+      message: "נתוני המשמרת אינם תקינים.",
+    });
+  }
+
+  var shiftId =
+    shiftPayload && shiftPayload.id ? normStr_(shiftPayload.id) : "";
+  var employeeId = shiftPayload ? normStr_(shiftPayload.employeeId) : "";
+  var jobId = shiftPayload
+    ? normStr_(shiftPayload.jobId || shiftPayload.workTypeId)
+    : "";
+  var jobName = shiftPayload
+    ? normStr_(shiftPayload.jobName || shiftPayload.workType)
+    : "";
+  var department = shiftPayload ? normStr_(shiftPayload.department) : "";
+  var status = shiftPayload ? normStr_(shiftPayload.status) : "";
+  var shiftDate = shiftPayload
+    ? normStr_(
+        shiftPayload.date ||
+          shiftPayload.shiftDate ||
+          shiftPayload.rawDate ||
+          shiftPayload.logicalDate
+      )
+    : "";
+  var startTime = shiftPayload ? normStr_(shiftPayload.startTime) : "";
+  var endTime = shiftPayload ? normStr_(shiftPayload.endTime) : "";
+  var manualNote = shiftPayload
+    ? normStr_(shiftPayload.manualNote || shiftPayload.note)
+    : "";
+  var bonusIds = Array.isArray(shiftPayload && shiftPayload.bonusIds)
+    ? shiftPayload.bonusIds
+    : [];
+
+  if (!employeeId) {
+    errors.push({ code: "NO_EMPLOYEE_ID", message: "יש לבחור עובד לשמירה." });
+  }
+  if (!jobId && !jobName) {
+    errors.push({ code: "NO_JOB", message: "יש לבחור סוג עבודה." });
+  }
+  if (!shiftDate) {
+    errors.push({ code: "NO_DATE", message: "יש לבחור תאריך למשמרת." });
+  }
+
+  if (!shiftId && (!startTime || !parsedStart)) {
+    errors.push({
+      code: "NO_START_TIME",
+      message: "חסר זמן כניסה למשמרת חדשה.",
+    });
+  }
+  if (!shiftId && (!endTime || !parsedEnd)) {
+    errors.push({ code: "NO_END_TIME", message: "חסר זמן יציאה למשמרת חדשה." });
+  }
+
+  var parsedStart =
+    shiftDate && startTime ? buildDateTime_(shiftDate, startTime) : null;
+  var parsedEnd =
+    shiftDate && endTime ? buildDateTime_(shiftDate, endTime) : null;
+
+  if (parsedStart && parsedEnd && parsedEnd.getTime() < parsedStart.getTime()) {
+    parsedEnd.setDate(parsedEnd.getDate() + 1);
+  }
+
+  var saveResult = null;
+
+  if (!errors.length && shiftId) {
+    var updatePayload = {
+      shiftId: shiftId,
+      workType: jobName,
+      workTypeId: jobId,
+      department: department,
+      status: status,
+      date: shiftDate,
+      startTime: startTime,
+      endTime: endTime,
+      manualNote: manualNote,
+      bonusIds: bonusIds,
+    };
+
+    try {
+      if (typeof SHIFTS_updateShift === "function") {
+        saveResult = SHIFTS_updateShift(updatePayload);
+      } else {
+        saveResult = { ok: false, error: "SHIFTS_updateShift missing" };
+      }
+    } catch (errUpdate) {
+      saveResult = { ok: false, error: String(errUpdate) };
+    }
+
+    if (!saveResult || saveResult.ok !== true) {
+      errors.push({
+        code: "UPDATE_FAILED",
+        message:
+          "עדכון המשמרת נכשל" +
+          (saveResult && saveResult.error ? ": " + saveResult.error : ""),
+      });
+    }
+  } else if (!errors.length && !shiftId) {
+    var newShiftId =
+      (typeof Utilities !== "undefined" &&
+        Utilities.getUuid &&
+        Utilities.getUuid()) ||
+      "";
+    var startIso = parsedStart ? formatIsoDate_(parsedStart) : shiftDate;
+    var endIso = parsedEnd ? formatIsoDate_(parsedEnd) : shiftDate;
+    var endTimeStr = parsedEnd ? timeStr_(parsedEnd) : endTime;
+
+    function submitReport_(direction, fixDateVal, fixTimeVal) {
+      if (typeof handleShiftReportSubmit_ !== "function") {
+        return { ok: false, error: "handleShiftReportSubmit_ missing" };
+      }
+      try {
+        return handleShiftReportSubmit_({
+          shiftId: newShiftId,
+          employeeId: employeeId,
+          jobId: jobId,
+          jobName: jobName,
+          department: department,
+          direction: direction,
+          fixDate: fixDateVal,
+          fixTime: fixTimeVal,
+          workDate: shiftDate,
+          manualDate: fixDateVal,
+          manualTime: fixTimeVal,
+          mode: "manual",
+          requiresApproval: false,
+        });
+      } catch (errSubmit) {
+        return { ok: false, error: String(errSubmit) };
+      }
+    }
+
+    var startRes = submitReport_("כניסה", startIso, startTime);
+    var endRes = submitReport_("יציאה", endIso, endTimeStr || endTime);
+
+    if (!startRes || startRes.ok === false || startRes.success === false) {
+      errors.push({
+        code: "CREATE_FAILED",
+        message:
+          "שמירת שעת כניסה נכשלה" +
+          (startRes && startRes.error ? ": " + startRes.error : ""),
+      });
+    }
+    if (!endRes || endRes.ok === false || endRes.success === false) {
+      errors.push({
+        code: "CREATE_FAILED",
+        message:
+          "שמירת שעת יציאה נכשלה" +
+          (endRes && endRes.error ? ": " + endRes.error : ""),
+      });
+    }
+
+    if (!errors.length) {
+      try {
+        if (typeof SHIFTS_upsertAroundWorkLog_ === "function") {
+          SHIFTS_upsertAroundWorkLog_(employeeId, jobId, shiftDate);
+        }
+      } catch (_upsertErr) {
+        // best-effort refresh only
+      }
+
+      saveResult = { ok: true, shiftId: newShiftId };
+    }
+  }
+
+  var dialogRes = null;
+  if (!errors.length) {
+    try {
+      dialogRes = UI_getShiftsDialogData(filtersEcho);
+    } catch (errReload) {
+      errors.push({
+        code: "RELOAD_FAILED",
+        message: "טעינת הנתונים לאחר שמירה נכשלה: " + errReload,
+      });
+    }
+
+    if (
+      dialogRes &&
+      Array.isArray(dialogRes.errors) &&
+      dialogRes.errors.length
+    ) {
+      errors = errors.concat(dialogRes.errors);
+    }
+  }
+
+  if (!errors.length && typeof AUDIT_logEvent === "function") {
+    try {
+      AUDIT_logEvent({
+        eventType: shiftId ? "shift_dialog_update" : "shift_dialog_create",
+        entityType: "shift",
+        entityId: shiftId || (saveResult && saveResult.shiftId) || "",
+        actorEmail: actorEmail,
+        actorRole: actorRole,
+        traceId: traceId,
+        summaryAfter: status || "",
+        extra: {
+          employeeId: employeeId,
+          jobId: jobId,
+          hasManualNote: !!manualNote,
+        },
+      });
+    } catch (_auditErr) {
+      // best-effort logging only
+    }
+  }
+
   return {
     meta: {
-      traceId: "",
-      requestedAt: new Date(),
-      actorEmail: "",
-      actorRole: "",
-      canEdit: false,
+      traceId: traceId,
+      requestedAt: requestedAt,
+      actorEmail: actorEmail,
+      actorRole: actorRole,
+      canEdit: errors.length === 0,
     },
-    data: null,
-    errors: [],
+    data:
+      saveResult || dialogRes
+        ? {
+            shiftId: shiftId,
+            saveResult: saveResult,
+            dialogData: dialogRes ? dialogRes.data : null,
+            dialogMeta: dialogRes ? dialogRes.meta : null,
+          }
+        : null,
+    errors: errors,
   };
 }
 

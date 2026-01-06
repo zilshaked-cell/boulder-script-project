@@ -159,6 +159,65 @@
       .placeholder {
         color: #666;
       }
+
+      .filters-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .filters-row .field {
+        min-width: 160px;
+        flex: 1;
+      }
+
+      table.shifts-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 14px;
+      }
+
+      table.shifts-table th,
+      table.shifts-table td {
+        border: 1px solid #e0e0e0;
+        padding: 8px;
+        font-size: 13px;
+        text-align: right;
+      }
+
+      table.shifts-table th {
+        background: #f5f5f5;
+        font-weight: 600;
+      }
+
+      table.shifts-table tr:hover {
+        background: #f0f8ff;
+        cursor: pointer;
+      }
+
+      .shifts-layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 16px;
+      }
+
+      .shifts-form {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 12px;
+        background: #fafafa;
+      }
+
+      .shifts-form .field textarea {
+        width: 100%;
+        min-height: 70px;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #d0d0d0;
+        border-radius: 4px;
+        font-size: 14px;
+      }
     </style>
   </head>
   <body class="boulder-dialog">
@@ -261,7 +320,7 @@
           if (dialogState.mode === "employee") {
             loadEmployeeDialogData();
           } else if (dialogState.mode === "shifts") {
-            renderError("תצוגת משמרות תתווסף בשלב הבא.");
+            loadShiftsDialogData();
           } else if (dialogState.mode === "requests") {
             renderError("תצוגת בקשות תתווסף בשלב הבא.");
           } else {
@@ -724,6 +783,452 @@
           line.textContent = message;
           box.appendChild(line);
           body.appendChild(box);
+        }
+
+        function loadShiftsDialogData(filters) {
+          var params = Object.assign(
+            {},
+            dialogState.params || {},
+            filters || {}
+          );
+          setBodyLoading("טוען נתוני משמרות...");
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              renderError("שגיאה בטעינת המשמרות: " + err);
+            })
+            .withSuccessHandler(function (response) {
+              dialogState.lastResponse = response || null;
+              renderShiftsView(response || {});
+            })
+            .UI_getShiftsDialogData(params);
+        }
+
+        function renderShiftsView(response) {
+          var body = document.getElementById("dialog-body");
+          if (!body) return;
+          body.innerHTML = "";
+
+          var errors = (response && response.errors) || [];
+          var data = (response && response.data) || {};
+
+          if (errors.length) {
+            var errBox = document.createElement("div");
+            errBox.className = "dialog-errors";
+            errors.forEach(function (err) {
+              var line = document.createElement("div");
+              line.textContent = err && err.message ? err.message : String(err);
+              errBox.appendChild(line);
+            });
+            body.appendChild(errBox);
+          }
+
+          if (!data || !Array.isArray(data.shifts)) {
+            var info = document.createElement("div");
+            info.className = "placeholder";
+            info.textContent = "לא נמצאו נתוני משמרות.";
+            body.appendChild(info);
+            return;
+          }
+
+          var filtersEcho = data.filtersEcho || {};
+          var employeesLookup = data.employeesLookup || [];
+          var jobTypesLookup = data.jobTypesLookup || [];
+          var statusesLookup = data.statuses || [];
+
+          var filtersRow = document.createElement("div");
+          filtersRow.className = "filters-row";
+
+          filtersRow.appendChild(
+            wrapField(
+              "מתאריך",
+              createInputWithValue(
+                "from-date",
+                "date",
+                filtersEcho.fromDate || ""
+              )
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "עד תאריך",
+              createInputWithValue("to-date", "date", filtersEcho.toDate || "")
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "עובד",
+              buildEmployeeSelect(
+                "filter-employee",
+                employeesLookup,
+                filtersEcho.employeeId || ""
+              )
+            )
+          );
+          filtersRow.appendChild(
+            wrapField(
+              "סטטוס",
+              buildStatusSelect(
+                "filter-status",
+                statusesLookup,
+                filtersEcho.status || ""
+              )
+            )
+          );
+
+          var filterActions = document.createElement("div");
+          filterActions.className = "dialog-actions";
+
+          var applyFiltersBtn = document.createElement("button");
+          applyFiltersBtn.type = "button";
+          applyFiltersBtn.textContent = "סינון";
+          applyFiltersBtn.onclick = function () {
+            loadShiftsDialogData(readCurrentShiftFilters());
+          };
+
+          var newShiftBtn = document.createElement("button");
+          newShiftBtn.type = "button";
+          newShiftBtn.textContent = "משמרת חדשה";
+          newShiftBtn.onclick = function () {
+            populateShiftForm(null, employeesLookup, jobTypesLookup);
+          };
+
+          filterActions.appendChild(applyFiltersBtn);
+          filterActions.appendChild(newShiftBtn);
+
+          body.appendChild(filtersRow);
+          body.appendChild(filterActions);
+
+          var layout = document.createElement("div");
+          layout.className = "shifts-layout";
+
+          var tableWrap = document.createElement("div");
+          var table = document.createElement("table");
+          table.className = "shifts-table";
+          var thead = document.createElement("thead");
+          var headerRow = document.createElement("tr");
+          [
+            "תאריך",
+            "עובד",
+            "סוג עבודה",
+            "כניסה",
+            "יציאה",
+            "סטטוס",
+            "מחלקה",
+            "הערות",
+          ].forEach(function (label) {
+            var th = document.createElement("th");
+            th.textContent = label;
+            headerRow.appendChild(th);
+          });
+          thead.appendChild(headerRow);
+          table.appendChild(thead);
+
+          var tbody = document.createElement("tbody");
+          (data.shifts || []).forEach(function (s) {
+            var tr = document.createElement("tr");
+            tr.onclick = function () {
+              populateShiftForm(s, employeesLookup, jobTypesLookup);
+            };
+            var values = [
+              s.rawDate || s.logicalDate || "",
+              s.employeeName || s.employeeId || "",
+              s.jobName || s.jobId || "",
+              s.startTime || "",
+              s.endTime || "",
+              s.status || "",
+              s.department || "",
+              s.manualNote || (s.hasIssues ? "בעיה" : ""),
+            ];
+            values.forEach(function (val) {
+              var td = document.createElement("td");
+              td.textContent = val;
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          tableWrap.appendChild(table);
+          layout.appendChild(tableWrap);
+
+          var formWrap = document.createElement("div");
+          formWrap.className = "shifts-form";
+          var formTitle = document.createElement("div");
+          formTitle.className = "job-row-title";
+          formTitle.textContent = "עריכת משמרת";
+          formWrap.appendChild(formTitle);
+
+          var form = document.createElement("form");
+          form.id = "shift-form";
+          form.onsubmit = function (e) {
+            e.preventDefault();
+            saveShiftFromForm(readCurrentShiftFilters());
+          };
+
+          form.appendChild(
+            wrapField(
+              "עובד",
+              buildEmployeeSelect(
+                "shift-employee",
+                employeesLookup,
+                filtersEcho.employeeId || ""
+              )
+            )
+          );
+
+          form.appendChild(
+            wrapField(
+              "סוג עבודה",
+              buildJobSelect("shift-job", jobTypesLookup, "")
+            )
+          );
+
+          var dateTimeGrid = document.createElement("div");
+          dateTimeGrid.className = "job-grid";
+          dateTimeGrid.appendChild(
+            wrapField(
+              "תאריך",
+              createInputWithValue(
+                "shift-date",
+                "date",
+                filtersEcho.fromDate || ""
+              )
+            )
+          );
+          dateTimeGrid.appendChild(
+            wrapField(
+              "שעת כניסה",
+              createInputWithValue("shift-start", "time", "")
+            )
+          );
+          dateTimeGrid.appendChild(
+            wrapField(
+              "שעת יציאה",
+              createInputWithValue("shift-end", "time", "")
+            )
+          );
+          dateTimeGrid.appendChild(
+            wrapField("סטטוס", createInputWithValue("shift-status", "text", ""))
+          );
+          dateTimeGrid.appendChild(
+            wrapField("מחלקה", createInputWithValue("shift-dept", "text", ""))
+          );
+          form.appendChild(dateTimeGrid);
+
+          form.appendChild(
+            wrapField("הערות", createTextarea("shift-note", ""))
+          );
+
+          var hiddenId = document.createElement("input");
+          hiddenId.type = "hidden";
+          hiddenId.id = "shift-id";
+          form.appendChild(hiddenId);
+
+          var formActions = document.createElement("div");
+          formActions.className = "dialog-footer-actions";
+          var saveBtn = document.createElement("button");
+          saveBtn.type = "submit";
+          saveBtn.textContent = "שמור";
+          var clearBtn = document.createElement("button");
+          clearBtn.type = "button";
+          clearBtn.textContent = "נקה";
+          clearBtn.onclick = function () {
+            populateShiftForm(null, employeesLookup, jobTypesLookup);
+          };
+          formActions.appendChild(saveBtn);
+          formActions.appendChild(clearBtn);
+          form.appendChild(formActions);
+
+          formWrap.appendChild(form);
+          layout.appendChild(formWrap);
+
+          body.appendChild(layout);
+
+          // Preselect first row if exists.
+          if (data.shifts && data.shifts.length) {
+            populateShiftForm(data.shifts[0], employeesLookup, jobTypesLookup);
+          } else {
+            populateShiftForm(null, employeesLookup, jobTypesLookup);
+          }
+        }
+
+        function createInputWithValue(id, type, value) {
+          var input = document.createElement("input");
+          input.id = id;
+          input.type = type;
+          input.value = value || "";
+          return input;
+        }
+
+        function createTextarea(id, value) {
+          var ta = document.createElement("textarea");
+          ta.id = id;
+          ta.value = value || "";
+          return ta;
+        }
+
+        function buildEmployeeSelect(id, employees, selectedId) {
+          var select = document.createElement("select");
+          select.id = id;
+          var optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "-- בחר עובד --";
+          select.appendChild(optEmpty);
+          (employees || []).forEach(function (e) {
+            var opt = document.createElement("option");
+            opt.value = e.id || "";
+            opt.textContent = e.name || e.id || "";
+            if (selectedId && opt.value === selectedId) opt.selected = true;
+            select.appendChild(opt);
+          });
+          return select;
+        }
+
+        function buildStatusSelect(id, statuses, selected) {
+          var select = document.createElement("select");
+          select.id = id;
+          var optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "-- סטטוס --";
+          select.appendChild(optEmpty);
+          (statuses || []).forEach(function (s) {
+            var opt = document.createElement("option");
+            opt.value = s || "";
+            opt.textContent = s || "";
+            if (selected && selected === opt.value) opt.selected = true;
+            select.appendChild(opt);
+          });
+          return select;
+        }
+
+        function buildJobSelect(id, jobs, selected) {
+          var select = document.createElement("select");
+          select.id = id;
+          var optEmpty = document.createElement("option");
+          optEmpty.value = "";
+          optEmpty.textContent = "-- בחר סוג עבודה --";
+          select.appendChild(optEmpty);
+          (jobs || []).forEach(function (j) {
+            var opt = document.createElement("option");
+            opt.value = j.id || j.name || "";
+            opt.textContent = j.name || j.id || "";
+            if (j.isActive === false) opt.textContent += " (לא פעיל)";
+            if (selected && (selected === opt.value || selected === j.name)) {
+              opt.selected = true;
+            }
+            select.appendChild(opt);
+          });
+          return select;
+        }
+
+        function readCurrentShiftFilters() {
+          return {
+            fromDate: (document.getElementById("from-date") || { value: "" })
+              .value,
+            toDate: (document.getElementById("to-date") || { value: "" }).value,
+            employeeId: (
+              document.getElementById("filter-employee") || { value: "" }
+            ).value,
+            status: (document.getElementById("filter-status") || { value: "" })
+              .value,
+          };
+        }
+
+        function populateShiftForm(shift, employeesLookup, jobTypesLookup) {
+          var idEl = document.getElementById("shift-id");
+          var empEl = document.getElementById("shift-employee");
+          var jobEl = document.getElementById("shift-job");
+          var dateEl = document.getElementById("shift-date");
+          var startEl = document.getElementById("shift-start");
+          var endEl = document.getElementById("shift-end");
+          var statusEl = document.getElementById("shift-status");
+          var deptEl = document.getElementById("shift-dept");
+          var noteEl = document.getElementById("shift-note");
+
+          if (!shift) {
+            if (idEl) idEl.value = "";
+            if (empEl) empEl.value = "";
+            if (jobEl) jobEl.value = "";
+            if (dateEl) dateEl.value = "";
+            if (startEl) startEl.value = "";
+            if (endEl) endEl.value = "";
+            if (statusEl) statusEl.value = "";
+            if (deptEl) deptEl.value = "";
+            if (noteEl) noteEl.value = "";
+            return;
+          }
+
+          if (idEl) idEl.value = shift.id || "";
+
+          if (empEl) {
+            var empId = shift.employeeId || "";
+            var hasEmp = (employeesLookup || []).some(function (e) {
+              return e.id === empId;
+            });
+            empEl.value = hasEmp ? empId : "";
+          }
+
+          if (jobEl) {
+            var jid = shift.jobId || shift.workTypeId || shift.jobName || "";
+            var matchedJob = (jobTypesLookup || []).find(function (j) {
+              return j.id === jid || j.name === jid || j.name === shift.jobName;
+            });
+            jobEl.value = matchedJob
+              ? matchedJob.id || matchedJob.name || ""
+              : jid;
+          }
+
+          if (dateEl) dateEl.value = shift.rawDate || shift.logicalDate || "";
+          if (startEl) startEl.value = shift.startTime || "";
+          if (endEl) endEl.value = shift.endTime || "";
+          if (statusEl) statusEl.value = shift.status || "";
+          if (deptEl) deptEl.value = shift.department || "";
+          if (noteEl) noteEl.value = shift.manualNote || "";
+        }
+
+        function saveShiftFromForm(filtersEcho) {
+          var payload = {
+            id: (document.getElementById("shift-id") || { value: "" }).value,
+            employeeId: (
+              document.getElementById("shift-employee") || { value: "" }
+            ).value,
+            jobId: (document.getElementById("shift-job") || { value: "" })
+              .value,
+            jobName:
+              document.getElementById("shift-job") &&
+              document.getElementById("shift-job").selectedOptions &&
+              document.getElementById("shift-job").selectedOptions[0]
+                ? document
+                    .getElementById("shift-job")
+                    .selectedOptions[0].textContent.replace(" (לא פעיל)", "")
+                : "",
+            date: (document.getElementById("shift-date") || { value: "" })
+              .value,
+            startTime: (document.getElementById("shift-start") || { value: "" })
+              .value,
+            endTime: (document.getElementById("shift-end") || { value: "" })
+              .value,
+            status: (document.getElementById("shift-status") || { value: "" })
+              .value,
+            department: (document.getElementById("shift-dept") || { value: "" })
+              .value,
+            manualNote: (document.getElementById("shift-note") || { value: "" })
+              .value,
+          };
+
+          google.script.run
+            .withFailureHandler(function (err) {
+              alert("שמירת המשמרת נכשלה: " + err);
+            })
+            .withSuccessHandler(function (response) {
+              dialogState.lastResponse = response || null;
+              if (!response) {
+                alert("לא התקבלה תשובה לאחר שמירה.");
+                return;
+              }
+              renderShiftsView(response);
+            })
+            .UI_saveShiftChanges({ payload: payload, filters: filtersEcho });
         }
       })();
     </script>
