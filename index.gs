@@ -1611,6 +1611,12 @@ function handleShiftReportSubmit_(payload) {
 function handleShiftReportMonthlyErrorNotify_(payload) {
   const employeeId = stringValue(payload.employeeId);
   const employeeEmail = stringValue(payload.email || payload.employeeEmail);
+  let employeePhone = stringValue(
+    payload.phone ||
+      payload.employeePhone ||
+      payload.mobile ||
+      payload.employeeMobile
+  );
   const jobTypeId = stringValue(payload.jobTypeId);
   const jobName = stringValue(payload.jobName);
 
@@ -1632,6 +1638,13 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
     );
     const nameCol = getOptionalColumn_(headers, ["שם מלא"]);
     const emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
+    const phoneCol = getOptionalColumn_(headers, [
+      "טלפון",
+      "פלאפון",
+      "נייד",
+      "phone",
+      "mobile",
+    ]);
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
       if (stringValue(rows[i][empIdCol - 1]) !== employeeId) continue;
@@ -1639,6 +1652,8 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
         resolvedName = stringValue(rows[i][nameCol - 1]);
       if (!resolvedEmail && emailCol)
         resolvedEmail = stringValue(rows[i][emailCol - 1]);
+      if (!employeePhone && phoneCol)
+        employeePhone = stringValue(rows[i][phoneCol - 1]);
       break;
     }
   }
@@ -1647,6 +1662,7 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
     employeeId: employeeId,
     employeeName: resolvedName,
     employeeEmail: resolvedEmail,
+    employeePhone: employeePhone,
     jobTypeId: jobTypeId,
     jobName: jobName,
     timestamp: new Date().toISOString(),
@@ -2247,34 +2263,89 @@ function resolveEmployeeJobPayType_(sheet, headers, employeeId, jobTypeId) {
 }
 
 function sendMonthlyBlockEmail_(details) {
-  const recipients = MONTHLY_ALERT_RECIPIENTS.length
+  const primaryRecipient = "ZIL.SHAKED@GMAIL.COM";
+  const configuredRecipients = MONTHLY_ALERT_RECIPIENTS.length
     ? MONTHLY_ALERT_RECIPIENTS
     : ACCESS_ISSUE_RECIPIENTS;
-  if (!recipients || !recipients.length) return;
-  const subject = "דיווח נחסם – אופן תשלום חודשי";
-  const bodyLines = [
-    "דיווח נחסם בגלל אופן תשלום חודשי:",
-    "זמן: " + (details.timestamp || ""),
-    "עובד: " +
-      (details.employeeName || "") +
-      " (" +
-      (details.employeeId || "") +
-      ")",
-    "אימייל: " + (details.employeeEmail || ""),
-    "סוג עבודה: " +
-      (details.jobName || "") +
-      " (" +
-      (details.jobTypeId || "") +
-      ")",
-  ];
-  const body = bodyLines
-    .filter(function (l) {
-      return stringValue(l);
-    })
-    .join("\n");
+
+  const dedup = {};
+  const recipients = [];
+  [primaryRecipient]
+    .concat(configuredRecipients || [])
+    .forEach(function (addr) {
+      const clean = stringValue(addr);
+      if (!clean) return;
+      const key = clean.toLowerCase();
+      if (dedup[key]) return;
+      dedup[key] = true;
+      recipients.push(clean);
+    });
+
+  if (!recipients.length) return;
+
+  const jobLabel = details.jobName
+    ? details.jobTypeId
+      ? details.jobName + " (" + details.jobTypeId + ")"
+      : details.jobName
+    : details.jobTypeId;
+  const reporterName = details.employeeName || "העובד";
+  const contactEmail = details.employeeEmail || "";
+  const contactPhone = details.employeePhone || details.phone || "";
+  const questionLine =
+    "האם " +
+    reporterName +
+    " צריך לדווח על " +
+    (jobLabel || "סוג העבודה") +
+    "?";
+
+  const subject = "ווב אפ - דף דיווח חדש";
+
+  const textLines = [
+    subject,
+    jobLabel ? "סוג עבודה: " + jobLabel : "",
+    reporterName + " שלח דיווח על כך שיש טעות.",
+    "",
+    questionLine,
+    "",
+    "ליצירת קשר עם העובד:",
+    contactEmail ? "מייל: " + contactEmail : "",
+    contactPhone ? "טלפון: " + contactPhone : "",
+    details.timestamp ? "נשלח ב: " + details.timestamp : "",
+  ].filter(function (line) {
+    return stringValue(line);
+  });
+
+  var contactList = [];
+  if (contactEmail) contactList.push("<li>מייל: " + contactEmail + "</li>");
+  if (contactPhone) contactList.push("<li>טלפון: " + contactPhone + "</li>");
+  const contactHtml =
+    contactList.length > 0
+      ? "<p>ליצירת קשר עם העובד:</p><ul>" + contactList.join("") + "</ul>"
+      : "";
+
+  const htmlBody =
+    "<p><strong>" +
+    subject +
+    "</strong></p>" +
+    (jobLabel ? "<p>סוג עבודה: " + jobLabel + "</p>" : "") +
+    "<p>" +
+    reporterName +
+    " שלח דיווח על כך שיש טעות.</p>" +
+    "<p><strong>" +
+    questionLine +
+    "</strong></p>" +
+    contactHtml +
+    (details.timestamp ? "<p>נשלח ב: " + details.timestamp + "</p>" : "");
+
+  const body = textLines.join("\n");
+
   recipients.forEach(function (to) {
-    if (!to) return;
-    MailApp.sendEmail({ to: to, subject: subject, body: body });
+    MailApp.sendEmail({
+      to: to,
+      subject: subject,
+      body: body,
+      htmlBody: htmlBody,
+    });
   });
 }
 
