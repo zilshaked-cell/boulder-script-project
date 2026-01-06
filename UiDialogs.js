@@ -1241,7 +1241,11 @@ function UI_saveRequestChanges(envelope) {
     }
 
     var timestamp =
-      req.timestamp || req.createdAt || req.requestedAt || req.updatedAt || null;
+      req.timestamp ||
+      req.createdAt ||
+      req.requestedAt ||
+      req.updatedAt ||
+      null;
     if (!timestamp) timestamp = new Date().toISOString();
     maybeSet_("timestamp", timestamp);
 
@@ -1249,8 +1253,9 @@ function UI_saveRequestChanges(envelope) {
     maybeSet_("employeeName", norm_(req.employeeName));
     maybeSet_("shiftId", norm_(req.shiftId));
     maybeSet_("direction", norm_(req.direction || req.requestType));
-    var fixDateVal =
-      norm_(req.fixDate || req.fromDate || req.toDate || req.workDate);
+    var fixDateVal = norm_(
+      req.fixDate || req.fromDate || req.toDate || req.workDate
+    );
     if (fixDateVal) maybeSet_("fixDate", fixDateVal);
     maybeSet_("fixTime", norm_(req.fixTime || req.time));
     maybeSet_("jobId", norm_(req.jobId));
@@ -1304,7 +1309,11 @@ function UI_saveRequestChanges(envelope) {
         parsed = JSON.parse(rawRes.getContentText());
       } else if (typeof rawRes === "string") {
         parsed = JSON.parse(rawRes);
-      } else if (rawRes && typeof rawRes === "object" && rawRes.success !== undefined) {
+      } else if (
+        rawRes &&
+        typeof rawRes === "object" &&
+        rawRes.success !== undefined
+      ) {
         parsed = rawRes;
       }
     } catch (parseErr) {
