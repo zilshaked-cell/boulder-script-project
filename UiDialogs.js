@@ -1,4 +1,10 @@
-/* global HtmlService, SpreadsheetApp, Session, Utilities, SHIFTS_list, EMP_getSidebarBootstrap */
+/* global EMP_getEmployeeById, EMP_saveEmployeePayload */
+/* global SHIFTS_updateShift, SHIFTS_upsertAroundWorkLog_, handleShiftReportSubmit_ */
+/* global REQ_listRequests, AUDIT_logEvent, getAllJobs */
+/* global SHIFTS_list, EMP_getSidebarBootstrap, handleRequestPost */
+/* exported UI_saveEmployeeDialogChanges, UI_saveShiftChanges */
+/* exported UI_getRequestsDialogData, UI_saveRequestChanges */
+/* exported UI_debugOpenEmployeeDialog, UI_debugOpenShiftsDialog, UI_debugOpenRequestsDialog */
 
 /** Opens the extended employee dialog. */
 function UI_openEmployeeDialog(params) {
@@ -114,6 +120,7 @@ function buildEmployeeJobsFromEmployee_(employee) {
 }
 
 /** Saves changes made in the extended employee dialog. */
+// eslint-disable-next-line no-unused-vars
 function UI_saveEmployeeDialogChanges(envelope) {
   var traceId =
     (typeof Utilities !== "undefined" &&
@@ -512,6 +519,32 @@ function formatIsoDate_(dt) {
   );
 }
 
+function resolveActorContext_() {
+  var actorEmail = "";
+  try {
+    actorEmail = Session.getActiveUser().getEmail() || "";
+  } catch (_e) {
+    actorEmail = "";
+  }
+  var actorRole = actorEmail ? "MANAGER" : "UNKNOWN";
+  return { actorEmail: actorEmail, actorRole: actorRole };
+}
+
+function deriveActorRole_(actorEmail, employeesLookup) {
+  if (!actorEmail) return "UNKNOWN";
+  var emailKey = String(actorEmail).toLowerCase();
+  if (Array.isArray(employeesLookup)) {
+    for (var i = 0; i < employeesLookup.length; i++) {
+      var e = employeesLookup[i];
+      var eEmail = e && e.email ? String(e.email).toLowerCase() : "";
+      if (eEmail && eEmail === emailKey) {
+        return "EMPLOYEE";
+      }
+    }
+  }
+  return "MANAGER";
+}
+
 function buildLogicalDate_(shift) {
   if (!shift) return "";
   // The module's date field already derives a date from workDate/fixDate/timestamp.
@@ -589,6 +622,7 @@ function buildUniqueValuePairs_(items, key) {
 }
 
 /** Saves changes made in the extended shifts dialog. */
+// eslint-disable-next-line no-unused-vars
 function UI_saveShiftChanges(envelope) {
   var traceId =
     (typeof Utilities !== "undefined" &&
@@ -900,6 +934,7 @@ function UI_openRequestsDialog(params) {
 }
 
 /** Returns data for the extended requests dialog (placeholder). */
+// eslint-disable-next-line no-unused-vars
 function UI_getRequestsDialogData(params) {
   var traceId =
     (typeof Utilities !== "undefined" &&
@@ -907,13 +942,10 @@ function UI_getRequestsDialogData(params) {
       Utilities.getUuid()) ||
     "";
   var requestedAt = new Date();
-  var actorEmail = "";
-  try {
-    actorEmail = Session.getActiveUser().getEmail() || "";
-  } catch (_e) {
-    actorEmail = "";
-  }
-  var actorRole = "MANAGER"; // placeholder until role logic is added
+
+  var actorCtx = resolveActorContext_();
+  var actorEmail = actorCtx.actorEmail;
+  var actorRole = actorCtx.actorRole;
 
   var errors = [];
 
@@ -927,6 +959,9 @@ function UI_getRequestsDialogData(params) {
     ? String(safeParams.requestType).trim()
     : "";
   var statusFilter = safeParams.status ? String(safeParams.status).trim() : "";
+  var statusesFilterArray = Array.isArray(safeParams.statuses)
+    ? safeParams.statuses
+    : null;
 
   var range = normalizeDateRange_(safeParams.fromDate, safeParams.toDate);
   if (!range.ok) {
@@ -944,9 +979,20 @@ function UI_getRequestsDialogData(params) {
     var filters = {
       dateFrom: fromIso,
       dateTo: toIso,
-      includeClosed: true, // we will handle cancel hiding ourselves
+      includeClosed: true,
     };
-    if (statusFilter) filters.statuses = [statusFilter];
+
+    if (statusesFilterArray && statusesFilterArray.length) {
+      filters.statuses = statusesFilterArray
+        .filter(function (s) {
+          return !!normRequestVal_(s);
+        })
+        .map(function (s) {
+          return String(s).trim();
+        });
+    } else if (statusFilter) {
+      filters.statuses = [statusFilter];
+    }
 
     var reqRes = null;
     try {
@@ -1033,12 +1079,12 @@ function UI_getRequestsDialogData(params) {
       fromDate: rec.fixDate || "",
       toDate: rec.fixDate || "",
       notes: rec.note || "",
-      managerNotes: "",
+      managerNotes: rec.shiftNote || "",
       canEmployeeEdit: canEmployeeEditRequestStatus_(
         statusVal,
         cancelledStatusValue
       ),
-      canManagerEdit: true, // placeholder until role logic is added
+      canManagerEdit: true,
     };
   });
 
@@ -1066,6 +1112,8 @@ function UI_getRequestsDialogData(params) {
       message: "טעינת רשימת העובדים נכשלה.",
     });
   }
+
+  actorRole = deriveActorRole_(actorEmail, employeesLookup);
 
   var requestTypes = buildUniqueValuePairs_(mappedRequests, "requestType");
   var statuses = buildUniqueValuePairs_(mappedRequests, "status");
@@ -1096,38 +1144,272 @@ function UI_getRequestsDialogData(params) {
       requestedAt: requestedAt,
       actorEmail: actorEmail,
       actorRole: actorRole,
-      canEdit: errors.length === 0,
+      canEdit: errors.length === 0 && actorRole !== "UNKNOWN",
     },
-    data: data,
+    data: errors.length ? null : data,
     errors: errors,
   };
 }
 
 /** Saves changes made in the extended requests dialog (placeholder). */
+// eslint-disable-next-line no-unused-vars
 function UI_saveRequestChanges(envelope) {
-  void envelope;
+  var traceId =
+    (typeof Utilities !== "undefined" &&
+      Utilities.getUuid &&
+      Utilities.getUuid()) ||
+    "";
+  var requestedAt = new Date();
+
+  var actorCtx = resolveActorContext_();
+  var actorEmail = actorCtx.actorEmail;
+  var actorRole = actorCtx.actorRole;
+
+  var errors = [];
+  var safeEnvelope = envelope && typeof envelope === "object" ? envelope : {};
+  var candidate =
+    safeEnvelope.payload !== undefined
+      ? safeEnvelope.payload
+      : safeEnvelope.request !== undefined
+      ? safeEnvelope.request
+      : safeEnvelope.requests !== undefined
+      ? safeEnvelope.requests
+      : safeEnvelope.data !== undefined
+      ? safeEnvelope.data
+      : safeEnvelope;
+
+  var requestsList = [];
+  if (Array.isArray(candidate)) {
+    requestsList = candidate;
+  } else if (candidate && typeof candidate === "object") {
+    requestsList = [candidate];
+  }
+
+  if (!requestsList.length) {
+    errors.push({
+      code: "NO_REQUESTS",
+      message: "לא התקבלו בקשות לשמירה.",
+    });
+  }
+
+  if (actorRole === "UNKNOWN" || actorRole === "EMPLOYEE") {
+    errors.push({
+      code: "FORBIDDEN",
+      message: "אין הרשאה לעדכן בקשות.",
+    });
+  }
+
+  var cancelledStatusValue =
+    safeEnvelope.rules && safeEnvelope.rules.cancelledStatusValue
+      ? String(safeEnvelope.rules.cancelledStatusValue)
+      : "";
+  if (!cancelledStatusValue) cancelledStatusValue = "מבוטלת";
+
+  function normalizeRequestForSave_(req) {
+    if (!req || typeof req !== "object") {
+      return {
+        ok: false,
+        error: { code: "INVALID_PAYLOAD", message: "נתוני הבקשה אינם תקינים." },
+      };
+    }
+
+    function norm_(v) {
+      if (v === null || v === undefined) return "";
+      return String(v).replace(/\s+/g, " ").trim();
+    }
+
+    var requestId = norm_(req.requestId || req.id);
+    if (!requestId) {
+      return {
+        ok: false,
+        error: { code: "NO_REQUEST_ID", message: "חסר מזהה בקשה לשמירה." },
+      };
+    }
+
+    var status = norm_(req.status || req.newStatus || req.state);
+    if (!status) {
+      return {
+        ok: false,
+        error: { code: "NO_STATUS", message: "חסר סטטוס בקשה לשמירה." },
+      };
+    }
+
+    var payload = { requestId: requestId, status: status };
+
+    function maybeSet_(key, value) {
+      if (value !== undefined) payload[key] = value;
+    }
+
+    var timestamp =
+      req.timestamp || req.createdAt || req.requestedAt || req.updatedAt || null;
+    if (!timestamp) timestamp = new Date().toISOString();
+    maybeSet_("timestamp", timestamp);
+
+    maybeSet_("employeeId", norm_(req.employeeId));
+    maybeSet_("employeeName", norm_(req.employeeName));
+    maybeSet_("shiftId", norm_(req.shiftId));
+    maybeSet_("direction", norm_(req.direction || req.requestType));
+    var fixDateVal =
+      norm_(req.fixDate || req.fromDate || req.toDate || req.workDate);
+    if (fixDateVal) maybeSet_("fixDate", fixDateVal);
+    maybeSet_("fixTime", norm_(req.fixTime || req.time));
+    maybeSet_("jobId", norm_(req.jobId));
+    maybeSet_("jobName", norm_(req.jobName || req.jobType));
+    maybeSet_("department", norm_(req.department));
+    if (req.units !== undefined) maybeSet_("units", req.units);
+    var noteVal =
+      req.managerNotes !== undefined
+        ? req.managerNotes
+        : req.notes !== undefined
+        ? req.notes
+        : req.shiftNote;
+    if (noteVal !== undefined) {
+      maybeSet_("shiftNote", noteVal);
+    }
+
+    return { ok: true, payload: payload, requestId: requestId, status: status };
+  }
+
+  function saveRequest_(payload) {
+    if (typeof handleRequestPost !== "function") {
+      return {
+        ok: false,
+        error: {
+          code: "REQUEST_SAVE_MISSING",
+          message: "handleRequestPost לא זמין בסקריפט.",
+        },
+      };
+    }
+
+    var rawRes;
+    try {
+      rawRes = handleRequestPost({
+        postData: { contents: JSON.stringify(payload) },
+      });
+    } catch (errSave) {
+      return {
+        ok: false,
+        error: {
+          code: "REQUEST_SAVE_THROW",
+          message: "שמירת הבקשה נכשלה: " + errSave,
+        },
+      };
+    }
+
+    var parsed = null;
+    try {
+      if (rawRes && typeof rawRes.getContent === "function") {
+        parsed = JSON.parse(rawRes.getContent());
+      } else if (rawRes && typeof rawRes.getContentText === "function") {
+        parsed = JSON.parse(rawRes.getContentText());
+      } else if (typeof rawRes === "string") {
+        parsed = JSON.parse(rawRes);
+      } else if (rawRes && typeof rawRes === "object" && rawRes.success !== undefined) {
+        parsed = rawRes;
+      }
+    } catch (parseErr) {
+      return {
+        ok: false,
+        error: {
+          code: "REQUEST_SAVE_PARSE_FAILED",
+          message: "שמירת הבקשה נכשלה: " + parseErr,
+        },
+      };
+    }
+
+    if (!parsed || parsed.success !== true) {
+      return {
+        ok: false,
+        error: {
+          code: "REQUEST_SAVE_FAILED",
+          message:
+            "שמירת הבקשה נכשלה" +
+            (parsed && parsed.error ? ": " + parsed.error : ""),
+          details: parsed || rawRes || null,
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      summary: {
+        requestId: parsed.requestId || payload.requestId || "",
+        mode: parsed.mode || "updated",
+        rowIndex: parsed.rowIndex || null,
+        status: payload.status || "",
+      },
+    };
+  }
+
+  var saveResults = [];
+
+  if (!errors.length) {
+    for (var i = 0; i < requestsList.length; i++) {
+      var normRes = normalizeRequestForSave_(requestsList[i]);
+      if (!normRes.ok) {
+        errors.push(normRes.error);
+        continue;
+      }
+
+      var saveRes = saveRequest_(normRes.payload);
+      if (!saveRes.ok) {
+        errors.push(saveRes.error);
+        continue;
+      }
+
+      saveResults.push(saveRes.summary);
+
+      if (typeof AUDIT_logEvent === "function") {
+        try {
+          AUDIT_logEvent({
+            traceId: traceId,
+            eventType: "REQUEST_UPDATED",
+            entityType: "request",
+            entityId: saveRes.summary.requestId,
+            actorEmail: actorEmail,
+            actorRole: actorRole,
+            source: "requests_dialog",
+            summary: normRes.status,
+            extra: {
+              status: normRes.status,
+              requestId: normRes.requestId,
+              shiftId: normRes.payload.shiftId || "",
+              employeeId: normRes.payload.employeeId || "",
+              cancelledStatusValue: cancelledStatusValue,
+            },
+          });
+        } catch (_auditErr) {
+          // best-effort audit
+        }
+      }
+    }
+  }
+
   return {
     meta: {
-      traceId: "",
-      requestedAt: new Date(),
-      actorEmail: "",
-      actorRole: "",
-      canEdit: false,
+      traceId: traceId,
+      requestedAt: requestedAt,
+      actorEmail: actorEmail,
+      actorRole: actorRole,
+      canEdit: errors.length === 0,
     },
-    data: null,
-    errors: [],
+    data: saveResults.length ? { saveResults: saveResults } : null,
+    errors: errors,
   };
 }
 
 // Debug helpers for manual testing (not for production use).
+// eslint-disable-next-line no-unused-vars
 function UI_debugOpenEmployeeDialog() {
   UI_openEmployeeDialog({});
 }
 
+// eslint-disable-next-line no-unused-vars
 function UI_debugOpenShiftsDialog() {
   UI_openShiftsDialog({});
 }
 
+// eslint-disable-next-line no-unused-vars
 function UI_debugOpenRequestsDialog() {
   UI_openRequestsDialog({});
 }

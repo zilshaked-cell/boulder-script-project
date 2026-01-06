@@ -1,102 +1,83 @@
-/* global SpreadsheetApp */
 /* exported AUDIT_logEvent */
 
-(function () {
-  "use strict";
+/**
+ * מחזיר את גיליון ה-AUDIT_LOG, ויוצר אותו אם לא קיים.
+ */
+function getAuditSheet_() {
+  var ss = SpreadsheetApp.getActive();
+  var sheetName = "AUDIT_LOG";
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.appendRow([
+      "timestamp",
+      "traceId",
+      "eventType",
+      "entityType",
+      "entityId",
+      "actorEmail",
+      "actorRole",
+      "source",
+      "summary",
+      "extraJson",
+    ]);
+  }
+  return sheet;
+}
 
-  var SHEET_NAME = "AUDIT_LOG";
-  var DEFAULT_HEADERS = [
-    "timestamp",
-    "eventType",
-    "entityType",
-    "entityId",
-    "actorEmail",
-    "actorRole",
-    "traceId",
-    "summaryBefore",
-    "summaryAfter",
-    "extraJson",
-  ];
-
-  function getAuditSheet_() {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sh = ss.getSheetByName(SHEET_NAME);
-    if (!sh) {
-      sh = ss.insertSheet(SHEET_NAME);
-      sh.appendRow(DEFAULT_HEADERS);
-      try {
-        sh.setFrozenRows(1);
-      } catch (_e) {
-        // ignore freeze errors in restricted contexts
-      }
-      return sh;
-    }
-
-    var lastRow = sh.getLastRow();
-    if (lastRow < 1) {
-      sh.appendRow(DEFAULT_HEADERS);
-      try {
-        sh.setFrozenRows(1);
-      } catch (_e2) {}
-    }
-
-    return sh;
+/**
+ * רישום אירוע Audit כללי.
+ *
+ * evt = {
+ *   traceId,
+ *   eventType,
+ *   entityType,
+ *   entityId,
+ *   actorEmail,
+ *   actorRole,
+ *   source,
+ *   summary,
+ *   extra: {before, after, ...} // אופציונלי
+ * }
+ */
+// eslint-disable-next-line no-unused-vars
+function AUDIT_logEvent(evt) {
+  if (!evt) {
+    return;
   }
 
-  function buildHeaderIndex_(headers) {
-    var map = {};
-    for (var i = 0; i < headers.length; i++) {
-      var key = String(headers[i] || "").trim();
-      if (key) map[key] = i;
-    }
-    return map;
-  }
+  var sheet = getAuditSheet_();
+  var timestamp = new Date();
 
-  function safeStringify_(obj) {
+  var traceId = evt.traceId || "";
+  var eventType = evt.eventType || "";
+  var entityType = evt.entityType || "";
+  var entityId = evt.entityId || "";
+  var actorEmail = evt.actorEmail || "";
+  var actorRole = evt.actorRole || "";
+  var source = evt.source || "";
+  var summary = evt.summary || "";
+  var extra = evt.extra || null;
+
+  var extraJson = "";
+  if (extra) {
     try {
-      return JSON.stringify(obj == null ? {} : obj);
-    } catch (_e) {
-      return "{}";
+      extraJson = JSON.stringify(extra);
+    } catch (e) {
+      extraJson = "";
     }
   }
 
-  // eslint-disable-next-line no-unused-vars
-  function AUDIT_logEvent(event) {
-    var sh = getAuditSheet_();
-    var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-    var hIndex = buildHeaderIndex_(headers);
-
-    var row = new Array(headers.length);
-    function set_(name, value) {
-      if (hIndex.hasOwnProperty(name)) {
-        row[hIndex[name]] = value;
-      }
-    }
-
-    var evt = event || {};
-    set_("timestamp", new Date());
-    set_("eventType", evt.eventType || "");
-    set_("entityType", evt.entityType || "");
-    set_("entityId", evt.entityId || "");
-    set_("actorEmail", evt.actorEmail || "");
-    set_("actorRole", evt.actorRole || "");
-    set_("traceId", evt.traceId || "");
-    set_("summaryBefore", evt.summaryBefore || "");
-    set_("summaryAfter", evt.summaryAfter || "");
-    set_("extraJson", safeStringify_(evt.extra));
-
-    // Backfill any missing cells with empty strings to match column count.
-    for (var i = 0; i < row.length; i++) {
-      if (row[i] === undefined) row[i] = "";
-    }
-
-    sh.appendRow(row);
-    return { ok: true, written: true, sheet: SHEET_NAME };
-  }
-
-  if (typeof globalThis !== "undefined") {
-    globalThis.AUDIT_logEvent = AUDIT_logEvent;
-  } else {
-    this.AUDIT_logEvent = AUDIT_logEvent;
-  }
-})();
+  sheet.appendRow([
+    timestamp,
+    traceId,
+    eventType,
+    entityType,
+    entityId,
+    actorEmail,
+    actorRole,
+    source,
+    summary,
+    extraJson,
+  ]);
+}
