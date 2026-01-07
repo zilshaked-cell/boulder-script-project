@@ -59,15 +59,15 @@ var BONUSES = BONUSES || {};
         fallbackIndex: null,
       },
       workDate: {
-        candidates: ["תאריך משמרת", "Work Date"],
+        candidates: ["תאריך", "תאריך משמרת", "Work Date"],
         fallbackIndex: null,
       },
       startTime: {
-        candidates: ["שעת התחלה", "Start Time", "שעת כניסה"],
+        candidates: ["כניסה", "שעת התחלה", "Start Time", "שעת כניסה"],
         fallbackIndex: null,
       },
       endTime: {
-        candidates: ["שעת סיום", "End Time", "שעת יציאה"],
+        candidates: ["יציאה", "שעת סיום", "End Time", "שעת יציאה"],
         fallbackIndex: null,
       },
       bonusIds: {
@@ -172,15 +172,29 @@ var BONUSES = BONUSES || {};
     jobTypeId: ["ID סוג עבודה", "ID סוגי עבודה", "JobTypeId", "jobTypeId"],
     jobTypeName: ["סוג עבודה", "סוגי עבודה", "JobTypeName", "jobTypeName"],
     department: ["מחלקה", "מחלקות", "Department", "department"],
-    shiftDate: ["תאריך משמרת", "ShiftDate", "shiftDate"],
-    startTime: ["שעת התחלה", "Start Time", "StartTime", "startTime"],
-    endTime: ["שעת סיום", "End Time", "EndTime", "endTime"],
+    shiftDate: ["תאריך", "תאריך משמרת", "ShiftDate", "shiftDate"],
+    startTime: [
+      "כניסה",
+      "שעת התחלה",
+      "Start Time",
+      "StartTime",
+      "startTime",
+      "שעת כניסה",
+    ],
+    endTime: [
+      "יציאה",
+      "שעת סיום",
+      "End Time",
+      "EndTime",
+      "endTime",
+      "שעת יציאה",
+    ],
     startDateTime: ["StartDateTime", "שעת התחלה מדויקת"],
     endDateTime: ["EndDateTime", "שעת סיום מדויקת"],
     spanHours: ["שעות", "SpanHours", "Hours"],
     payHours: ["שעות לשכר", "PayHours"],
     status: ["סטטוס משמרת", "סטטוס", "Status"],
-    note: ["הערות למשמרת", "הערות", "Note"],
+    note: ["הערות", "הערות למשמרת", "Note"],
     sourceReportIds: ["מקור דיווחים", "SourceReportIds"],
   };
 
@@ -215,17 +229,7 @@ var BONUSES = BONUSES || {};
       if (!found) missing.push(item.header);
     });
 
-    // Only append if truly absent (to avoid cluttering sheet with duplicate English headers).
-    if (missing.length) {
-      sheet
-        .getRange(CONFIG.HEADER_ROW, lastCol + 1, 1, missing.length)
-        .setValues([missing]);
-      headers = sheet
-        .getRange(CONFIG.HEADER_ROW, 1, 1, sheet.getLastColumn())
-        .getValues()[0];
-      map = buildHeaderMap_(headers);
-    }
-
+    // Do NOT append columns automatically. Only detect and report missing headers.
     formatNumericColumn_(
       sheet,
       pickCol_(map, { candidates: SHIFT_HEADER_CANDIDATES.spanHours })
@@ -238,7 +242,7 @@ var BONUSES = BONUSES || {};
     if (typeof logDuration_ === "function") {
       logDuration_(logger, "shifts.headers.ensure", startMs, {
         existing: Object.keys(map).length,
-        missingAdded: missing.length,
+        missingDetected: missing.length,
       });
     } else if (logger && logger.info) {
       logger.info({
@@ -246,7 +250,7 @@ var BONUSES = BONUSES || {};
         step: "headers.ensure",
         details: {
           existing: Object.keys(map).length,
-          missingAdded: missing.length,
+          missingDetected: missing.length,
         },
       });
     }
@@ -470,54 +474,55 @@ var BONUSES = BONUSES || {};
         .setNumberFormat("0.00");
   }
 
-  function ensureNormalizedShiftHeaders_(sheet) {
-    var lastCol = Math.max(1, sheet.getLastColumn());
-    var headers = sheet
-      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
-      .getValues()[0];
-    var headerMap = buildHeaderMap_(headers);
-
-    var currentLast = lastCol;
-    NORMALIZED_SHIFT_CORE_HEADERS.forEach(function (col) {
-      var key = norm_(col.header);
-      if (!headerMap[key]) {
-        currentLast += 1;
-        sheet.getRange(CONFIG.HEADER_ROW, currentLast).setValue(col.header);
-        headerMap[key] = currentLast;
-      }
-    });
-
-    ensureSpanAndPayFormats_(sheet, headerMap);
-    return headerMap;
-  }
-
   function getOrCreateShiftsSheet_() {
+    var logger = getLogger_("SHIFTS_HEADERS");
+    var startMs = new Date().getTime();
     var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
     if (!sh) {
       sh = ss_().insertSheet(CONFIG.SHEET_NAME);
-      var headers = NORMALIZED_SHIFT_CORE_HEADERS.map(function (c) {
-        return c.header;
+      var headers = REQUIRED_SHIFT_HEADERS.map(function (h) {
+        return h.header;
       });
       sh.getRange(CONFIG.HEADER_ROW, 1, 1, headers.length).setValues([headers]);
       var headerMapNew = buildHeaderMap_(headers);
       ensureSpanAndPayFormats_(sh, headerMapNew);
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.sheet.create", startMs, {
+          headers: headers.length,
+        });
+      }
       return sh;
     }
 
-    ensureNormalizedShiftHeaders_(sh);
+    var map = ensureRequiredShiftHeaders_(sh);
+    ensureSpanAndPayFormats_(sh, map);
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "shifts.sheet.ensureHeaders", startMs, {
+        totalHeaders: Object.keys(map).length,
+      });
+    }
     return sh;
   }
 
   function getShiftsHeaderMap_() {
+    var logger = getLogger_("SHIFTS_HEADERS");
+    var startMs = new Date().getTime();
     var sh = getOrCreateShiftsSheet_();
     var lastCol = Math.max(1, sh.getLastColumn());
     var headers = sh.getRange(CONFIG.HEADER_ROW, 1, 1, lastCol).getValues()[0];
-    var mapByName = buildHeaderMap_(headers);
+    var map = buildHeaderMap_(headers);
     var logicalMap = {};
 
-    NORMALIZED_SHIFT_CORE_HEADERS.forEach(function (col) {
-      logicalMap[col.field] = mapByName[norm_(col.header)] || null;
+    REQUIRED_SHIFT_HEADERS.forEach(function (item) {
+      var candidates = SHIFT_HEADER_CANDIDATES[item.key] || [item.header];
+      logicalMap[item.key] = pickCol_(map, { candidates: candidates });
     });
+
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "shifts.headers.map", startMs, {
+        mapped: Object.keys(logicalMap).length,
+      });
+    }
 
     return logicalMap;
   }
@@ -711,6 +716,38 @@ var BONUSES = BONUSES || {};
     )
       return true;
     return false;
+  }
+
+  function translateShiftStatusAndNote_(status, note) {
+    var statusMap = {
+      OK: "תקין",
+      MISSING_IN: "חסרה כניסה",
+      MISSING_OUT: "חסרה יציאה",
+      CONFLICT: "תקלה",
+      MISSING_ENTRY: "חסרה כניסה",
+      MISSING_EXIT: "חסרה יציאה",
+    };
+
+    var noteMap = {
+      "Extra IN before OUT": "כניסה נוספת לפני יציאה",
+      "Missing IN": "חסרה כניסה",
+      "Missing OUT": "חסרה יציאה",
+      "Unknown direction": "כיוון דיווח לא מזוהה",
+      "issue: end time before or equal to start time":
+        "שעת יציאה לפני או שווה לשעת כניסה",
+      "issue: overlap with another shift for this employee/job":
+        "חפיפה עם משמרת אחרת לאותו עובד/תפקיד",
+      "issue: shift still open at end of range (missing exit)":
+        "משמרת נשארה פתוחה ללא יציאה בסוף הטווח",
+      "issue: OUT without matching IN (missing entry)": "יציאה ללא כניסה תואמת",
+      "issue: second IN without matching OUT (missing exit)":
+        "כניסה נוספת בלי יציאה קודמת",
+    };
+
+    return {
+      statusDisplay: statusMap[status] || status || "",
+      noteDisplay: noteMap[note] || note || "",
+    };
   }
 
   function getLayout_(sheet) {
@@ -1031,6 +1068,7 @@ var BONUSES = BONUSES || {};
 
     for (var s = 0; s < shifts.length; s++) {
       var shObj = shifts[s];
+      var translated = translateShiftStatusAndNote_(shObj.status, shObj.note);
       set_(s, "shiftId", shObj.shiftId || "");
       set_(s, "employeeId", shObj.employeeId || "");
       set_(s, "employeeName", shObj.employeeName || "");
@@ -1052,8 +1090,8 @@ var BONUSES = BONUSES || {};
 
       set_(s, "spanHours", shObj.spanHours || 0);
       set_(s, "payHours", shObj.payHours || shObj.spanHours || 0);
-      set_(s, "status", shObj.status || "");
-      set_(s, "note", shObj.note || "");
+      set_(s, "status", translated.statusDisplay || "");
+      set_(s, "note", translated.noteDisplay || "");
       set_(s, "sourceReportIds", shObj.sourceReportIds || "");
     }
 

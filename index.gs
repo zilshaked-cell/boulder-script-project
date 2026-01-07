@@ -44,13 +44,17 @@ const HEADER_KEY_MAP = {
   סטטוס: "status",
   "סטטוס סוגי עבודה": "jobStatus",
   "סטטוס משמרת": "status",
+  סטטוס: "status",
   מחלקה: "department",
   מחלקות: "department",
   "דיווח שעות": "direction",
   "כניסה / יציאה": "direction",
+  כניסה: "startTime",
+  יציאה: "endTime",
   "תיקון תאריך": "fixDate",
   "תיקון שעה": "fixTime",
   "תאריך משמרת": "workDate",
+  תאריך: "workDate",
   "חותמת זמן": "timestamp",
   שעות: "hoursDecimal",
   "שעות לשכר": "payHours",
@@ -485,6 +489,10 @@ function createScriptLogger_(traceContext) {
   var ctx = traceContext || { traceId: makeTraceId_(), operation: "UNKNOWN" };
 
   function emit(level, step, details, errorCode, err) {
+    var errorStack =
+      err && err.stack ? String(err.stack).slice(0, 500) : undefined;
+    var errorMeta = err && err.meta ? sanitizeForLogs_(err.meta) : undefined;
+
     var payload = {
       timestamp: new Date().toISOString(),
       traceId: ctx.traceId,
@@ -496,6 +504,8 @@ function createScriptLogger_(traceContext) {
       errorCode: errorCode || null,
       details: sanitizeForLogs_(details) || null,
       errorMessage: err && err.message ? String(err.message) : undefined,
+      errorStack: errorStack,
+      errorMeta: errorMeta,
     };
 
     // Prefer console logging; sheet logging is optional and may not be configured.
@@ -518,7 +528,11 @@ function createScriptLogger_(traceContext) {
         actor: payload.actor,
         errorCode: payload.errorCode,
         details: payload.details,
-        extra: { errorMessage: payload.errorMessage },
+        extra: {
+          errorMessage: payload.errorMessage,
+          errorStack: payload.errorStack,
+          errorMeta: payload.errorMeta,
+        },
       });
     }
   }
@@ -652,16 +666,18 @@ function doPost(e) {
     logDuration_(logger, "response", dispatchStartMs, { action: action });
     return response;
   } catch (err) {
+    var errorCode =
+      err && err.errorCode ? err.errorCode : "APPS_SCRIPT_EXCEPTION";
+    var errorDetails = {
+      action: action,
+      message: err && err.message ? err.message : "Unexpected error",
+      stack: err && err.stack ? String(err.stack).slice(0, 500) : undefined,
+    };
+    if (err && err.meta) {
+      errorDetails.meta = err.meta;
+    }
     if (logger && logger.error) {
-      logger.error(
-        "error",
-        {
-          action: action,
-          message: err && err.message ? err.message : "Unexpected error",
-        },
-        "APPS_SCRIPT_EXCEPTION",
-        err
-      );
+      logger.error("error", errorDetails, errorCode, err);
     } else {
       console.error("[apps-script] doPost failed", err);
     }
@@ -671,7 +687,8 @@ function doPost(e) {
         ok: false,
         error: err && err.message ? err.message : "Unexpected error",
         stack: err && err.stack ? String(err.stack).slice(0, 500) : undefined,
-        errorCode: "APPS_SCRIPT_EXCEPTION",
+        meta: err && err.meta ? err.meta : undefined,
+        errorCode: errorCode,
       },
       500
     );
@@ -686,7 +703,6 @@ function doPost(e) {
 }
 
 function handleNewPost_(action, payload, logger) {
-  if (logger) logger.info("dispatch", { action: action });
   var handlers = getActionRegistry_();
   var handler = handlers[action];
 
@@ -3052,13 +3068,20 @@ function getRequiredColumn_(headerMap, possibleHeaders, sheetName) {
       }
     }
   }
-  throw new Error(
+  var missingHeaderErr = new Error(
     "Missing required header '" +
       candidates[0] +
       "' in sheet '" +
       sheetName +
       "'"
   );
+  missingHeaderErr.errorCode = ERROR_CODES.VALIDATION_FAILED;
+  missingHeaderErr.meta = {
+    sheetName: sheetName,
+    missingHeader: candidates[0],
+    normalizedHeader: normalizeHeaderKey_(candidates[0]),
+  };
+  throw missingHeaderErr;
 }
 
 function getOptionalColumn_(headerMap, possibleHeaders) {
@@ -3218,18 +3241,16 @@ function getShiftsSheet_() {
     "ID משמרת",
     "מזהה עובד",
     "שם מלא",
-    "תאריך משמרת",
-    "שעת התחלה",
-    "שעת סיום",
+    "תאריך",
+    "כניסה",
+    "יציאה",
     "ID סוג עבודה",
     "סוג עבודה",
     "מחלקה",
     "שעות",
-    "שעות לשכר",
     "כמות יחידות",
-    "סטטוס משמרת",
     "הערות",
-    "מקור דיווחים",
+    "סטטוס משמרת",
   ];
 
   const lastCol = Math.max(sheet.getLastColumn(), headers.length);
@@ -3239,13 +3260,6 @@ function getShiftsSheet_() {
   for (let i = 0; i < currentHeaders.length; i++) {
     const h = stringValue(currentHeaders[i]);
     if (h) map[h] = i + 1;
-  }
-
-  if (!map["שעות לשכר"]) {
-    const hoursCol = map["שעות"];
-    if (hoursCol) {
-      sheet.insertColumnAfter(hoursCol);
-    }
   }
 
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -3266,9 +3280,9 @@ function listShifts_(payload) {
     sheetName
   );
   const employeeNameCol = getOptionalColumn_(headerMap, ["שם מלא"]);
-  const workDateCol = getRequiredColumn_(headerMap, ["תאריך משמרת"], sheetName);
-  const startCol = getRequiredColumn_(headerMap, ["שעת התחלה"], sheetName);
-  const endCol = getRequiredColumn_(headerMap, ["שעת סיום"], sheetName);
+  const workDateCol = getRequiredColumn_(headerMap, ["תאריך"], sheetName);
+  const startCol = getRequiredColumn_(headerMap, ["כניסה"], sheetName);
+  const endCol = getRequiredColumn_(headerMap, ["יציאה"], sheetName);
   const jobTypeIdCol = getRequiredColumn_(
     headerMap,
     ["ID סוג עבודה", "ID סוגי עבודה"],
@@ -3277,14 +3291,12 @@ function listShifts_(payload) {
   const jobNameCol = getOptionalColumn_(headerMap, ["סוג עבודה", "סוגי עבודה"]);
   const deptCol = getOptionalColumn_(headerMap, ["מחלקה", "מחלקות"]);
   const hoursCol = getRequiredColumn_(headerMap, ["שעות"], sheetName);
-  const payCol = getRequiredColumn_(headerMap, ["שעות לשכר"], sheetName);
   const unitsCol = getOptionalColumn_(headerMap, [
     "כמות יחידות",
     "דיווח יחידות",
   ]);
-  const statusCol = getRequiredColumn_(headerMap, ["סטטוס משמרת"], sheetName);
   const noteCol = getOptionalColumn_(headerMap, ["הערות", "הערה"], sheetName);
-  const rawIdsCol = getOptionalColumn_(headerMap, ["מקור דיווחים"], sheetName);
+  const statusCol = getRequiredColumn_(headerMap, ["סטטוס משמרת"], sheetName);
 
   const dateFrom = toIsoDate_(filters.dateFrom || "");
   const dateTo = toIsoDate_(filters.dateTo || "");
@@ -3292,7 +3304,7 @@ function listShifts_(payload) {
   const statusFilters = Array.isArray(filters.statuses)
     ? filters.statuses
         .map(function (s) {
-          return stringValue(s).toUpperCase();
+          return stringValue(s);
         })
         .filter(function (s) {
           return !!s;
@@ -3349,8 +3361,7 @@ function listShifts_(payload) {
     if (employeeFilter && employeeId !== employeeFilter) continue;
 
     const statusRaw = stringValue(row[statusCol - 1]);
-    const statusNorm = statusRaw.toUpperCase();
-    if (statusFilters.length && statusFilters.indexOf(statusNorm) === -1)
+    if (statusFilters.length && statusFilters.indexOf(statusRaw) === -1)
       continue;
 
     const jobTypeId = stringValue(row[jobTypeIdCol - 1]);
@@ -3358,7 +3369,6 @@ function listShifts_(payload) {
       continue;
 
     const hoursDecimal = parseNumberOrNull_(row[hoursCol - 1]);
-    const payHours = parseNumberOrNull_(row[payCol - 1]);
     const unitsVal = unitsCol ? parseNumberOrNull_(row[unitsCol - 1]) : null;
 
     results.push({
@@ -3374,11 +3384,9 @@ function listShifts_(payload) {
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
       hoursDecimal: hoursDecimal,
-      payHours: payHours,
       units: unitsVal,
       status: statusRaw,
       note: noteCol ? stringValue(row[noteCol - 1]) : "",
-      rawLogIds: rawIdsCol ? stringValue(row[rawIdsCol - 1]) : "",
     });
   }
 

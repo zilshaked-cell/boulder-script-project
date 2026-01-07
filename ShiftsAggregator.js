@@ -188,6 +188,38 @@ function buildShiftRecord_(logs, status, note, startLog, endLog) {
   return shift;
 }
 
+function translateShiftStatusAndNote_(status, note) {
+  const statusMap = {
+    OK: "תקין",
+    MISSING_IN: "חסרה כניסה",
+    MISSING_OUT: "חסרה יציאה",
+    CONFLICT: "תקלה",
+    MISSING_ENTRY: "חסרה כניסה",
+    MISSING_EXIT: "חסרה יציאה",
+  };
+
+  const noteMap = {
+    "Extra IN before OUT": "כניסה נוספת לפני יציאה",
+    "Missing IN": "חסרה כניסה",
+    "Missing OUT": "חסרה יציאה",
+    "Unknown direction": "כיוון דיווח לא מזוהה",
+    "issue: end time before or equal to start time":
+      "שעת יציאה לפני או שווה לשעת כניסה",
+    "issue: overlap with another shift for this employee/job":
+      "חפיפה עם משמרת אחרת לאותו עובד/תפקיד",
+    "issue: shift still open at end of range (missing exit)":
+      "משמרת נשארה פתוחה ללא יציאה בסוף הטווח",
+    "issue: OUT without matching IN (missing entry)": "יציאה ללא כניסה תואמת",
+    "issue: second IN without matching OUT (missing exit)":
+      "כניסה נוספת בלי יציאה קודמת",
+  };
+
+  const statusDisplay = statusMap[status] || status || "";
+  const normalizedNote = noteMap[note] || note || "";
+
+  return { statusDisplay: statusDisplay, noteDisplay: normalizedNote };
+}
+
 function readWorkLogsForRange_(opts) {
   const logger = aggLogger_("AGG_READ_LOGS");
   const startMs = new Date().getTime();
@@ -385,6 +417,7 @@ function buildShiftRows_(shifts, headerMap) {
   const map = headerMap || getHeaderMap_(sheet);
   return shifts.map(function (shift) {
     const workDate = isoToDate_(shift.workDateIso);
+    const translated = translateShiftStatusAndNote_(shift.status, shift.note);
     return buildRowFromHeaders_(map, {
       shiftId: shift.shiftId,
       employeeId: shift.employeeId,
@@ -396,11 +429,9 @@ function buildShiftRows_(shifts, headerMap) {
       jobName: shift.jobName,
       department: shift.department,
       hoursDecimal: shift.hoursDecimal === "" ? "" : Number(shift.hoursDecimal),
-      payHours: shift.payHours === "" ? "" : Number(shift.payHours),
       units: shift.units,
-      status: shift.status,
-      note: shift.note,
-      rawLogIds: shift.rawLogIds,
+      status: translated.statusDisplay,
+      note: translated.noteDisplay,
     });
   });
 }
@@ -438,16 +469,15 @@ function rebuildShiftsForRange_(opts) {
   const sheet = getShiftsSheet_();
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
-  const workDateCol = getRequiredColumn_(headerMap, ["תאריך משמרת"], sheetName);
+  const workDateCol = getRequiredColumn_(headerMap, ["תאריך"], sheetName);
   const employeeCol = getRequiredColumn_(
     headerMap,
     ["מזהה עובד", "ID עובד"],
     sheetName
   );
-  const startCol = getRequiredColumn_(headerMap, ["שעת התחלה"], sheetName);
-  const endCol = getRequiredColumn_(headerMap, ["שעת סיום"], sheetName);
+  const startCol = getRequiredColumn_(headerMap, ["כניסה"], sheetName);
+  const endCol = getRequiredColumn_(headerMap, ["יציאה"], sheetName);
   const hoursCol = getRequiredColumn_(headerMap, ["שעות"], sheetName);
-  const payCol = getRequiredColumn_(headerMap, ["שעות לשכר"], sheetName);
 
   const shifts = buildAggregatedShifts_(readWorkLogsForRange_(filters));
   const rows = buildShiftRows_(shifts, headerMap);
@@ -497,9 +527,6 @@ function rebuildShiftsForRange_(opts) {
     .setValues(writableRows);
   sheet
     .getRange(startRow, hoursCol, writableRows.length, 1)
-    .setNumberFormat("0.00");
-  sheet
-    .getRange(startRow, payCol, writableRows.length, 1)
     .setNumberFormat("0.00");
 
   const startBg = [];
