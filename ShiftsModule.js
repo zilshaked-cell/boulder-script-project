@@ -165,24 +165,30 @@ var BONUSES = BONUSES || {};
     return sh;
   }
 
-  var REQUIRED_SHIFT_HEADERS = [
-    { key: "shiftId", header: "ShiftId" },
-    { key: "employeeId", header: "EmployeeId" },
-    { key: "employeeName", header: "EmployeeName" },
-    { key: "jobTypeId", header: "JobTypeId" },
-    { key: "jobTypeName", header: "JobTypeName" },
-    { key: "department", header: "Department" },
-    { key: "shiftDate", header: "ShiftDate" },
-    { key: "startTime", header: "StartTime" },
-    { key: "endTime", header: "EndTime" },
-    { key: "startDateTime", header: "StartDateTime" },
-    { key: "endDateTime", header: "EndDateTime" },
-    { key: "spanHours", header: "SpanHours" },
-    { key: "payHours", header: "PayHours" },
-    { key: "status", header: "Status" },
-    { key: "note", header: "Note" },
-    { key: "sourceReportIds", header: "SourceReportIds" },
-  ];
+  var SHIFT_HEADER_CANDIDATES = {
+    shiftId: ["ID משמרת", "ShiftId", "shiftId"],
+    employeeId: ["מזהה עובד", "ID עובד", "EmployeeId", "employeeId"],
+    employeeName: ["שם מלא", "EmployeeName", "employeeName"],
+    jobTypeId: ["ID סוג עבודה", "ID סוגי עבודה", "JobTypeId", "jobTypeId"],
+    jobTypeName: ["סוג עבודה", "סוגי עבודה", "JobTypeName", "jobTypeName"],
+    department: ["מחלקה", "מחלקות", "Department", "department"],
+    shiftDate: ["תאריך משמרת", "ShiftDate", "shiftDate"],
+    startTime: ["שעת התחלה", "Start Time", "StartTime", "startTime"],
+    endTime: ["שעת סיום", "End Time", "EndTime", "endTime"],
+    startDateTime: ["StartDateTime", "שעת התחלה מדויקת"],
+    endDateTime: ["EndDateTime", "שעת סיום מדויקת"],
+    spanHours: ["שעות", "SpanHours", "Hours"],
+    payHours: ["שעות לשכר", "PayHours"],
+    status: ["סטטוס משמרת", "סטטוס", "Status"],
+    note: ["הערות למשמרת", "הערות", "Note"],
+    sourceReportIds: ["מקור דיווחים", "SourceReportIds"],
+  };
+
+  var REQUIRED_SHIFT_HEADERS = Object.keys(SHIFT_HEADER_CANDIDATES).map(
+    function (key) {
+      return { key: key, header: SHIFT_HEADER_CANDIDATES[key][0] };
+    }
+  );
 
   function formatNumericColumn_(sheet, colIndex) {
     if (!colIndex) return;
@@ -190,6 +196,8 @@ var BONUSES = BONUSES || {};
   }
 
   function ensureRequiredShiftHeaders_(sheet) {
+    var logger = getLogger_("SHIFTS_HEADERS");
+    var startMs = new Date().getTime();
     var lastCol = sheet.getLastColumn();
     if (lastCol < 1) lastCol = 1;
     var headers = sheet
@@ -197,11 +205,17 @@ var BONUSES = BONUSES || {};
       .getValues()[0];
     var map = buildHeaderMap_(headers);
 
+    // Try to find existing headers by candidates before appending anything new.
     var missing = [];
     REQUIRED_SHIFT_HEADERS.forEach(function (item) {
-      if (!map[norm_(item.header)]) missing.push(item.header);
+      var candidates = SHIFT_HEADER_CANDIDATES[item.key] || [item.header];
+      var found = candidates.some(function (c) {
+        return !!map[norm_(c)];
+      });
+      if (!found) missing.push(item.header);
     });
 
+    // Only append if truly absent (to avoid cluttering sheet with duplicate English headers).
     if (missing.length) {
       sheet
         .getRange(CONFIG.HEADER_ROW, lastCol + 1, 1, missing.length)
@@ -212,13 +226,37 @@ var BONUSES = BONUSES || {};
       map = buildHeaderMap_(headers);
     }
 
-    formatNumericColumn_(sheet, map[norm_("SpanHours")]);
-    formatNumericColumn_(sheet, map[norm_("PayHours")]);
+    formatNumericColumn_(
+      sheet,
+      pickCol_(map, { candidates: SHIFT_HEADER_CANDIDATES.spanHours })
+    );
+    formatNumericColumn_(
+      sheet,
+      pickCol_(map, { candidates: SHIFT_HEADER_CANDIDATES.payHours })
+    );
+
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "shifts.headers.ensure", startMs, {
+        existing: Object.keys(map).length,
+        missingAdded: missing.length,
+      });
+    } else if (logger && logger.info) {
+      logger.info({
+        layer: "shifts-module",
+        step: "headers.ensure",
+        details: {
+          existing: Object.keys(map).length,
+          missingAdded: missing.length,
+        },
+      });
+    }
 
     return map;
   }
 
   function getOrCreateShiftsSheet_() {
+    var logger = getLogger_("SHIFTS_HEADERS");
+    var startMs = new Date().getTime();
     var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
     if (!sh) {
       sh = ss_().insertSheet(CONFIG.SHEET_NAME);
@@ -239,14 +277,24 @@ var BONUSES = BONUSES || {};
       );
       formatNumericColumn_(sh, mapNew[norm_("SpanHours")]);
       formatNumericColumn_(sh, mapNew[norm_("PayHours")]);
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.sheet.create", startMs, {
+          headers: REQUIRED_SHIFT_HEADERS.length,
+        });
+      }
       return sh;
     }
 
     ensureRequiredShiftHeaders_(sh);
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "shifts.sheet.exists", startMs, {});
+    }
     return sh;
   }
 
   function getShiftsHeaderMap_() {
+    var logger = getLogger_("SHIFTS_HEADERS");
+    var startMs = new Date().getTime();
     var sh = getOrCreateShiftsSheet_();
     var lastCol = sh.getLastColumn();
     if (lastCol < 1) lastCol = 1;
@@ -255,8 +303,15 @@ var BONUSES = BONUSES || {};
 
     var logical = {};
     REQUIRED_SHIFT_HEADERS.forEach(function (item) {
-      logical[item.key] = map[norm_(item.header)] || null;
+      var candidates = SHIFT_HEADER_CANDIDATES[item.key] || [item.header];
+      logical[item.key] = pickCol_(map, { candidates: candidates });
     });
+
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "shifts.headers.map", startMs, {
+        mapped: Object.keys(logical).length,
+      });
+    }
 
     return logical;
   }
@@ -894,6 +949,8 @@ var BONUSES = BONUSES || {};
     fromDate,
     toDate
   ) {
+    var logger = getLogger_("SHIFTS_UPSERT_RANGE");
+    var startMs = new Date().getTime();
     var empIdNorm = normalizeId_(employeeId);
     var jobIdNorm = normalizeId_(jobTypeId);
     var fromD = toDateOnly_(fromDate);
@@ -936,6 +993,13 @@ var BONUSES = BONUSES || {};
         });
         for (var r = 0; r < rowsToDelete.length; r++) {
           sheet.deleteRow(rowsToDelete[r]);
+        }
+        if (typeof logDuration_ === "function") {
+          logDuration_(logger, "shifts.upsert.delete", startMs, {
+            deleted: rowsToDelete.length,
+            emp: empIdNorm,
+            job: jobIdNorm,
+          });
         }
       }
     }
@@ -995,6 +1059,13 @@ var BONUSES = BONUSES || {};
 
     if (values.length) {
       sheet.getRange(startRow, 1, values.length, lastCol).setValues(values);
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.upsert.write", startMs, {
+          written: values.length,
+          emp: empIdNorm,
+          job: jobIdNorm,
+        });
+      }
     }
   }
 

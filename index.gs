@@ -285,8 +285,8 @@ function getActionRegistry_() {
     getEmployeeRequests: function (_payload, _logger) {
       return { requests: [] };
     },
-    "gameLeaderboard.list": function (_payload, _logger) {
-      return listGameLeaderboard_();
+    "gameLeaderboard.list": function (payload, _logger) {
+      return listGameLeaderboard_(payload || {});
     },
     "gameLeaderboard.submit": function (payload, _logger) {
       return submitGameLeaderboard_(payload || {});
@@ -4068,7 +4068,11 @@ function writeLeaderboardRows_(sheet, headers, rows) {
   sheet.getRange(2, 1, matrix.length, headers.length).setValues(matrix);
 }
 
-function listGameLeaderboard_() {
+function listGameLeaderboard_(payload) {
+  Logger.log(
+    "LEADERBOARD_LIST called with payload: %s",
+    JSON.stringify(payload)
+  );
   const logger = ensureModuleLoggerDefined_("LEADERBOARD_LIST");
   const meta = ensureLeaderboardSheet_();
   const rows = sortLeaderboardRows_(
@@ -4091,6 +4095,10 @@ function listGameLeaderboard_() {
 }
 
 function submitGameLeaderboard_(payload) {
+  Logger.log(
+    "LEADERBOARD_SAVE called with payload: %s",
+    JSON.stringify(payload)
+  );
   const logger = ensureModuleLoggerDefined_("LEADERBOARD_SAVE");
   const employeeId = stringValue(payload.employeeId);
   const employeeName = stringValue(payload.employeeName);
