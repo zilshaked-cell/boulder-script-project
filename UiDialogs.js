@@ -6,6 +6,26 @@
 /* exported UI_getRequestsDialogData, UI_saveRequestChanges */
 /* exported UI_debugOpenEmployeeDialog, UI_debugOpenShiftsDialog, UI_debugOpenRequestsDialog */
 
+function getSidebarLogger_(operation) {
+  try {
+    if (typeof ensureModuleLoggerDefined_ === "function") {
+      return ensureModuleLoggerDefined_(operation || "SIDEBAR_DIALOG");
+    }
+    if (typeof createScriptLogger_ === "function") {
+      return createScriptLogger_({
+        traceId:
+          (typeof makeTraceId_ === "function" && makeTraceId_()) ||
+          (typeof Utilities !== "undefined" && Utilities.getUuid
+            ? Utilities.getUuid()
+            : ""),
+        operation: operation || "SIDEBAR_DIALOG",
+        source: "apps-script-sidebar",
+      });
+    }
+  } catch (_ignored) {}
+  return null;
+}
+
 /** Opens the extended employee dialog. */
 function UI_openEmployeeDialog(params) {
   params = params || {};
@@ -20,6 +40,8 @@ function UI_openEmployeeDialog(params) {
 
 /** Returns data for the extended employee dialog. */
 function UI_getEmployeeDialogData(params) {
+  var logger = getSidebarLogger_("SIDEBAR_EMPLOYEE_DIALOG");
+  var startMs = new Date().getTime();
   var traceId =
     (typeof Utilities !== "undefined" &&
       Utilities.getUuid &&
@@ -91,7 +113,7 @@ function UI_getEmployeeDialogData(params) {
     }
   }
 
-  return {
+  var result = {
     meta: {
       traceId: traceId,
       requestedAt: requestedAt,
@@ -102,6 +124,13 @@ function UI_getEmployeeDialogData(params) {
     data: errors.length ? null : data,
     errors: errors,
   };
+
+  logDuration_(logger, "sidebar.employee.get", startMs, {
+    employeeId: employeeId,
+    errors: errors.length,
+  });
+
+  return result;
 }
 
 function buildEmployeeJobsFromEmployee_(employee) {
@@ -122,6 +151,8 @@ function buildEmployeeJobsFromEmployee_(employee) {
 /** Saves changes made in the extended employee dialog. */
 // eslint-disable-next-line no-unused-vars
 function UI_saveEmployeeDialogChanges(envelope) {
+  var logger = getSidebarLogger_("SIDEBAR_EMPLOYEE_SAVE");
+  var startMs = new Date().getTime();
   var traceId =
     (typeof Utilities !== "undefined" &&
       Utilities.getUuid &&
@@ -249,7 +280,7 @@ function UI_saveEmployeeDialogChanges(envelope) {
     }
   }
 
-  return {
+  var result = {
     meta: {
       traceId: traceId,
       requestedAt: requestedAt,
@@ -268,6 +299,13 @@ function UI_saveEmployeeDialogChanges(envelope) {
         : null,
     errors: errors,
   };
+
+  logDuration_(logger, "sidebar.employee.save", startMs, {
+    employeeId: toSave && toSave.id ? toSave.id : "",
+    errors: errors.length,
+  });
+
+  return result;
 }
 
 /** Opens the extended shifts dialog. */
@@ -284,6 +322,8 @@ function UI_openShiftsDialog(params) {
 
 /** Returns data for the extended shifts dialog. */
 function UI_getShiftsDialogData(params) {
+  var logger = getSidebarLogger_("SIDEBAR_SHIFTS_DIALOG");
+  var startMs = new Date().getTime();
   var traceId =
     (typeof Utilities !== "undefined" &&
       Utilities.getUuid &&
@@ -451,7 +491,7 @@ function UI_getShiftsDialogData(params) {
         rules: { crossMidnightCutoffHour: 4 },
       };
 
-  return {
+  var result = {
     meta: {
       traceId: traceId,
       requestedAt: requestedAt,
@@ -462,6 +502,13 @@ function UI_getShiftsDialogData(params) {
     data: data,
     errors: errors,
   };
+
+  logDuration_(logger, "sidebar.shifts.get", startMs, {
+    errors: errors.length,
+    returnedShifts: returnedShifts,
+  });
+
+  return result;
 }
 
 function normalizeDateRange_(fromDateStr, toDateStr) {
@@ -624,6 +671,8 @@ function buildUniqueValuePairs_(items, key) {
 /** Saves changes made in the extended shifts dialog. */
 // eslint-disable-next-line no-unused-vars
 function UI_saveShiftChanges(envelope) {
+  var logger = getSidebarLogger_("SIDEBAR_SHIFTS_SAVE");
+  var startMs = new Date().getTime();
   var traceId =
     (typeof Utilities !== "undefined" &&
       Utilities.getUuid &&
@@ -900,7 +949,7 @@ function UI_saveShiftChanges(envelope) {
     }
   }
 
-  return {
+  var result = {
     meta: {
       traceId: traceId,
       requestedAt: requestedAt,
@@ -919,6 +968,13 @@ function UI_saveShiftChanges(envelope) {
         : null,
     errors: errors,
   };
+
+  logDuration_(logger, "sidebar.shifts.save", startMs, {
+    shiftId: shiftId,
+    errors: errors.length,
+  });
+
+  return result;
 }
 
 /** Opens the extended requests dialog. */
@@ -936,6 +992,8 @@ function UI_openRequestsDialog(params) {
 /** Returns data for the extended requests dialog (placeholder). */
 // eslint-disable-next-line no-unused-vars
 function UI_getRequestsDialogData(params) {
+  var logger = getSidebarLogger_("SIDEBAR_REQUESTS_DIALOG");
+  var startMs = new Date().getTime();
   var traceId =
     (typeof Utilities !== "undefined" &&
       Utilities.getUuid &&
@@ -1138,7 +1196,7 @@ function UI_getRequestsDialogData(params) {
     },
   };
 
-  return {
+  var result = {
     meta: {
       traceId: traceId,
       requestedAt: requestedAt,
@@ -1149,11 +1207,20 @@ function UI_getRequestsDialogData(params) {
     data: errors.length ? null : data,
     errors: errors,
   };
+
+  logDuration_(logger, "sidebar.requests.get", startMs, {
+    errors: errors.length,
+    returned: rawRequests.length,
+  });
+
+  return result;
 }
 
 /** Saves changes made in the extended requests dialog (placeholder). */
 // eslint-disable-next-line no-unused-vars
 function UI_saveRequestChanges(envelope) {
+  var logger = getSidebarLogger_("SIDEBAR_REQUESTS_SAVE");
+  var startMs = new Date().getTime();
   var traceId =
     (typeof Utilities !== "undefined" &&
       Utilities.getUuid &&
@@ -1393,6 +1460,11 @@ function UI_saveRequestChanges(envelope) {
       }
     }
   }
+
+  logDuration_(logger, "sidebar.requests.save", startMs, {
+    errors: errors.length,
+    saved: saveResults.length,
+  });
 
   return {
     meta: {

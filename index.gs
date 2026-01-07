@@ -31,6 +31,7 @@ const HEADER_KEY_MAP = {
   "Shift ID": "shiftId",
   "Request ID": "id",
   requestId: "id",
+  "ID בקשה": "id",
   "Employee ID": "employeeId",
   "ID עובד": "employeeId",
   "מזהה עובד": "employeeId",
@@ -546,9 +547,18 @@ function safeDurationMs_(startMs) {
   return diff < 0 ? 0 : diff;
 }
 
-function logDuration_(logger, step, startMs, details, severity, errorCode, err) {
+function logDuration_(
+  logger,
+  step,
+  startMs,
+  details,
+  severity,
+  errorCode,
+  err
+) {
   if (!logger || typeof logger.info !== "function") return;
-  var payload = details && typeof details === "object" ? Object.assign({}, details) : {};
+  var payload =
+    details && typeof details === "object" ? Object.assign({}, details) : {};
   payload.durationMs = safeDurationMs_(startMs);
 
   var level = (severity || "info").toLowerCase();
@@ -891,7 +901,9 @@ function handleLegacyPost_(e, body, _logger) {
   }
 
   const legacyPayload = normalizeLegacyShiftPayload_(body);
-  return jsonResponse(withOk_(handleShiftReportSubmit_(legacyPayload, _logger)));
+  return jsonResponse(
+    withOk_(handleShiftReportSubmit_(legacyPayload, _logger))
+  );
 }
 
 function parseBody(e) {
@@ -1062,12 +1074,13 @@ function listJobTypes_() {
   return results;
 }
 
-function listEmployeeLinkedJobIds_(payload) {
-  var logger = ensureModuleLoggerDefined_("REPORT_LOAD");
+function listEmployeeLinkedJobIds_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("REPORT_LOAD");
+  var startMs = new Date().getTime();
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) {
-    logger.warn(
+    lg.warn(
       "validation",
       { reason: "Missing employeeId" },
       ERROR_CODES.VALIDATION_FAILED
@@ -1089,7 +1102,7 @@ function listEmployeeLinkedJobIds_(payload) {
   );
   const statusCol = getRequiredColumn_(headerMap, ["סטטוס"], sheetName);
   const values = sheet.getDataRange().getValues();
-  logger.info("read-sheet", { sheetName: sheetName, rows: values.length - 1 });
+  lg.info("read-sheet", { sheetName: sheetName, rows: values.length - 1 });
   const jobTypeIds = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
@@ -1100,11 +1113,17 @@ function listEmployeeLinkedJobIds_(payload) {
     const jobTypeId = stringValue(row[jobTypeCol - 1]);
     if (jobTypeId) jobTypeIds.push(jobTypeId);
   }
+  logDuration_(lg, "employee.linkedJobs.total", startMs, {
+    employeeId: employeeId,
+    linkedCount: jobTypeIds.length,
+  });
   return { employeeId, jobTypeIds };
 }
 
-function listWorkLogsByEmployee_(payload) {
+function listWorkLogsByEmployee_(payload, logger) {
   // SPEC-SHIFT-001
+  var lg = logger || ensureModuleLoggerDefined_("WORK_LOG_LOAD");
+  var startMs = new Date().getTime();
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) throw new Error("Missing employeeId");
@@ -1167,11 +1186,18 @@ function listWorkLogsByEmployee_(payload) {
       fixTime: stringValue(row[fixTimeCol - 1]),
     });
   }
+  logDuration_(lg, "worklogs.list", startMs, {
+    employeeId: employeeId,
+    rowsScanned: Math.max(values.length - 1, 0),
+    returned: logs.length,
+  });
   return { workLogs: logs };
 }
 
-function listRequestsByEmployee_(payload) {
+function listRequestsByEmployee_(payload, logger) {
   // SPEC-REQ-001
+  var lg = logger || ensureModuleLoggerDefined_("REQUEST_LIST");
+  var startMs = new Date().getTime();
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) throw new Error("Missing employeeId");
@@ -1320,6 +1346,11 @@ function listRequestsByEmployee_(payload) {
       correction: correction,
     });
   }
+  logDuration_(lg, "requests.list", startMs, {
+    employeeId: employeeId,
+    rowsScanned: Math.max(values.length - 1, 0),
+    returned: requests.length,
+  });
   return { requests };
 }
 
@@ -1613,6 +1644,7 @@ function handleShiftReportSubmit_(payload, logger) {
     getRequiredColumn_(headers, ["סוג בקשה"], reqSheetName);
     var requestAppendStartMs = new Date().getTime();
     const row = buildRowFromHeaders_(headers, {
+      id: shiftId,
       shiftId: shiftId,
       status: "ממתין",
       employeeId: employeeId,
@@ -1813,10 +1845,15 @@ function handleShiftCorrectionSubmit_(payload, logger) {
     }
   }
   if (!employeeName) throw new Error("Employee not found: " + employeeId);
-  logDuration_(logger, "shift.correction.resolve-employee", employeeScanStartMs, {
-    sheet: empSheetName,
-    found: !!employeeName,
-  });
+  logDuration_(
+    logger,
+    "shift.correction.resolve-employee",
+    employeeScanStartMs,
+    {
+      sheet: empSheetName,
+      found: !!employeeName,
+    }
+  );
 
   const original = {
     workDate: stringValue(payload.originalWorkDate || payload.workDate),
@@ -1890,6 +1927,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   });
 
   const row = buildRowFromHeaders_(headers, {
+    id: newShiftId,
     shiftId: newShiftId,
     status: "ממתין",
     employeeId: employeeId,
@@ -1918,9 +1956,14 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   var requestAppendStartMs = new Date().getTime();
   reqSheet.appendRow(row);
 
-  logDuration_(logger, "shift.correction.append-request", requestAppendStartMs, {
-    sheet: reqSheetName,
-  });
+  logDuration_(
+    logger,
+    "shift.correction.append-request",
+    requestAppendStartMs,
+    {
+      sheet: reqSheetName,
+    }
+  );
   logDuration_(logger, "shift.correction.total", fnStartMs, {
     requestType: "shift_correction",
     jobTypeId: jobTypeId,
@@ -1934,7 +1977,9 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   };
 }
 
-function handleRequestApprove_(payload) {
+function handleRequestApprove_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("REQUEST_DECIDE");
+  var startMs = new Date().getTime();
   const requestId = stringValue(
     payload.requestId || payload.shiftId || payload.id
   );
@@ -1994,11 +2039,15 @@ function handleRequestApprove_(payload) {
   normalized.department = department;
   normalized.timestamp = new Date().toISOString();
 
-  writeWorkLogFromNormalizedShift_(normalized, {
-    employeeId: rec.employeeId,
-    employeeName: rec.employeeName,
-    note: updated.note,
-  });
+  writeWorkLogFromNormalizedShift_(
+    normalized,
+    {
+      employeeId: rec.employeeId,
+      employeeName: rec.employeeName,
+      note: updated.note,
+    },
+    lg
+  );
 
   if (rec.statusCol) {
     found.sheet.getRange(found.rowIndex, rec.statusCol).setValue("approved");
@@ -2009,6 +2058,11 @@ function handleRequestApprove_(payload) {
       .setValue(new Date().toISOString());
   }
 
+  logDuration_(lg, "requests.approve", startMs, {
+    requestId: requestId,
+    jobTypeId: jobTypeId,
+    employeeId: rec.employeeId,
+  });
   return { ok: true, status: "approved", requestType: "job_not_linked" };
 }
 

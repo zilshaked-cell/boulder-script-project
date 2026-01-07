@@ -2,24 +2,58 @@ function handleShiftPost(e) {
   var lock = LockService.getDocumentLock();
   lock.tryLock(30000);
 
+  var logger = null;
+  var startMs = new Date().getTime();
+  try {
+    if (typeof ensureModuleLoggerDefined_ === "function") {
+      logger = ensureModuleLoggerDefined_("SHIFT_POST");
+    }
+  } catch (_ignoredLogger) {}
+
+  function finish_(res, errorCode, err) {
+    if (typeof logDuration_ === "function") {
+      logDuration_(
+        logger,
+        "shift.post",
+        startMs,
+        { success: !!(res && res.success), error: res && res.error },
+        res && res.success ? "info" : "warn",
+        errorCode,
+        err
+      );
+    }
+    return res;
+  }
+
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : "";
-    if (!raw) return jsonResponse({ success: false, error: "Missing body" });
+    if (!raw)
+      return finish_(
+        jsonResponse({ success: false, error: "Missing body" }),
+        "MISSING_BODY"
+      );
 
     var data;
     try {
       data = JSON.parse(raw);
     } catch (err) {
-      return jsonResponse({ success: false, error: "Invalid JSON: " + err });
+      return finish_(
+        jsonResponse({ success: false, error: "Invalid JSON: " + err }),
+        "INVALID_JSON",
+        err
+      );
     }
 
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(SHEET_NAME);
     if (!sheet)
-      return jsonResponse({
-        success: false,
-        error: "Sheet not found: " + SHEET_NAME,
-      });
+      return finish_(
+        jsonResponse({
+          success: false,
+          error: "Sheet not found: " + SHEET_NAME,
+        }),
+        "SHEET_NOT_FOUND"
+      );
 
     function norm_(v) {
       if (v === null || v === undefined) return "";
@@ -144,19 +178,31 @@ function handleShiftPost(e) {
 
     // --- ולידציות מינימום ---
     if (!employeeName && !employeeId) {
-      return jsonResponse({
-        success: false,
-        error: "Missing employeeId/employeeName",
-      });
+      return finish_(
+        jsonResponse({
+          success: false,
+          error: "Missing employeeId/employeeName",
+        }),
+        "MISSING_EMPLOYEE"
+      );
     }
     if (!direction) {
-      return jsonResponse({ success: false, error: "Missing direction" });
+      return finish_(
+        jsonResponse({ success: false, error: "Missing direction" }),
+        "MISSING_DIRECTION"
+      );
     }
     if (!fixDate || !fixTime) {
-      return jsonResponse({ success: false, error: "Missing fixDate/fixTime" });
+      return finish_(
+        jsonResponse({ success: false, error: "Missing fixDate/fixTime" }),
+        "MISSING_FIX_FIELDS"
+      );
     }
     if (!jobName && !jobId) {
-      return jsonResponse({ success: false, error: "Missing jobId/jobName" });
+      return finish_(
+        jsonResponse({ success: false, error: "Missing jobId/jobName" }),
+        "MISSING_JOB"
+      );
     }
 
     // --- סכימת "דיווח שעות עבודה" לפי ה-contract (A..L) ---
@@ -208,7 +254,7 @@ function handleShiftPost(e) {
       Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + errUpsert);
     }
 
-    return jsonResponse({ success: true, shiftId: shiftId });
+    return finish_(jsonResponse({ success: true, shiftId: shiftId }));
   } finally {
     try {
       lock.releaseLock();
