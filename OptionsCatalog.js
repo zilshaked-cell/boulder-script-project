@@ -30,6 +30,15 @@ var OPT = OPT || {};
 
   var cache = null;
 
+  function getLogger_(operation) {
+    try {
+      if (typeof ensureModuleLoggerDefined_ === "function") {
+        return ensureModuleLoggerDefined_(operation || "OPTIONS_CATALOG");
+      }
+    } catch (_ignored) {}
+    return null;
+  }
+
   function getSheet_() {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(CONFIG.SHEET_NAME_OPTIONS);
@@ -52,6 +61,8 @@ var OPT = OPT || {};
    * - paysByName / paysById / paysList
    */
   function buildCache_() {
+    var logger = getLogger_("OPTIONS_CATALOG_BUILD_CACHE");
+    var startMs = new Date().getTime();
     if (cache) return cache;
 
     var sh = getSheet_();
@@ -128,6 +139,12 @@ var OPT = OPT || {};
     }
 
     cache = result;
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "optionsCatalog.buildCache", startMs, {
+        jobs: result.jobsList.length,
+        pays: result.paysList.length,
+      });
+    }
     return result;
   }
 

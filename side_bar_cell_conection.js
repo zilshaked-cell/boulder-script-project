@@ -1,8 +1,16 @@
 function EMP_getSelectedEmployeeId() {
+  var logger = null;
+  var startMs = new Date().getTime();
+  try {
+    if (typeof ensureModuleLoggerDefined_ === "function") {
+      logger = ensureModuleLoggerDefined_("SIDEBAR_CELL_SELECT");
+    }
+  } catch (_ignored) {}
+
   // --- התאמה לטבלה שלך ---
-  var SHEET_NAME = 'פרטי עובדים'; // אם שם הגיליון אחר – עדכן כאן
-  var HEADER_ROW = 1;             // שורת הכותרת
-  var COL_EMP_ID = 2;             // עמודת ID עובד (B=2)
+  var SHEET_NAME = "פרטי עובדים"; // אם שם הגיליון אחר – עדכן כאן
+  var HEADER_ROW = 1; // שורת הכותרת
+  var COL_EMP_ID = 2; // עמודת ID עובד (B=2)
 
   var ss = SpreadsheetApp.getActive();
   var sh = ss.getActiveSheet();
@@ -25,8 +33,16 @@ function EMP_getSelectedEmployeeId() {
     return { ok: true, employeeId: null };
   }
 
-  return {
+  var res = {
     ok: true,
-    employeeId: String(empId)
+    employeeId: String(empId),
   };
+
+  if (typeof logDuration_ === "function") {
+    logDuration_(logger, "sidebar.cell.getEmployeeId", startMs, {
+      employeeId: res.employeeId || null,
+    });
+  }
+
+  return res;
 }

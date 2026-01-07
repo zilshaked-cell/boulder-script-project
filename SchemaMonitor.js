@@ -21,6 +21,15 @@ var SCH = SCH || {};
     ],
   };
 
+  function getLogger_(operation) {
+    try {
+      if (typeof ensureModuleLoggerDefined_ === "function") {
+        return ensureModuleLoggerDefined_(operation || "SCHEMA_MONITOR");
+      }
+    } catch (_ignored) {}
+    return null;
+  }
+
   function ss_() {
     return SpreadsheetApp.getActiveSpreadsheet();
   }
@@ -78,6 +87,8 @@ var SCH = SCH || {};
   }
 
   function checkOne_(sheetName, reason) {
+    var logger = getLogger_("SCHEMA_CHECK_ONE");
+    var startMs = new Date().getTime();
     var sheet = ss_().getSheetByName(sheetName);
     if (!sheet) return { ok: false, sheet: sheetName, status: "missing" };
 
@@ -97,13 +108,25 @@ var SCH = SCH || {};
 
     p.setProperty(key, current);
     sendEmail_(sheetName, prev, current, reason);
-    return { ok: true, sheet: sheetName, status: "changed" };
+    var res = { ok: true, sheet: sheetName, status: "changed" };
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "schema.checkOne", startMs, res, null, null);
+    }
+    return res;
   }
 
   function checkAll_(reason) {
+    var logger = getLogger_("SCHEMA_CHECK_ALL");
+    var startMs = new Date().getTime();
     var res = [];
     for (var i = 0; i < CONFIG.WATCH_SHEETS.length; i++) {
       res.push(checkOne_(CONFIG.WATCH_SHEETS[i], reason));
+    }
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "schema.checkAll", startMs, {
+        reason: reason || "",
+        results: res.length,
+      });
     }
     return res;
   }

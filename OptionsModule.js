@@ -33,6 +33,15 @@ var OPT = OPT || {};
 
   var cache = null;
 
+  function getLogger_(operation) {
+    try {
+      if (typeof ensureModuleLoggerDefined_ === "function") {
+        return ensureModuleLoggerDefined_(operation || "OPTIONS_MODULE");
+      }
+    } catch (_ignored) {}
+    return null;
+  }
+
   function getSheet_() {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sh = ss.getSheetByName(CONFIG.SHEET_NAME_OPTIONS);
@@ -70,6 +79,8 @@ var OPT = OPT || {};
    * @return {{created:number}} סטטיסטיקה
    */
   function ensureCatalogIds_(sheet) {
+    var logger = getLogger_("OPTIONS_ENSURE_IDS");
+    var startMs = new Date().getTime();
     var sh = sheet || getSheet_();
     var headerRow = CONFIG.HEADER_ROW;
     var lastRow = sh.getLastRow();
@@ -128,6 +139,13 @@ var OPT = OPT || {};
       cache = null; // invalidate
     }
 
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "options.ensureCatalogIds", startMs, {
+        created: created,
+        rows: values.length,
+      });
+    }
+
     return { created: created };
   }
 
@@ -136,6 +154,8 @@ var OPT = OPT || {};
    * NOTE: הקאש נבנה *אחרי* שמוודאים IDs.
    */
   function buildCache_() {
+    var logger = getLogger_("OPTIONS_BUILD_CACHE");
+    var startMs = new Date().getTime();
     if (cache) return cache;
 
     var sh = getSheet_();
@@ -279,6 +299,15 @@ var OPT = OPT || {};
     }
 
     cache = out;
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "options.buildCache", startMs, {
+        jobs: out.jobs.length,
+        bonuses: out.bonuses.length,
+        pays: out.pays.length,
+        seniority: out.seniority.length,
+        trains: out.trains.length,
+      });
+    }
     return out;
   }
 
@@ -298,7 +327,10 @@ var OPT = OPT || {};
       var jobs = buildCache_().jobs;
       for (var i = 0; i < jobs.length; i++) {
         var j = jobs[i];
-        if (normKey_(j.name) === nameKey && normKey_(j.department) === deptKey) {
+        if (
+          normKey_(j.name) === nameKey &&
+          normKey_(j.department) === deptKey
+        ) {
           return j;
         }
       }
@@ -355,10 +387,17 @@ var OPT = OPT || {};
   // ---------- Triggers ----------
 
   function handleOpen_(e) {
+    var logger = getLogger_("OPTIONS_HANDLE_OPEN");
+    var startMs = new Date().getTime();
     ensureCatalogIds_();
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "options.onOpen", startMs, {});
+    }
   }
 
   function handleEdit_(e) {
+    var logger = getLogger_("OPTIONS_HANDLE_EDIT");
+    var startMs = new Date().getTime();
     var range = e && e.range ? e.range : null;
     if (!range) return;
 
@@ -389,6 +428,13 @@ var OPT = OPT || {};
     if (!touches) return;
 
     ensureCatalogIds_(sh);
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "options.onEdit", startMs, {
+        sheet: sh ? sh.getName() : "",
+        startCol: startCol,
+        endCol: endCol,
+      });
+    }
   }
 
   // ---------- export ----------

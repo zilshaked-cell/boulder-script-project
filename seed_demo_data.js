@@ -1,3 +1,34 @@
+var SEED_TAG = "[SEED_DEMO_M2]";
+var SEED_PROGRESS_KEY = "SEED_DEMO_LAST_TWO_MONTHS_PROGRESS";
+var SEED_MAX_DAYS_PER_RUN = 7; // reduce if still close to timeout
+var REQUEST_DATA_HEADER_CANDIDATES = [
+  "סטטוס בקשה",
+  "ID בקשה",
+  "הערות למשמרת",
+  "ID משמרת",
+  "חותמת זמן",
+  "ID עובד",
+  "שם מלא",
+  "כניסה / יציאה",
+  "תיקון תאריך",
+  "תיקון שעה",
+  "ID סוג עבודה",
+  "ID סוגי עבודה",
+  "סוג עבודה",
+  "סוגי עבודה",
+  "סוג העבודה",
+  "מחלקה",
+  "כמות היחידות",
+];
+
+function seedLogger_(operation) {
+  try {
+    if (typeof ensureModuleLoggerDefined_ === "function") {
+      return ensureModuleLoggerDefined_(operation || "SEED_DEMO_DATA");
+    }
+  } catch (_ignored) {}
+  return null;
+}
 /* global OPT, SHEET_NAME, SHEET_NAME_REQUESTS */
 /* exported SEED_generateDemoDataForLastTwoMonths, SEED_clearAllDemoData */
 // Deterministic demo data seeding (manual-only). Uses batch writes (setValues) to avoid execution timeouts.
@@ -30,30 +61,9 @@
 // כניסה / יציאה, תיקון תאריך, תיקון שעה, ID סוג עבודה/ID סוגי עבודה,
 // סוג עבודה/סוגי עבודה/סוג העבודה, מחלקה, כמות היחידות (only columns present are filled).
 
-var SEED_TAG = "[SEED_DEMO_M2]";
-var SEED_PROGRESS_KEY = "SEED_DEMO_LAST_TWO_MONTHS_PROGRESS";
-var SEED_MAX_DAYS_PER_RUN = 7; // reduce if still close to timeout
-var REQUEST_DATA_HEADER_CANDIDATES = [
-  "סטטוס בקשה",
-  "ID בקשה",
-  "הערות למשמרת",
-  "ID משמרת",
-  "חותמת זמן",
-  "ID עובד",
-  "שם מלא",
-  "כניסה / יציאה",
-  "תיקון תאריך",
-  "תיקון שעה",
-  "ID סוג עבודה",
-  "ID סוגי עבודה",
-  "סוג עבודה",
-  "סוגי עבודה",
-  "סוג העבודה",
-  "מחלקה",
-  "כמות היחידות",
-];
-
 function SEED_generateDemoDataForLastTwoMonths() {
+  var logger = seedLogger_("SEED_LAST_TWO_MONTHS");
+  var startMs = new Date().getTime();
   var props = PropertiesService.getScriptProperties();
 
   var today = new Date();
@@ -74,7 +84,15 @@ function SEED_generateDemoDataForLastTwoMonths() {
 
   if (currentStart > end) {
     props.deleteProperty(SEED_PROGRESS_KEY);
-    Logger.log("SEED: last two months already fully seeded; nothing to do.");
+    try {
+      Logger.log("SEED: last two months already fully seeded; nothing to do.");
+    } catch (_ignoredLog) {}
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "seed.lastTwoMonths", startMs, {
+        status: "complete",
+        created: 0,
+      });
+    }
     return;
   }
 
@@ -122,22 +140,51 @@ function SEED_generateDemoDataForLastTwoMonths() {
         ". " +
         resultSummary
     );
+    try {
+      Logger.log(
+        "SEED: completed last two months. Chunk " +
+          rangeStart.toDateString() +
+          " – " +
+          rangeEnd.toDateString() +
+          ". " +
+          resultSummary
+      );
+    } catch (_ignoredLog2) {}
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "seed.lastTwoMonths", startMs, {
+        status: "complete",
+        chunkStart: rangeStart.toISOString(),
+        chunkEnd: rangeEnd.toISOString(),
+      });
+    }
   } else {
     props.setProperty(SEED_PROGRESS_KEY, nextStart.toISOString());
-    Logger.log(
-      "SEED: processed chunk " +
-        rangeStart.toDateString() +
-        " – " +
-        rangeEnd.toDateString() +
-        ". Next start: " +
-        nextStart.toDateString() +
-        ". " +
-        resultSummary
-    );
+    try {
+      Logger.log(
+        "SEED: processed chunk " +
+          rangeStart.toDateString() +
+          " – " +
+          rangeEnd.toDateString() +
+          ". Next start: " +
+          nextStart.toDateString() +
+          ". " +
+          resultSummary
+      );
+    } catch (_ignoredLog3) {}
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "seed.lastTwoMonths", startMs, {
+        status: "partial",
+        nextStart: nextStart.toISOString(),
+        chunkStart: rangeStart.toISOString(),
+        chunkEnd: rangeEnd.toISOString(),
+      });
+    }
   }
 }
 
 function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
+  var logger = seedLogger_("SEED_RANGE");
+  var startMs = new Date().getTime();
   var startDate = normalizeDate_(startDateInput);
   var endDate = normalizeDate_(endDateInput);
   if (!startDate || !endDate || startDate > endDate) {
@@ -169,6 +216,14 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
         SEED_TAG +
         "); aborting."
     );
+
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "seed.range", startMs, {
+        days: Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1,
+        shiftRows: ctx.shiftRows.length,
+        requestRows: ctx.requestRows.length,
+      });
+    }
   }
 
   var ctx = {

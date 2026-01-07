@@ -41,6 +41,15 @@ var REQ = REQ || {};
     return Utilities.getUuid();
   }
 
+  function getLogger_(operation) {
+    try {
+      if (typeof ensureModuleLoggerDefined_ === "function") {
+        return ensureModuleLoggerDefined_(operation || "REQUESTS_MODULE");
+      }
+    } catch (_ignored) {}
+    return null;
+  }
+
   function norm_(v) {
     if (v === null || v === undefined) return "";
     return String(v).replace(/\s+/g, " ").trim();
@@ -118,10 +127,12 @@ var REQ = REQ || {};
   ];
 
   function list_(filters) {
+    var logger = getLogger_("REQUESTS_LIST");
+    var startMs = new Date().getTime();
     var sh = sh_();
     var lastRow = sh.getLastRow();
     if (lastRow <= CONFIG.HEADER_ROW) {
-      return {
+      var emptyRes = {
         ok: true,
         requests: [],
         total: 0,
@@ -129,6 +140,10 @@ var REQ = REQ || {};
         hasMore: false,
         statuses: [],
       };
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "requests.list", startMs, { returned: 0 });
+      }
+      return emptyRes;
     }
 
     var map = headersMap_(sh);
@@ -236,7 +251,7 @@ var REQ = REQ || {};
     var sliced = all.slice(offset, offset + limit);
     var hasMore = offset + limit < all.length;
 
-    return {
+    var res = {
       ok: true,
       requests: sliced,
       total: all.length,
@@ -246,6 +261,17 @@ var REQ = REQ || {};
         return statusesFound[k];
       }),
     };
+
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "requests.list", startMs, {
+        total: all.length,
+        returned: sliced.length,
+        offset: offset,
+        limit: limit,
+      });
+    }
+
+    return res;
   }
 
   /**
@@ -253,6 +279,8 @@ var REQ = REQ || {};
    * ברירת מחדל: רק עמודת "ID בקשה" (אם קיימת) כדי לא לגעת בשדות אחרים.
    */
   function ensureRequestIds_(sheet) {
+    var logger = getLogger_("REQUESTS_ENSURE_IDS");
+    var startMs = new Date().getTime();
     var sh = sheet || sh_();
     var lastRow = sh.getLastRow();
     if (lastRow <= CONFIG.HEADER_ROW) return { filled: 0 };
@@ -325,16 +353,46 @@ var REQ = REQ || {};
       dataRange.setValues(data);
     }
 
-    return { filled: filled };
+    var result = { filled: filled };
+    if (warning) result.warning = warning;
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "requests.ensureIds", startMs, {
+        filled: filled,
+        warning: warning || "",
+      });
+    }
+    return result;
   }
 
   function handleOpen_(e) {
+    var logger = getLogger_("REQUESTS_ON_OPEN");
+    var startMs = new Date().getTime();
     try {
       ensureRequestIds_();
-    } catch (err) {}
+    } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "requests.onOpen",
+          startMs,
+          {
+            error: String(err),
+          },
+          "warn",
+          "REQ_ON_OPEN_FAIL",
+          err
+        );
+      }
+      return;
+    }
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "requests.onOpen", startMs, {});
+    }
   }
 
   function handleEdit_(e) {
+    var logger = getLogger_("REQUESTS_ON_EDIT");
+    var startMs = new Date().getTime();
     var range = e && e.range ? e.range : null;
     if (!range) return;
 
@@ -343,6 +401,11 @@ var REQ = REQ || {};
 
     // אם עריכה מתרחשת בטאב בקשות – נוודא IDs
     ensureRequestIds_(sheet);
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "requests.onEdit", startMs, {
+        sheet: sheet ? sheet.getName() : "",
+      });
+    }
   }
 
   // Export

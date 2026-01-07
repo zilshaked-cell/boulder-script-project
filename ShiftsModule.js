@@ -136,6 +136,15 @@ var BONUSES = BONUSES || {};
     { field: "SourceReportIds", header: "SourceReportIds" },
   ];
 
+  function getLogger_(operation) {
+    try {
+      if (typeof ensureModuleLoggerDefined_ === "function") {
+        return ensureModuleLoggerDefined_(operation || "SHIFTS_MODULE");
+      }
+    } catch (_ignored) {}
+    return null;
+  }
+
   function ss_() {
     return SpreadsheetApp.getActiveSpreadsheet();
   }
@@ -1486,50 +1495,146 @@ var BONUSES = BONUSES || {};
   }
 
   SHIFTS.list = function (filters) {
+    var logger = getLogger_("SHIFTS_LIST");
+    var startMs = new Date().getTime();
     try {
       var res = list_(filters || {});
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.list", startMs, {
+          total: res && res.total,
+          returned: res && res.returned,
+        });
+      }
       return JSON.parse(JSON.stringify(res));
     } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "shifts.list",
+          startMs,
+          { error: String(err) },
+          "warn",
+          "SHIFTS_LIST_FAIL",
+          err
+        );
+      }
       Logger.log("SHIFTS.list error: " + err);
       return { ok: false, error: "SHIFTS.list failed: " + err };
     }
   };
 
   SHIFTS.get = function (shiftId) {
+    var logger = getLogger_("SHIFTS_GET");
+    var startMs = new Date().getTime();
     try {
       var res = get_(shiftId);
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.get", startMs, {
+          shiftId: shiftId || "",
+          ok: res && res.ok,
+        });
+      }
       return JSON.parse(JSON.stringify(res));
     } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "shifts.get",
+          startMs,
+          { shiftId: shiftId || "", error: String(err) },
+          "warn",
+          "SHIFTS_GET_FAIL",
+          err
+        );
+      }
       Logger.log("SHIFTS.get error: " + err);
       return { ok: false, error: "SHIFTS.get failed: " + err };
     }
   };
 
   SHIFTS.getSelectedRef = function () {
+    var logger = getLogger_("SHIFTS_GET_SELECTED");
+    var startMs = new Date().getTime();
     try {
       var res = getSelectedRef_();
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.getSelectedRef", startMs, {
+          sourceSheet: res && res.sourceSheet,
+          hasAny: res && res.hasAny,
+        });
+      }
       return JSON.parse(JSON.stringify(res));
     } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "shifts.getSelectedRef",
+          startMs,
+          { error: String(err) },
+          "warn",
+          "SHIFTS_GET_SELECTED_FAIL",
+          err
+        );
+      }
       Logger.log("SHIFTS.getSelectedRef error: " + err);
       return { ok: false, error: "SHIFTS.getSelectedRef failed: " + err };
     }
   };
 
   SHIFTS.updateBonuses = function (shiftId, bonusIds) {
+    var logger = getLogger_("SHIFTS_UPDATE_BONUSES");
+    var startMs = new Date().getTime();
     try {
       var res = updateBonuses_(shiftId, bonusIds || []);
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.updateBonuses", startMs, {
+          shiftId: shiftId || "",
+          bonuses: bonusIds ? bonusIds.length : 0,
+          ok: res && res.ok,
+        });
+      }
       return JSON.parse(JSON.stringify(res));
     } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "shifts.updateBonuses",
+          startMs,
+          { shiftId: shiftId || "", error: String(err) },
+          "warn",
+          "SHIFTS_UPDATE_BONUSES_FAIL",
+          err
+        );
+      }
       Logger.log("SHIFTS.updateBonuses error: " + err);
       return { ok: false, error: "SHIFTS.updateBonuses failed: " + err };
     }
   };
 
   SHIFTS.updateShift = function (payload) {
+    var logger = getLogger_("SHIFTS_UPDATE");
+    var startMs = new Date().getTime();
     try {
       var res = updateShift_(payload || {});
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "shifts.update", startMs, {
+          shiftId: payload && payload.shiftId,
+          ok: res && res.ok,
+        });
+      }
       return JSON.parse(JSON.stringify(res));
     } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "shifts.update",
+          startMs,
+          { shiftId: payload && payload.shiftId, error: String(err) },
+          "warn",
+          "SHIFTS_UPDATE_FAIL",
+          err
+        );
+      }
       Logger.log("SHIFTS.updateShift error: " + err);
       return { ok: false, error: "SHIFTS.updateShift failed: " + err };
     }
@@ -1621,10 +1726,28 @@ var BONUSES = BONUSES || {};
   }
 
   BONUSES.listAll = function () {
+    var logger = getLogger_("BONUSES_LIST_ALL");
+    var startMs = new Date().getTime();
     try {
       var res = listAllBonuses_();
+      if (typeof logDuration_ === "function") {
+        logDuration_(logger, "bonuses.listAll", startMs, {
+          bonuses: res && res.bonuses ? res.bonuses.length : 0,
+        });
+      }
       return JSON.parse(JSON.stringify(res));
     } catch (err) {
+      if (typeof logDuration_ === "function") {
+        logDuration_(
+          logger,
+          "bonuses.listAll",
+          startMs,
+          { error: String(err) },
+          "warn",
+          "BONUSES_LIST_FAIL",
+          err
+        );
+      }
       Logger.log("BONUSES.listAll error: " + err);
       return { ok: false, error: "BONUSES.listAll failed: " + err };
     }

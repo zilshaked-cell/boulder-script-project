@@ -85,6 +85,15 @@ function collectRawLogIds_(logs) {
   return ids.join(",");
 }
 
+function aggLogger_(operation) {
+  try {
+    if (typeof ensureModuleLoggerDefined_ === "function") {
+      return ensureModuleLoggerDefined_(operation || "SHIFTS_AGGREGATOR");
+    }
+  } catch (_ignored) {}
+  return null;
+}
+
 function pickFirst_(logs, getter) {
   for (let i = 0; i < logs.length; i++) {
     const val = getter(logs[i]);
@@ -180,6 +189,8 @@ function buildShiftRecord_(logs, status, note, startLog, endLog) {
 }
 
 function readWorkLogsForRange_(opts) {
+  const logger = aggLogger_("AGG_READ_LOGS");
+  const startMs = new Date().getTime();
   const filters = opts || {};
   const dateFrom = toIsoDate_(filters.dateFrom || "");
   const dateTo = toIsoDate_(filters.dateTo || "");
@@ -263,10 +274,21 @@ function readWorkLogsForRange_(opts) {
     logs.push(log);
   }
 
+  if (typeof logDuration_ === "function") {
+    logDuration_(logger, "shifts.readWorkLogsForRange", startMs, {
+      logs: logs.length,
+      from: dateFrom || "",
+      to: dateTo || "",
+      employeeId: employeeFilter || "",
+    });
+  }
+
   return logs;
 }
 
 function buildAggregatedShifts_(logs) {
+  const logger = aggLogger_("AGG_BUILD_SHIFTS");
+  const startMs = new Date().getTime();
   const grouped = {};
   for (let i = 0; i < logs.length; i++) {
     const log = logs[i];
@@ -346,6 +368,13 @@ function buildAggregatedShifts_(logs) {
       built[i].shiftId = buildShiftId_(built[i], i + 1);
       results.push(built[i]);
     }
+  }
+
+  if (typeof logDuration_ === "function") {
+    logDuration_(logger, "shifts.buildAggregated", startMs, {
+      inputLogs: logs ? logs.length : 0,
+      shifts: results.length,
+    });
   }
 
   return results;
