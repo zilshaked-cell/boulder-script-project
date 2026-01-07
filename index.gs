@@ -1728,6 +1728,24 @@ function handleShiftReportSubmit_(payload, logger) {
   const duplicatesFound = duplicates.length >= 2;
 
   if (duplicatesFound) {
+    const cleanup = cleanupExactDuplicateWorkLogs_(duplicates);
+    if (cleanup.deletedCount > 0) {
+      logDuration_(logger, "shift.submit.total", fnStartMs, {
+        requiresApproval: false,
+        duplicatesFound: true,
+        autoDeleted: cleanup.deletedCount,
+        jobTypeId: jobTypeId,
+        payType: payType || payTypeName,
+      });
+      return {
+        ok: true,
+        status: "duplicate_auto_deleted",
+        shiftId: shiftId,
+        deletedCount: cleanup.deletedCount,
+        capped: cleanup.capped === true,
+      };
+    }
+
     logDuration_(logger, "shift.submit.total", fnStartMs, {
       requiresApproval: false,
       duplicatesFound: true,
@@ -2630,7 +2648,60 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     "תיקון תאריך",
     "חותמת זמן",
   ]);
+  const fixDateCol = getOptionalColumn_(headers, ["תיקון תאריך"]);
+  const fixTimeCol = getOptionalColumn_(headers, ["תיקון שעה"]);
   const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
+  const unitsCol = getOptionalColumn_(headers, [
+    "כמות היחידות",
+    "כמות יחידות",
+    "דיווח יחידות",
+  ]);
+  const noteCol = getOptionalColumn_(headers, [
+    "הערות",
+    "הערה",
+    "הערות למשמרת",
+  ]);
+
+  function buildCanonical_(row) {
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const workDateIso = toIsoDate_(workDateRaw) || "";
+    return {
+      shiftId: stringValue(row[shiftIdCol - 1]),
+      employeeId: stringValue(row[empCol - 1]),
+      jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
+      jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
+      department: deptCol ? stringValue(row[deptCol - 1]) : "",
+      direction: directionCol ? stringValue(row[directionCol - 1]) : "",
+      workDate: workDateIso,
+      fixDate: fixDateCol ? toIsoDate_(row[fixDateCol - 1]) : "",
+      fixTime: fixTimeCol ? stringValue(row[fixTimeCol - 1]) : "",
+      units:
+        unitsCol &&
+        row[unitsCol - 1] !== undefined &&
+        row[unitsCol - 1] !== null
+          ? stringValue(row[unitsCol - 1])
+          : "",
+      note: noteCol ? stringValue(row[noteCol - 1]) : "",
+      timestamp: tsCol ? toIsoDate_(row[tsCol - 1]) : "",
+    };
+  }
+
+  function canonicalKey_(rec) {
+    return [
+      rec.shiftId,
+      rec.employeeId,
+      rec.jobTypeId,
+      rec.jobName,
+      rec.department,
+      rec.direction,
+      rec.workDate,
+      rec.fixDate,
+      rec.fixTime,
+      rec.units,
+      rec.note,
+      rec.timestamp,
+    ].join("__");
+  }
 
   const values = sheet.getDataRange().getValues();
   const targetKey = buildDuplicateKey_(
@@ -2643,42 +2714,85 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   const results = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    const rowEmployeeId = stringValue(row[empCol - 1]);
-    const rowJobTypeId = jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "";
-    const rowDirection = directionCol ? stringValue(row[directionCol - 1]) : "";
-    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
-    const rowWorkDate = toIsoDate_(workDateRaw) || "";
+    const rec = buildCanonical_(row);
     const key = buildDuplicateKey_(
-      rowEmployeeId,
-      rowJobTypeId,
-      rowWorkDate,
-      rowDirection
+      rec.employeeId,
+      rec.jobTypeId,
+      rec.workDate,
+      rec.direction
     );
 
     if (key !== targetKey) continue;
-    const shiftId = stringValue(row[shiftIdCol - 1]);
-    const jobName = jobNameCol ? stringValue(row[jobNameCol - 1]) : "";
-    const department = deptCol ? stringValue(row[deptCol - 1]) : "";
 
     // includeShiftId is used to ensure the just-created row is not skipped
-    if (includeShiftId && shiftId === includeShiftId) {
+    if (includeShiftId && rec.shiftId === includeShiftId) {
       // always include
     }
 
     results.push({
-      shiftId: shiftId,
-      employeeId: rowEmployeeId,
-      jobTypeId: rowJobTypeId,
-      jobName: jobName,
-      department: department,
-      direction: rowDirection,
-      workDate: rowWorkDate,
-      timestamp: tsCol ? toIsoDate_(row[tsCol - 1]) : null,
+      shiftId: rec.shiftId,
+      employeeId: rec.employeeId,
+      jobTypeId: rec.jobTypeId,
+      jobName: rec.jobName,
+      department: rec.department,
+      direction: rec.direction,
+      workDate: rec.workDate,
+      timestamp: rec.timestamp,
       rowIndex: i + 1,
+      canonicalKey: canonicalKey_(rec),
     });
   }
 
   return results;
+}
+
+function cleanupExactDuplicateWorkLogs_(duplicates) {
+  if (!duplicates || duplicates.length < 2) return { deletedCount: 0 };
+  const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const groups = {};
+  duplicates.forEach(function (d) {
+    if (!d || !d.canonicalKey) return;
+    if (!groups[d.canonicalKey]) groups[d.canonicalKey] = [];
+    groups[d.canonicalKey].push(d);
+  });
+
+  const rowsToDelete = [];
+  Object.keys(groups).forEach(function (key) {
+    const list = groups[key].slice().sort(function (a, b) {
+      return (a.rowIndex || 0) - (b.rowIndex || 0);
+    });
+    if (list.length < 2) return;
+    for (let i = 1; i < list.length; i++) {
+      if (list[i].rowIndex) rowsToDelete.push(list[i].rowIndex);
+    }
+  });
+
+  if (!rowsToDelete.length) return { deletedCount: 0 };
+
+  const MAX_DELETE = 50;
+  rowsToDelete.sort(function (a, b) {
+    return b - a;
+  });
+  const limited = rowsToDelete.slice(0, MAX_DELETE);
+  limited.forEach(function (rowIdx) {
+    sheet.deleteRow(rowIdx);
+  });
+
+  appendSystemLog_({
+    operation: "WORK_LOG_SAVE",
+    step: "delete-exact-duplicates",
+    severity: "info",
+    errorCode: null,
+    details: {
+      deletedCount: limited.length,
+      capped: rowsToDelete.length > MAX_DELETE,
+    },
+  });
+
+  return {
+    deletedCount: limited.length,
+    capped: rowsToDelete.length > MAX_DELETE,
+  };
 }
 
 function buildDuplicateKey_(employeeId, jobTypeId, workDate, direction) {
