@@ -2733,6 +2733,35 @@
         }
 
         // ---- מחלקה – נגזרת מסוג העבודה ----
+        function selectPaymentValue(payName) {
+          if (!payName) return;
+          var opts = paySelect.options;
+          var found = false;
+          for (var pi = 0; pi < opts.length; pi++) {
+            if (opts[pi].value === payName) {
+              opts[pi].selected = true;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            var optNewPay = document.createElement("option");
+            optNewPay.value = payName;
+            optNewPay.textContent = payName + " (לא בטבלת אופציות)";
+            optNewPay.selected = true;
+            paySelect.insertBefore(optNewPay, paySelect.children[1] || null);
+          }
+        }
+
+        function applyDefaultPaymentFromJob(forceApply) {
+          var jName = (jobSelect.value || "").trim();
+          if (!jName) return;
+          var jobMeta = jobByName[jName];
+          if (!jobMeta || !jobMeta.defaultPaymentName) return;
+          if (!forceApply && paySelect.value) return;
+          selectPaymentValue(jobMeta.defaultPaymentName);
+        }
+
         function updateDeptAndTitle() {
           var jName = (jobSelect.value || "").trim();
           if (jName && jobByName[jName]) {
@@ -2742,10 +2771,12 @@
             deptInput.value = currentDept || "";
           }
           headerTitle.textContent = jName || "סוג עבודה חדש";
+          applyDefaultPaymentFromJob(false);
         }
 
         jobSelect.addEventListener("change", function () {
           updateDeptAndTitle();
+          applyDefaultPaymentFromJob(true);
           scheduleLiveSave();
         });
 

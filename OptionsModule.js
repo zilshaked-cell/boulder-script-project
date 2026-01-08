@@ -12,6 +12,7 @@ var OPT = OPT || {};
       JOB_ID: 2, // B
       JOB_NAME: 3, // C
       JOB_DEPARTMENT: 4, // D
+      JOB_DEFAULT_PAYMENT: 5, // E – "אופן תשלום (default)"
 
       BONUS_STATUS: 5, // E
       BONUS_ID: 6, // F
@@ -204,6 +205,9 @@ var OPT = OPT || {};
       findCol_(["ID אופן תשלום", "ID אופני תשלום"]) || CONFIG.COL.PAY_ID;
     var payNameCol =
       findCol_(["אופן תשלום", "אופני תשלום"]) || CONFIG.COL.PAY_NAME;
+    var jobDefaultPayCol =
+      findCol_(["אופן תשלום (default)", "אופן תשלום דיפולט"]) ||
+      CONFIG.COL.JOB_DEFAULT_PAYMENT;
 
     var data = sh
       .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
@@ -235,11 +239,13 @@ var OPT = OPT || {};
       var jobId = norm_(row[CONFIG.COL.JOB_ID - 1]);
       var jobStatus = norm_(row[CONFIG.COL.JOB_STATUS - 1]);
       var dept = norm_(row[CONFIG.COL.JOB_DEPARTMENT - 1]);
+      var jobDefaultPay = norm_(row[jobDefaultPayCol - 1]);
       if (jobName || jobId) {
         var job = {
           id: jobId,
           name: jobName,
           department: dept,
+          defaultPaymentName: jobDefaultPay,
           status: jobStatus,
         };
         out.jobs.push(job);
