@@ -2449,6 +2449,7 @@
           return;
         }
 
+        setLoadingOverlay(true);
         google.script.run
           .withSuccessHandler(function (res) {
             if (res && res.ok && res.employeeId) {
@@ -2456,9 +2457,11 @@
             } else {
               setGlobalMessage("לא נמצאה בחירה פעילה בגיליון.", true);
             }
+            setLoadingOverlay(false);
           })
           .withFailureHandler(function (err) {
             setGlobalMessage("שגיאה בטעינת עובד מהבחירה: " + err, true);
+            setLoadingOverlay(false);
           })
           .EMP_getSelectedEmployeeId();
       }
@@ -2599,6 +2602,7 @@
       }
 
       function loadEmployee(id) {
+        setLoadingOverlay(true);
         setGlobalMessage("טוען עובד...", false);
         google.script.run
           .withSuccessHandler(function (res) {
@@ -2612,15 +2616,18 @@
             }
             if (res.error) {
               setGlobalMessage("שגיאה בטעינת עובד: " + res.error, true);
+              setLoadingOverlay(false);
               return;
             }
             var emp = res.employee;
             selectedEmployeeId = emp.id;
             renderEmployee(emp);
             setGlobalMessage("", false);
+            setLoadingOverlay(false);
           })
           .withFailureHandler(function (err) {
             setGlobalMessage("שגיאה בטעינת עובד: " + err, true);
+            setLoadingOverlay(false);
           })
           .EMP_getEmployeeById(id);
       }
