@@ -2456,8 +2456,8 @@
               loadEmployee(res.employeeId);
             } else {
               setGlobalMessage("לא נמצאה בחירה פעילה בגיליון.", true);
+              setLoadingOverlay(false);
             }
-            setLoadingOverlay(false);
           })
           .withFailureHandler(function (err) {
             setGlobalMessage("שגיאה בטעינת עובד מהבחירה: " + err, true);
