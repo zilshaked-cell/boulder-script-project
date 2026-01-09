@@ -237,6 +237,7 @@ function mapActionToOperation_(action) {
     "logs.list": "SYSTEM_LOG_LIST",
     "jobTypes.list": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
+    "admin.listEmployees": "ADMIN_EMPLOYEES_LIST",
     "workLogs.listByEmployee": "WORK_LOG_LOAD",
     "requests.listByEmployee": "REQUEST_LIST",
     reportAccessIssue: "REPORT_SAVE",
@@ -266,6 +267,9 @@ function getActionRegistry_() {
     },
     "jobTypes.list": function (_payload, _logger) {
       return { jobTypes: listJobTypes_() };
+    },
+    "admin.listEmployees": function (payload, logger) {
+      return adminListEmployees_(payload || {}, logger);
     },
     "employee.linkedJobs": function (payload, _logger) {
       return listEmployeeLinkedJobIds_(payload);
@@ -1166,6 +1170,319 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     linkedCount: jobTypeIds.length,
   });
   return { employeeId, jobTypeIds };
+}
+
+function adminListEmployees_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("ADMIN_EMPLOYEES_LIST");
+  var startMs = new Date().getTime();
+  const sheet = getEmployeesSheet_();
+  const headers = getHeaderMap_(sheet);
+  const sheetName = sheet.getName();
+
+  const idCol = getRequiredColumn_(
+    headers,
+    ["מזהה עובד", "ID עובד", "Employee ID"],
+    sheetName
+  );
+  const nameCol = getOptionalColumn_(headers, ["שם מלא", "name", "Full Name"]);
+  const emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
+  const phoneCol = getOptionalColumn_(headers, [
+    "טלפון",
+    "פלאפון",
+    "נייד",
+    "phone",
+    "mobile",
+  ]);
+  const roleTitleCol = getOptionalColumn_(headers, [
+    "תפקיד",
+    "role title",
+    "title",
+    "תיאור תפקיד",
+  ]);
+  const notesCol = getOptionalColumn_(headers, ["הערות", "notes"]);
+  const jobTypeCol = getOptionalColumn_(headers, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+    "Job Type ID",
+  ]);
+  const statusCol = getOptionalColumn_(headers, [
+    "סטטוס",
+    "סטטוס פעיל",
+    "active",
+    "status",
+  ]);
+  const employmentStatusCol = getOptionalColumn_(headers, [
+    "סטטוס העסקה",
+    "employment status",
+    "Employment Status",
+  ]);
+  const branchCol = getOptionalColumn_(headers, [
+    "סניף",
+    "branch",
+    "Branch",
+    "Branch Id",
+    "branch id",
+    "branchId",
+  ]);
+  const systemRoleCol = getOptionalColumn_(headers, [
+    "System Role",
+    "system role",
+    "Role",
+    "Admin Role",
+  ]);
+
+  const values = sheet.getDataRange().getValues();
+  lg.info("read-sheet", {
+    sheetName: sheetName,
+    rows: Math.max(values.length - 1, 0),
+  });
+
+  const jobTypes = listJobTypes_();
+  const jobMap = {};
+  jobTypes.forEach(function (jt) {
+    jobMap[jt.id] = jt;
+  });
+
+  const statusFilterRaw = stringValue(payload.statusFilter).toUpperCase();
+  const statusFilter =
+    statusFilterRaw === "ACTIVE" || statusFilterRaw === "INACTIVE"
+      ? statusFilterRaw
+      : "ALL";
+  const jobTypeFilter = stringValue(payload.jobTypeId);
+  const search = stringValue(payload.search).toLowerCase();
+  const employmentFilter = stringValue(payload.employmentStatus).toLowerCase();
+  const branchFilter = stringValue(
+    payload.branch || payload.branchId
+  ).toLowerCase();
+
+  function normalizeSystemRole_(raw) {
+    const val = stringValue(raw).toUpperCase();
+    if (!val) return "EMPLOYEE";
+    if (val === "NONE") return "NONE";
+    if (val.indexOf("ADMIN") !== -1) return "ADMIN";
+    if (val.indexOf("SHIFT") !== -1 || val.indexOf("MANAGER") !== -1)
+      return "SHIFT_MANAGER";
+    if (val.indexOf("VIEW") !== -1) return "VIEWER";
+    if (val === "EMPLOYEE") return "EMPLOYEE";
+    return "EMPLOYEE";
+  }
+
+  function rolePriority_(role) {
+    switch (role) {
+      case "ADMIN":
+        return 3;
+      case "SHIFT_MANAGER":
+        return 2;
+      case "VIEWER":
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  function normalizeEmploymentStatus_(raw, inactiveFlag) {
+    const val = stringValue(raw);
+    if (!val && inactiveFlag) return "INACTIVE";
+    if (!val) return "ACTIVE";
+    const lower = val.toLowerCase();
+    if (lower.indexOf("לא פעיל") !== -1 || lower.indexOf("inactive") !== -1)
+      return "INACTIVE";
+    if (lower.indexOf("terminated") !== -1 || lower.indexOf("פיט") !== -1)
+      return "TERMINATED";
+    if (lower.indexOf("leave") !== -1 || lower.indexOf("חופ") !== -1)
+      return "ON_LEAVE";
+    if (lower.indexOf("pending") !== -1 || lower.indexOf("start") !== -1)
+      return "PENDING_START";
+    const normalized = val.replace(/\s+/g, "_").toUpperCase();
+    return normalized || (inactiveFlag ? "INACTIVE" : "ACTIVE");
+  }
+
+  const employees = {};
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const employeeId = stringValue(row[idCol - 1]);
+    if (!employeeId) continue;
+
+    const statusVal = statusCol ? stringValue(row[statusCol - 1]) : "";
+    const statusLower = statusVal.toLowerCase();
+    const rowInactive =
+      statusLower.indexOf("לא פעיל") !== -1 ||
+      statusLower.indexOf("inactive") !== -1 ||
+      statusLower.indexOf("terminated") !== -1;
+    const employmentVal = employmentStatusCol
+      ? stringValue(row[employmentStatusCol - 1])
+      : "";
+    const branchVal = branchCol ? stringValue(row[branchCol - 1]) : "";
+
+    let record = employees[employeeId];
+    if (!record) {
+      record = {
+        id: employeeId,
+        fullName: "",
+        email: "",
+        phone: "",
+        roleTitle: "",
+        notes: "",
+        branch: "",
+        employmentStatus: "",
+        isActive: true,
+        jobTypeIds: [],
+        jobTypesDetailed: [],
+        systemRole: "EMPLOYEE",
+        _hasActiveRow: false,
+        _hasInactiveRow: false,
+        _roleRank: 0,
+      };
+      employees[employeeId] = record;
+    }
+
+    if (!record.fullName && nameCol)
+      record.fullName = stringValue(row[nameCol - 1]);
+    if (!record.email && emailCol)
+      record.email = stringValue(row[emailCol - 1]);
+    if (!record.phone && phoneCol)
+      record.phone = stringValue(row[phoneCol - 1]);
+    if (!record.roleTitle && roleTitleCol)
+      record.roleTitle = stringValue(row[roleTitleCol - 1]);
+    if (!record.notes && notesCol)
+      record.notes = stringValue(row[notesCol - 1]);
+    if (!record.branch && branchVal) record.branch = branchVal;
+
+    const normalizedEmployment = normalizeEmploymentStatus_(
+      employmentVal,
+      rowInactive
+    );
+    if (!record.employmentStatus)
+      record.employmentStatus = normalizedEmployment;
+    if (
+      record.employmentStatus === "ACTIVE" &&
+      normalizedEmployment !== "ACTIVE"
+    )
+      record.employmentStatus = normalizedEmployment;
+
+    if (rowInactive) {
+      record._hasInactiveRow = true;
+    } else {
+      record._hasActiveRow = true;
+    }
+
+    if (jobTypeCol) {
+      const jobTypeId = stringValue(row[jobTypeCol - 1]);
+      if (jobTypeId && record.jobTypeIds.indexOf(jobTypeId) === -1) {
+        record.jobTypeIds.push(jobTypeId);
+      }
+    }
+
+    const rawSystemRole = systemRoleCol
+      ? stringValue(row[systemRoleCol - 1])
+      : "";
+    if (rawSystemRole) {
+      const normalizedRole = normalizeSystemRole_(rawSystemRole);
+      const rank = rolePriority_(normalizedRole);
+      if (rank > record._roleRank) {
+        record._roleRank = rank;
+        record.systemRole = normalizedRole;
+      }
+    }
+  }
+
+  const allEmployees = Object.keys(employees).map(function (key) {
+    const rec = employees[key];
+    const isActive = rec._hasActiveRow
+      ? true
+      : rec._hasInactiveRow
+      ? false
+      : true;
+    const employmentStatus = normalizeEmploymentStatus_(
+      rec.employmentStatus,
+      !isActive
+    );
+    const jobTypesDetailed = rec.jobTypeIds.map(function (jobTypeId) {
+      const jt = jobMap[jobTypeId];
+      if (jt) {
+        return {
+          jobTypeId: jt.id,
+          name: jt.name,
+          department: jt.department || "",
+          isActive: jt.isActive !== false,
+          payTypeId: jt.payTypeId || "",
+          payTypeName: jt.payTypeName || "",
+        };
+      }
+      return {
+        jobTypeId: jobTypeId,
+        name: "",
+        department: "",
+        isActive: false,
+        payTypeId: "",
+        payTypeName: "",
+      };
+    });
+
+    return {
+      id: rec.id,
+      fullName: rec.fullName,
+      email: rec.email,
+      phone: rec.phone,
+      roleTitle: rec.roleTitle,
+      notes: rec.notes,
+      branch: rec.branch,
+      employmentStatus: employmentStatus,
+      isActive: isActive,
+      jobTypeIds: rec.jobTypeIds,
+      jobTypesDetailed: jobTypesDetailed,
+      systemRole: rec.systemRole,
+    };
+  });
+
+  const filtered = allEmployees.filter(function (emp) {
+    if (statusFilter === "ACTIVE" && !emp.isActive) return false;
+    if (statusFilter === "INACTIVE" && emp.isActive) return false;
+    if (jobTypeFilter && emp.jobTypeIds.indexOf(jobTypeFilter) === -1)
+      return false;
+    if (employmentFilter) {
+      const empEmployment = stringValue(emp.employmentStatus).toLowerCase();
+      if (empEmployment !== employmentFilter) return false;
+    }
+    if (branchFilter) {
+      const empBranch = stringValue(emp.branch).toLowerCase();
+      if (empBranch !== branchFilter) return false;
+    }
+    if (search) {
+      const haystack = [
+        emp.fullName,
+        emp.email,
+        emp.phone,
+        emp.roleTitle,
+        emp.id,
+        emp.branch,
+      ]
+        .map(function (v) {
+          return stringValue(v).toLowerCase();
+        })
+        .filter(function (v) {
+          return !!v;
+        });
+      const matched = haystack.some(function (v) {
+        return v.indexOf(search) !== -1;
+      });
+      if (!matched) return false;
+    }
+    return true;
+  });
+
+  logDuration_(lg, "admin.listEmployees.total", startMs, {
+    sheet: sheetName,
+    scannedRows: Math.max(values.length - 1, 0),
+    employees: allEmployees.length,
+    returned: filtered.length,
+    statusFilter: statusFilter,
+    jobTypeFilter: !!jobTypeFilter,
+    search: !!search,
+  });
+
+  return { employees: filtered };
 }
 
 function listWorkLogsByEmployee_(payload, logger) {
@@ -3378,25 +3695,39 @@ function getShiftsSheet_() {
 
 function listShifts_(payload) {
   const filters = payload || {};
-  const ctx = getShiftsSheetAndHeaderMap_();
-  const sheet = ctx.sheet;
-  const headerMap = ctx.headerMap;
+  const sheet = getSheetOrThrow_("משמרות");
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) return { shifts: [], total: 0 };
 
-  const shiftIdCol = headerMap["ID משמרת"];
-  const employeeCol = headerMap["מזהה עובד"];
-  const employeeNameCol = headerMap["שם מלא"];
-  const workDateCol = headerMap["תאריך משמרת"];
-  const startCol = headerMap["שעת התחלה"];
-  const endCol = headerMap["שעת סיום"];
-  const jobTypeIdCol = headerMap["ID סוג עבודה"];
-  const jobNameCol = headerMap["סוג עבודה"];
-  const deptCol = headerMap["מחלקה"];
-  const hoursCol = headerMap["שעות"];
-  const payHoursCol = headerMap["שעות לשכר"];
-  const unitsCol = headerMap["כמות יחידות"];
-  const notePrimaryCol = headerMap.notesPrimary;
-  const statusCol = headerMap["סטטוס משמרת"];
-  const sourcePrimaryCol = headerMap.sourcePrimary;
+  const headerMap = getHeaderMap_(sheet, 1);
+
+  const shiftIdCol = getRequiredColumn_(headerMap, ["ID משמרת"], "משמרות");
+  const employeeCol = getRequiredColumn_(
+    headerMap,
+    ["ID עובד", "מזהה עובד"],
+    "משמרות"
+  );
+  const employeeNameCol = getOptionalColumn_(headerMap, ["שם מלא"]);
+  const workDateCol = getRequiredColumn_(
+    headerMap,
+    ["תאריך", "תאריך משמרת"],
+    "משמרות"
+  );
+  const startCol = getOptionalColumn_(headerMap, ["כניסה", "שעת התחלה"]);
+  const endCol = getOptionalColumn_(headerMap, ["יציאה", "שעת סיום"]);
+  const jobTypeIdCol = getOptionalColumn_(headerMap, ["ID סוג עבודה"]);
+  const jobNameCol = getOptionalColumn_(headerMap, ["סוג עבודה"]);
+  const deptCol = getOptionalColumn_(headerMap, ["מחלקה"]);
+  const hoursCol = getOptionalColumn_(headerMap, ["שעות"]);
+  const payHoursCol = getOptionalColumn_(headerMap, ["שעות לשכר"]);
+  const unitsCol = getOptionalColumn_(headerMap, ["כמות יחידות"]);
+  const noteCol = getOptionalColumn_(headerMap, ["הערות", "הערות למשמרת"]);
+  const statusCol = getRequiredColumn_(
+    headerMap,
+    ["סטטוס משמרת", "סטטוס"],
+    "משמרות"
+  );
+  const sourceCol = getOptionalColumn_(headerMap, ["מקור דיווחים"]);
 
   const dateFrom = toIsoDate_(filters.dateFrom || "");
   const dateTo = toIsoDate_(filters.dateTo || "");
@@ -3447,68 +3778,52 @@ function listShifts_(payload) {
     return s;
   }
 
-  const values = sheet.getDataRange().getValues();
   const results = [];
 
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
 
-    const workDate = toIsoDate_(row[workDateCol]);
+    const workDate = toIsoDate_(row[workDateCol - 1]);
     if (dateFrom && workDate && workDate < dateFrom) continue;
     if (dateTo && workDate && workDate > dateTo) continue;
 
-    const employeeId = stringValue(row[employeeCol]);
+    const employeeId = stringValue(row[employeeCol - 1]);
     if (employeeFilter && employeeId !== employeeFilter) continue;
 
-    const statusRaw = stringValue(row[statusCol]);
+    const statusRaw = stringValue(row[statusCol - 1]);
     if (statusFilters.length && statusFilters.indexOf(statusRaw) === -1)
       continue;
 
-    const jobTypeId = stringValue(row[jobTypeIdCol]);
+    const jobTypeId = jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "";
     if (jobTypeFilters.length && jobTypeFilters.indexOf(jobTypeId) === -1)
       continue;
 
-    const hoursDecimal = parseNumberOrNull_(row[hoursCol]);
-    const payHoursVal =
-      payHoursCol !== undefined && payHoursCol !== null
-        ? parseNumberOrNull_(row[payHoursCol])
-        : null;
-    const unitsVal =
-      unitsCol !== undefined && unitsCol !== null
-        ? parseNumberOrNull_(row[unitsCol])
-        : null;
+    const hoursDecimal = hoursCol
+      ? parseNumberOrNull_(row[hoursCol - 1])
+      : null;
+    const payHoursVal = payHoursCol
+      ? parseNumberOrNull_(row[payHoursCol - 1])
+      : null;
+    const unitsVal = unitsCol ? parseNumberOrNull_(row[unitsCol - 1]) : null;
 
     results.push({
-      shiftId: stringValue(row[shiftIdCol]),
+      shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: employeeId,
-      employeeName:
-        employeeNameCol !== undefined && employeeNameCol !== null
-          ? stringValue(row[employeeNameCol])
-          : "",
+      employeeName: employeeNameCol
+        ? stringValue(row[employeeNameCol - 1])
+        : "",
       workDate: workDate,
-      startTime: formatTime_(row[startCol]),
-      endTime: formatTime_(row[endCol]),
+      startTime: startCol ? formatTime_(row[startCol - 1]) : "",
+      endTime: endCol ? formatTime_(row[endCol - 1]) : "",
       jobTypeId: jobTypeId,
-      jobName:
-        jobNameCol !== undefined && jobNameCol !== null
-          ? stringValue(row[jobNameCol])
-          : "",
-      department:
-        deptCol !== undefined && deptCol !== null
-          ? stringValue(row[deptCol])
-          : "",
+      jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
+      department: deptCol ? stringValue(row[deptCol - 1]) : "",
       hoursDecimal: hoursDecimal,
       payHours: payHoursVal,
       units: unitsVal,
       status: statusRaw,
-      note:
-        notePrimaryCol !== undefined && notePrimaryCol !== null
-          ? stringValue(row[notePrimaryCol])
-          : "",
-      sourceReportIds:
-        sourcePrimaryCol !== undefined && sourcePrimaryCol !== null
-          ? stringValue(row[sourcePrimaryCol])
-          : "",
+      note: noteCol ? stringValue(row[noteCol - 1]) : "",
+      sourceReportIds: sourceCol ? stringValue(row[sourceCol - 1]) : "",
     });
   }
 

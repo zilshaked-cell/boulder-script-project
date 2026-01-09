@@ -230,7 +230,17 @@
 
     <script>
       (function () {
-        var _DIALOG_PARAMS_RAW = <?!= paramsJson || '{}' ?>;
+        // Params arrive from the server as a JSON literal string. Embed it safely and
+        // support both string and object forms to be robust to template changes.
+        var _DIALOG_PARAMS_RAW = <?= paramsJson ?> || {};
+        if (typeof _DIALOG_PARAMS_RAW === "string") {
+          try {
+            _DIALOG_PARAMS_RAW = JSON.parse(_DIALOG_PARAMS_RAW);
+          } catch (_e) {
+            _DIALOG_PARAMS_RAW = {};
+          }
+        }
+
         window.DIALOG_PARAMS =
           _DIALOG_PARAMS_RAW && typeof _DIALOG_PARAMS_RAW === "object"
             ? _DIALOG_PARAMS_RAW

@@ -3,155 +3,15 @@
 var SHIFTS = SHIFTS || {};
 var BONUSES = BONUSES || {};
 
-(function () {
-  "use strict";
-
-  var CONFIG = {
-    SHEET_NAME: typeof SHEET_NAME !== "undefined" ? SHEET_NAME : "משמרות",
-    HEADER_ROW: 1,
-    BONUS_SEPARATOR: ",",
-    COLS: {
-      notes: {
-        candidates: ["הערות למשמרת", "הערות", "notes"],
-        fallbackIndex: 1,
-      },
-      shiftId: {
-        candidates: ["ID משמרת", "shiftId", "Shift ID"],
-        fallbackIndex: 2,
-      },
-      timestamp: {
-        candidates: ["חותמת זמן", "timestamp", "Timestamp"],
-        fallbackIndex: 3,
-      },
-      employeeId: {
-        candidates: ["ID עובד", "employee_id", "Employee ID"],
-        fallbackIndex: 4,
-      },
-      employeeName: {
-        candidates: ["שם מלא", "employeeName", "Employee Name"],
-        fallbackIndex: 5,
-      },
-      email: { candidates: ["מייל", "email", "Email"], fallbackIndex: null },
-      direction: {
-        candidates: ["כניסה / יציאה", "כיוון", "direction"],
-        fallbackIndex: 6,
-      },
-      fixDate: {
-        candidates: ["תיקון תאריך", "תאריך", "date"],
-        fallbackIndex: 7,
-      },
-      fixTime: { candidates: ["תיקון שעה", "שעה", "time"], fallbackIndex: 8 },
-      jobId: {
-        candidates: ["ID סוג עבודה", "ID סוגי עבודה", "jobId"],
-        fallbackIndex: 9,
-      },
-      jobName: {
-        candidates: ["סוג עבודה", "סוג העבודה", "jobName", "workType"],
-        fallbackIndex: 10,
-      },
-      department: { candidates: ["מחלקה", "department"], fallbackIndex: 11 },
-      units: {
-        candidates: ["כמות היחידות", "יחידות", "units"],
-        fallbackIndex: 12,
-      },
-      status: {
-        candidates: ["סטטוס משמרת", "סטטוס", "status"],
-        fallbackIndex: null,
-      },
-      workDate: {
-        candidates: ["תאריך", "תאריך משמרת", "Work Date"],
-        fallbackIndex: null,
-      },
-      startTime: {
-        candidates: ["כניסה", "שעת התחלה", "Start Time", "שעת כניסה"],
-        fallbackIndex: null,
-      },
-      endTime: {
-        candidates: ["יציאה", "שעת סיום", "End Time", "שעת יציאה"],
-        fallbackIndex: null,
-      },
-      bonusIds: {
-        candidates: ["BonusIds", "Bonus IDs", "בונוסים"],
-        fallbackIndex: null,
-      },
-      manualEdited: {
-        candidates: ["ManualEdited", "Manual Edited", "עריכה ידנית"],
-        fallbackIndex: null,
-      },
-      manualNote: {
-        candidates: ["ManualNote", "הערת מנהל", "הערת עריכה"],
-        fallbackIndex: null,
-      },
-      lastUpdatedBySidebar: {
-        candidates: ["LastUpdatedBySidebar", "עודכן בסיידבר על ידי"],
-        fallbackIndex: null,
-      },
-      lastUpdatedAt: {
-        candidates: [
-          "LastUpdatedAt",
-          "עודכן בסיידבר בתאריך",
-          "SidebarUpdatedAt",
-        ],
-        fallbackIndex: null,
-      },
-      hasIssues: {
-        candidates: ["HasIssues", "בעיה", "Issues"],
-        fallbackIndex: null,
-      },
-    },
-  };
-
-  var RAW_WORK_LOG_SHEET_NAME = "דיווח שעות עבודה";
-  var MAX_YESTERDAY_REBUILD_PAIRS = 200; // safety guard for SHIFTS_rebuildYesterday
-
-  // התאמת shiftId לפי סכימה ידועה
-  if (CONFIG.SHEET_NAME === "דיווח שעות עבודה") {
-    CONFIG.COLS.shiftId = {
-      candidates: ["ID דיווח"],
-      fallbackIndex: null,
-    };
-  } else if (CONFIG.SHEET_NAME === "משמרות") {
-    CONFIG.COLS.shiftId = {
-      candidates: ["ID משמרת"],
-      fallbackIndex: null,
-    };
-  }
-
-  var NORMALIZED_SHIFT_CORE_HEADERS = [
-    { field: "ShiftId", header: "ShiftId" },
-    { field: "EmployeeId", header: "EmployeeId" },
-    { field: "EmployeeName", header: "EmployeeName" },
-    { field: "JobTypeId", header: "JobTypeId" },
-    { field: "JobTypeName", header: "JobTypeName" },
-    { field: "Department", header: "Department" },
-    { field: "ShiftDate", header: "ShiftDate" },
-    { field: "StartTime", header: "StartTime" },
-    { field: "EndTime", header: "EndTime" },
-    { field: "StartDateTime", header: "StartDateTime" },
-    { field: "EndDateTime", header: "EndDateTime" },
-    { field: "SpanHours", header: "SpanHours" },
-    { field: "PayHours", header: "PayHours" },
-    { field: "Status", header: "Status" },
-    { field: "Note", header: "Note" },
-    { field: "SourceReportIds", header: "SourceReportIds" },
-  ];
-
-  function getLogger_(operation) {
-    try {
-      if (typeof ensureModuleLoggerDefined_ === "function") {
-        return ensureModuleLoggerDefined_(operation || "SHIFTS_MODULE");
-      }
-    } catch (_ignored) {}
-    return null;
-  }
-
   function ss_() {
     return SpreadsheetApp.getActiveSpreadsheet();
   }
 
   function getSheet_() {
-    var ctx = getShiftsSheetAndHeaderMap_();
-    return ctx.sheet;
+    var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
+    if (!sh)
+      throw new Error('לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME + '"');
+    return sh;
   }
 
   function getRawWorkLogSheet_() {
@@ -163,100 +23,38 @@ var BONUSES = BONUSES || {};
     return sh;
   }
 
-  var SHIFT_HEADER_PRIMARY = {
-    shiftId: SHIFTS_HEADERS_CANONICAL[0],
-    employeeId: SHIFTS_HEADERS_CANONICAL[1],
-    employeeName: SHIFTS_HEADERS_CANONICAL[2],
-    shiftDate: SHIFTS_HEADERS_CANONICAL[3],
-    startTime: SHIFTS_HEADERS_CANONICAL[4],
-    endTime: SHIFTS_HEADERS_CANONICAL[5],
-    jobTypeId: SHIFTS_HEADERS_CANONICAL[6],
-    jobTypeName: SHIFTS_HEADERS_CANONICAL[7],
-    department: SHIFTS_HEADERS_CANONICAL[8],
-    spanHours: SHIFTS_HEADERS_CANONICAL[9],
-    units: SHIFTS_HEADERS_CANONICAL[10],
-    note: SHIFTS_HEADERS_CANONICAL[11],
-    status: SHIFTS_HEADERS_CANONICAL[12],
-  };
-
+  // Shift header mapping: best-effort, local to the sheet (no canonical schema dependency)
   var SHIFT_HEADER_CANDIDATES = {
-    shiftId: [SHIFT_HEADER_PRIMARY.shiftId, "ShiftId", "shiftId"],
-    employeeId: [
-      SHIFT_HEADER_PRIMARY.employeeId,
-      "מזהה עובד",
-      "EmployeeId",
-      "employeeId",
-    ],
-    employeeName: [
-      SHIFT_HEADER_PRIMARY.employeeName,
-      "EmployeeName",
-      "employeeName",
-    ],
-    jobTypeId: [
-      SHIFT_HEADER_PRIMARY.jobTypeId,
-      "ID סוגי עבודה",
-      "JobTypeId",
-      "jobTypeId",
-    ],
-    jobTypeName: [
-      SHIFT_HEADER_PRIMARY.jobTypeName,
-      "סוגי עבודה",
-      "JobTypeName",
-      "jobTypeName",
-    ],
-    department: [
-      SHIFT_HEADER_PRIMARY.department,
-      "מחלקות",
-      "Department",
-      "department",
-    ],
-    shiftDate: [
-      SHIFT_HEADER_PRIMARY.shiftDate,
-      "תאריך משמרת",
-      "ShiftDate",
-      "shiftDate",
-    ],
-    startTime: [
-      SHIFT_HEADER_PRIMARY.startTime,
-      "שעת התחלה",
-      "Start Time",
-      "StartTime",
-      "startTime",
-      "שעת כניסה",
-    ],
-    endTime: [
-      SHIFT_HEADER_PRIMARY.endTime,
-      "שעת סיום",
-      "End Time",
-      "EndTime",
-      "endTime",
-      "שעת יציאה",
-    ],
-    startDateTime: ["StartDateTime", "שעת התחלה מדויקת"],
-    endDateTime: ["EndDateTime", "שעת סיום מדויקת"],
-    spanHours: [SHIFT_HEADER_PRIMARY.spanHours, "SpanHours", "Hours"],
-    payHours: ["שעות לשכר", "PayHours"],
-    units: [SHIFT_HEADER_PRIMARY.units, "דיווח יחידות", "Units", "units"],
+    shiftId: ["ID משמרת"],
+    employeeId: ["ID עובד", "מזהה עובד"],
+    employeeName: ["שם מלא"],
+    jobTypeId: ["ID סוג עבודה"],
+    jobTypeName: ["סוג עבודה"],
+    department: ["מחלקה"],
+    shiftDate: ["תאריך משמרת"],
+    startTime: ["שעת התחלה"],
+    endTime: ["שעת סיום"],
+    startDateTime: [],
+    endDateTime: [],
+    spanHours: ["שעות"],
+    payHours: ["שעות לשכר"],
     unitsCount: ["כמות יחידות"],
-    status: [SHIFT_HEADER_PRIMARY.status, "סטטוס", "Status"],
-    note: [SHIFT_HEADER_PRIMARY.note, "הערות למשמרת", "Note"],
-    sourceReportIds: ["מקור דיווחים", "SourceReportIds"],
+    status: ["סטטוס משמרת"],
+    note: ["הערות"],
+    sourceReportIds: ["מקור דיווחים"],
   };
 
   var REQUIRED_SHIFT_HEADERS = [
-    { key: "shiftId", header: SHIFT_HEADER_PRIMARY.shiftId },
-    { key: "employeeId", header: SHIFT_HEADER_PRIMARY.employeeId },
-    { key: "employeeName", header: SHIFT_HEADER_PRIMARY.employeeName },
-    { key: "jobTypeId", header: SHIFT_HEADER_PRIMARY.jobTypeId },
-    { key: "jobTypeName", header: SHIFT_HEADER_PRIMARY.jobTypeName },
-    { key: "department", header: SHIFT_HEADER_PRIMARY.department },
-    { key: "shiftDate", header: SHIFT_HEADER_PRIMARY.shiftDate },
-    { key: "startTime", header: SHIFT_HEADER_PRIMARY.startTime },
-    { key: "endTime", header: SHIFT_HEADER_PRIMARY.endTime },
-    { key: "spanHours", header: SHIFT_HEADER_PRIMARY.spanHours },
-    { key: "unitsCount", header: "כמות יחידות" },
-    { key: "note", header: SHIFT_HEADER_PRIMARY.note },
-    { key: "status", header: SHIFT_HEADER_PRIMARY.status },
+    "shiftId",
+    "employeeId",
+    "employeeName",
+    "workDate",
+    "startTime",
+    "endTime",
+    "jobId",
+    "jobName",
+    "spanHours",
+    "status",
   ];
 
   function formatNumericColumn_(sheet, colIndex) {
@@ -266,22 +64,14 @@ var BONUSES = BONUSES || {};
 
   function ensureRequiredShiftHeaders_(sheet) {
     void sheet;
-    var ctx = getShiftsSheetAndHeaderMap_();
-    return ctx.headerMap;
+    return getShiftsHeaderMap_();
   }
 
   function getOrCreateShiftsSheet_() {
-    var ctx = getShiftsSheetAndHeaderMap_();
-    return ctx.sheet;
-  }
-
-  function getShiftsHeaderMap_() {
-    var ctx = getShiftsSheetAndHeaderMap_();
-    var map = ctx.headerMap || {};
-    if (map["כמות יחידות"] !== undefined && map.unitsCount === undefined) {
-      map.unitsCount = map["כמות יחידות"];
-    }
-    return map;
+    var sh = getSheet_();
+    var map = getShiftsHeaderMap_();
+    ensureSpanAndPayFormats_(sh, map);
+    return sh;
   }
 
   function normalizeDirection_(raw) {
@@ -439,16 +229,38 @@ var BONUSES = BONUSES || {};
   }
 
   function getOrCreateShiftsSheet_() {
-    var ctx = getShiftsSheetAndHeaderMap_();
-    var sh = ctx.sheet;
-    var map = ctx.headerMap;
+    var sh = getSheet_();
+    var map = getShiftsHeaderMap_();
     ensureSpanAndPayFormats_(sh, map);
     return sh;
   }
 
   function getShiftsHeaderMap_() {
-    var ctx = getShiftsSheetAndHeaderMap_();
-    return ctx.headerMap;
+    var sheet = getSheet_();
+    var layoutInfo = getLayout_(sheet);
+    var layout = layoutInfo.layout;
+    var map = {};
+    map["ID משמרת"] = layout.shiftId;
+    map["ID עובד"] = layout.employeeId;
+    map["מזהה עובד"] = layout.employeeId;
+    map["שם מלא"] = layout.employeeName;
+    map["תאריך משמרת"] = layout.workDate;
+    map["שעת התחלה"] = layout.startTime;
+    map["שעת סיום"] = layout.endTime;
+    map["ID סוג עבודה"] = layout.jobId;
+    map["סוג עבודה"] = layout.jobName;
+    map["מחלקה"] = layout.department;
+    map["שעות"] = layout.spanHours;
+    map["שעות לשכר"] = layout.payHours;
+    map["כמות יחידות"] = layout.units;
+    map["הערות"] = layout.notesPrimary;
+    map["סטטוס משמרת"] = layout.status;
+    map.notesPrimary = layout.notesPrimary;
+    map.notesLegacy = layout.notesLegacy;
+    map.sourcePrimary = layout.sourcePrimary;
+    map.sourceLegacy = layout.sourceLegacy;
+    map.length = layoutInfo.lastCol;
+    return map;
   }
 
   function norm_(v) {
@@ -684,64 +496,66 @@ var BONUSES = BONUSES || {};
   }
 
   function getLayout_(sheet) {
-    var ctx = getShiftsSheetAndHeaderMap_();
-    var headerMap = ctx.headerMap;
     var headerRow = CONFIG.HEADER_ROW || 1;
     var lastCol = sheet.getLastColumn();
     if (lastCol < 1) lastCol = 1;
     var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
     var legacyMap = buildHeaderMap_(headers); // 1-based positions for optional cols
 
-    function findIndex_(names) {
+    function pickIndex_(names) {
       if (!names) return null;
       for (var i = 0; i < names.length; i++) {
         var key = norm_(names[i]);
-        if (legacyMap[key]) return legacyMap[key] - 1; // convert to zero-based
+        if (legacyMap[key]) return legacyMap[key] - 1; // zero-based
       }
       return null;
     }
 
     var layout = {
-      shiftId: headerMap["ID משמרת"],
-      employeeId: headerMap["מזהה עובד"],
-      employeeName: headerMap["שם מלא"],
-      email: findIndex_(["מייל", "email", "Email"]),
-      workDate: headerMap["תאריך משמרת"],
-      startTime: headerMap["שעת התחלה"],
-      endTime: headerMap["שעת סיום"],
-      status: headerMap["סטטוס משמרת"],
-      jobId: headerMap["ID סוג עבודה"],
-      jobName: headerMap["סוג עבודה"],
-      department: headerMap["מחלקה"],
-      spanHours: headerMap["שעות"],
-      payHours: headerMap["שעות לשכר"],
-      units: headerMap["כמות יחידות"],
-      notesPrimary: headerMap.notesPrimary,
-      notesLegacy: headerMap.notesLegacy,
-      sourcePrimary: headerMap.sourcePrimary,
-      timestamp: findIndex_(["חותמת זמן", "Timestamp"]),
-      direction: findIndex_(["כניסה / יציאה", "כיוון", "direction"]),
-      fixDate: findIndex_(["תיקון תאריך"]),
-      fixTime: findIndex_(["תיקון שעה"]),
-      bonusIds: findIndex_(["BonusIds", "Bonus IDs", "בונוסים"]),
-      manualEdited: findIndex_([
-        "ManualEdited",
-        "Manual Edited",
-        "עריכה ידנית",
-      ]),
-      manualNote: findIndex_(["ManualNote", "הערת מנהל", "הערת עריכה"]),
-      lastUpdatedBySidebar: findIndex_([
+      shiftId: pickIndex_(SHIFT_HEADER_CANDIDATES.shiftId),
+      employeeId: pickIndex_(SHIFT_HEADER_CANDIDATES.employeeId),
+      employeeName: pickIndex_(SHIFT_HEADER_CANDIDATES.employeeName),
+      email: pickIndex_(["מייל", "email", "Email"]),
+      workDate: pickIndex_(SHIFT_HEADER_CANDIDATES.shiftDate),
+      startTime: pickIndex_(SHIFT_HEADER_CANDIDATES.startTime),
+      endTime: pickIndex_(SHIFT_HEADER_CANDIDATES.endTime),
+      status: pickIndex_(SHIFT_HEADER_CANDIDATES.status),
+      jobId: pickIndex_(SHIFT_HEADER_CANDIDATES.jobTypeId),
+      jobName: pickIndex_(SHIFT_HEADER_CANDIDATES.jobTypeName),
+      department: pickIndex_(SHIFT_HEADER_CANDIDATES.department),
+      spanHours: pickIndex_(SHIFT_HEADER_CANDIDATES.spanHours),
+      payHours: pickIndex_(SHIFT_HEADER_CANDIDATES.payHours),
+      units: pickIndex_(SHIFT_HEADER_CANDIDATES.unitsCount),
+      notesPrimary: pickIndex_(SHIFT_HEADER_CANDIDATES.note),
+      notesLegacy: pickIndex_(SHIFT_HEADER_CANDIDATES.note),
+      sourcePrimary: pickIndex_(SHIFT_HEADER_CANDIDATES.sourceReportIds),
+      sourceLegacy: pickIndex_(SHIFT_HEADER_CANDIDATES.sourceReportIds),
+      timestamp: pickIndex_(["חותמת זמן", "Timestamp"]),
+      direction: pickIndex_(["כניסה / יציאה", "כיוון", "direction"]),
+      fixDate: pickIndex_(["תיקון תאריך"]),
+      fixTime: pickIndex_(["תיקון שעה"]),
+      bonusIds: pickIndex_(["BonusIds", "Bonus IDs", "בונוסים"]),
+      manualEdited: pickIndex_(["ManualEdited", "Manual Edited", "עריכה ידנית"]),
+      manualNote: pickIndex_(["ManualNote", "הערת מנהל", "הערת עריכה"]),
+      lastUpdatedBySidebar: pickIndex_([
         "LastUpdatedBySidebar",
         "עודכן בסיידבר על ידי",
       ]),
-      lastUpdatedAt: findIndex_([
+      lastUpdatedAt: pickIndex_([
         "LastUpdatedAt",
         "עודכן בסיידבר בתאריך",
         "SidebarUpdatedAt",
       ]),
     };
 
-    return { map: headerMap, layout: layout, lastCol: lastCol };
+    for (var r = 0; r < REQUIRED_SHIFT_HEADERS.length; r++) {
+      var key = REQUIRED_SHIFT_HEADERS[r];
+      if (layout[key] === null || layout[key] === undefined) {
+        throw new Error("Missing required shifts header: " + key);
+      }
+    }
+
+    return { map: legacyMap, layout: layout, lastCol: lastCol };
   }
 
   function readShiftRow_(row, layout) {
@@ -1045,9 +859,8 @@ var BONUSES = BONUSES || {};
     var jobIdNorm = normalizeId_(jobTypeId);
     var fromD = toDateOnly_(fromDate);
     var toD = toDateOnly_(toDate);
-    var ctx = getShiftsSheetAndHeaderMap_();
-    var sheet = ctx.sheet;
-    var headerMap = ctx.headerMap;
+    var sheet = getSheet_();
+    var headerMap = getShiftsHeaderMap_();
     var headerRow = CONFIG.HEADER_ROW || 1;
     var lastRow = sheet.getLastRow();
     var lastCol = headerMap.length;
@@ -1549,9 +1362,8 @@ var BONUSES = BONUSES || {};
     }
 
     try {
-      var ctx = getShiftsSheetAndHeaderMap_();
-      var sheet = ctx.sheet;
-      var headerMap = ctx.headerMap;
+      var sheet = getSheet_();
+      var headerMap = getShiftsHeaderMap_();
 
       var shiftIdCol = headerMap["ID משמרת"];
       if (shiftIdCol === undefined || shiftIdCol === null) {

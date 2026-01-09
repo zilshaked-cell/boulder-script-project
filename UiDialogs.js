@@ -33,7 +33,7 @@ function UI_openEmployeeDialog(params) {
   var template = HtmlService.createTemplateFromFile("ExtendedDialog");
   template.mode = "employee";
   template.title = "כרטיס עובד מורחב";
-  template.paramsJson = JSON.stringify(safeParams);
+  template.paramsJson = JSON.stringify(safeParams || {});
   var html = template.evaluate().setWidth(1200).setHeight(700);
   SpreadsheetApp.getUi().showModelessDialog(html, "כרטיס עובד");
 }
@@ -128,6 +128,7 @@ function UI_getEmployeeDialogData(params) {
   logDuration_(logger, "sidebar.employee.get", startMs, {
     employeeId: employeeId,
     errors: errors.length,
+    source: "extended-dialog",
   });
 
   return result;
@@ -303,6 +304,7 @@ function UI_saveEmployeeDialogChanges(envelope) {
   logDuration_(logger, "sidebar.employee.save", startMs, {
     employeeId: toSave && toSave.id ? toSave.id : "",
     errors: errors.length,
+    source: "extended-dialog",
   });
 
   return result;
@@ -315,7 +317,7 @@ function UI_openShiftsDialog(params) {
   var template = HtmlService.createTemplateFromFile("ExtendedDialog");
   template.mode = "shifts";
   template.title = "משמרות מורחב";
-  template.paramsJson = JSON.stringify(safeParams);
+  template.paramsJson = JSON.stringify(safeParams || {});
   var html = template.evaluate().setWidth(1200).setHeight(700);
   SpreadsheetApp.getUi().showModelessDialog(html, "משמרות");
 }
@@ -506,6 +508,7 @@ function UI_getShiftsDialogData(params) {
   logDuration_(logger, "sidebar.shifts.get", startMs, {
     errors: errors.length,
     returnedShifts: returnedShifts,
+    source: "extended-dialog",
   });
 
   return result;
@@ -972,6 +975,7 @@ function UI_saveShiftChanges(envelope) {
   logDuration_(logger, "sidebar.shifts.save", startMs, {
     shiftId: shiftId,
     errors: errors.length,
+    source: "extended-dialog",
   });
 
   return result;
@@ -984,7 +988,7 @@ function UI_openRequestsDialog(params) {
   var template = HtmlService.createTemplateFromFile("ExtendedDialog");
   template.mode = "requests";
   template.title = "בקשות עובדים";
-  template.paramsJson = JSON.stringify(safeParams);
+  template.paramsJson = JSON.stringify(safeParams || {});
   var html = template.evaluate().setWidth(1200).setHeight(700);
   SpreadsheetApp.getUi().showModelessDialog(html, "בקשות");
 }
@@ -1226,6 +1230,7 @@ function UI_getRequestsDialogData(params) {
   logDuration_(logger, "sidebar.requests.get", startMs, {
     errors: errors.length,
     returned: rawRequests.length,
+    source: "extended-dialog",
   });
 
   return result;
@@ -1479,6 +1484,7 @@ function UI_saveRequestChanges(envelope) {
   logDuration_(logger, "sidebar.requests.save", startMs, {
     errors: errors.length,
     saved: saveResults.length,
+    source: "extended-dialog",
   });
 
   return {
