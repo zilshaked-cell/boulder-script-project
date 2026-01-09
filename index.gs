@@ -14,7 +14,22 @@ const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציו�
 const LEADERBOARD_SHEET_NAME = "leaderboard";
 const LEADERBOARD_MAX_ROWS = 500;
 
-// Canonical schema for the "משמרות" sheet (SCHEMA_SNAPSHOT 2026-01-06). Keep in sync with the sheet.
+// Canonical schema for the "משמרות" sheet.
+// Source: _bundles/google SS boulder 5-1-26/משמרות.schema.json (exportedAt 2026-01-06T17:46:34.040Z)
+// Headers in order (A1:M1):
+// 1. ID משמרת
+// 2. ID עובד
+// 3. שם מלא
+// 4. תאריך
+// 5. כניסה
+// 6. יציאה
+// 7. ID סוג עבודה
+// 8. סוג עבודה
+// 9. מחלקה
+// 10. שעות
+// 11. כמות יחידות
+// 12. הערות
+// 13. סטטוס משמרת
 const SHIFTS_HEADERS_CANONICAL = [
   "ID משמרת",
   "ID עובד",

@@ -163,16 +163,61 @@ var BONUSES = BONUSES || {};
     return sh;
   }
 
+  var SHIFT_HEADER_PRIMARY = {
+    shiftId: SHIFTS_HEADERS_CANONICAL[0],
+    employeeId: SHIFTS_HEADERS_CANONICAL[1],
+    employeeName: SHIFTS_HEADERS_CANONICAL[2],
+    shiftDate: SHIFTS_HEADERS_CANONICAL[3],
+    startTime: SHIFTS_HEADERS_CANONICAL[4],
+    endTime: SHIFTS_HEADERS_CANONICAL[5],
+    jobTypeId: SHIFTS_HEADERS_CANONICAL[6],
+    jobTypeName: SHIFTS_HEADERS_CANONICAL[7],
+    department: SHIFTS_HEADERS_CANONICAL[8],
+    spanHours: SHIFTS_HEADERS_CANONICAL[9],
+    units: SHIFTS_HEADERS_CANONICAL[10],
+    note: SHIFTS_HEADERS_CANONICAL[11],
+    status: SHIFTS_HEADERS_CANONICAL[12],
+  };
+
   var SHIFT_HEADER_CANDIDATES = {
-    shiftId: ["ID משמרת", "ShiftId", "shiftId"],
-    employeeId: ["מזהה עובד", "ID עובד", "EmployeeId", "employeeId"],
-    employeeName: ["שם מלא", "EmployeeName", "employeeName"],
-    jobTypeId: ["ID סוג עבודה", "ID סוגי עבודה", "JobTypeId", "jobTypeId"],
-    jobTypeName: ["סוג עבודה", "סוגי עבודה", "JobTypeName", "jobTypeName"],
-    department: ["מחלקה", "מחלקות", "Department", "department"],
-    shiftDate: ["תאריך", "תאריך משמרת", "ShiftDate", "shiftDate"],
+    shiftId: [SHIFT_HEADER_PRIMARY.shiftId, "ShiftId", "shiftId"],
+    employeeId: [
+      SHIFT_HEADER_PRIMARY.employeeId,
+      "מזהה עובד",
+      "EmployeeId",
+      "employeeId",
+    ],
+    employeeName: [
+      SHIFT_HEADER_PRIMARY.employeeName,
+      "EmployeeName",
+      "employeeName",
+    ],
+    jobTypeId: [
+      SHIFT_HEADER_PRIMARY.jobTypeId,
+      "ID סוגי עבודה",
+      "JobTypeId",
+      "jobTypeId",
+    ],
+    jobTypeName: [
+      SHIFT_HEADER_PRIMARY.jobTypeName,
+      "סוגי עבודה",
+      "JobTypeName",
+      "jobTypeName",
+    ],
+    department: [
+      SHIFT_HEADER_PRIMARY.department,
+      "מחלקות",
+      "Department",
+      "department",
+    ],
+    shiftDate: [
+      SHIFT_HEADER_PRIMARY.shiftDate,
+      "תאריך משמרת",
+      "ShiftDate",
+      "shiftDate",
+    ],
     startTime: [
-      "כניסה",
+      SHIFT_HEADER_PRIMARY.startTime,
       "שעת התחלה",
       "Start Time",
       "StartTime",
@@ -180,7 +225,7 @@ var BONUSES = BONUSES || {};
       "שעת כניסה",
     ],
     endTime: [
-      "יציאה",
+      SHIFT_HEADER_PRIMARY.endTime,
       "שעת סיום",
       "End Time",
       "EndTime",
@@ -189,10 +234,11 @@ var BONUSES = BONUSES || {};
     ],
     startDateTime: ["StartDateTime", "שעת התחלה מדויקת"],
     endDateTime: ["EndDateTime", "שעת סיום מדויקת"],
-    spanHours: ["שעות", "SpanHours", "Hours"],
+    spanHours: [SHIFT_HEADER_PRIMARY.spanHours, "SpanHours", "Hours"],
     payHours: ["שעות לשכר", "PayHours"],
-    status: ["סטטוס משמרת", "סטטוס", "Status"],
-    note: ["הערות", "הערות למשמרת", "Note"],
+    units: [SHIFT_HEADER_PRIMARY.units, "דיווח יחידות", "Units", "units"],
+    status: [SHIFT_HEADER_PRIMARY.status, "סטטוס", "Status"],
+    note: [SHIFT_HEADER_PRIMARY.note, "הערות למשמרת", "Note"],
     sourceReportIds: ["מקור דיווחים", "SourceReportIds"],
   };
 
@@ -954,7 +1000,10 @@ var BONUSES = BONUSES || {};
       setByHeader_(rowArr, "כמות יחידות", shObj.units);
       setByHeader_(rowArr, "סטטוס משמרת", translated.statusDisplay || "");
 
-      if (headerMap.notesPrimary !== undefined && headerMap.notesPrimary !== null) {
+      if (
+        headerMap.notesPrimary !== undefined &&
+        headerMap.notesPrimary !== null
+      ) {
         rowArr[headerMap.notesPrimary] = translated.noteDisplay || "";
       }
       if (
