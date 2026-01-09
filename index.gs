@@ -1238,7 +1238,9 @@ function listRequestsByEmployee_(payload, logger) {
       break;
     }
   }
-  if (!tzValue) return { requests: [] };
+  if (!tzValue && lg && lg.warn) {
+    lg.warn("employee-lookup", { employeeId: employeeId, missing: "tz" });
+  }
 
   const reqSheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
   const reqHeaders = getHeaderMap_(reqSheet);
@@ -1253,6 +1255,7 @@ function listRequestsByEmployee_(payload, logger) {
     ["סטטוס", "סטטוס בקשה"],
     reqSheetName
   );
+  const requestIdCol = getOptionalColumn_(reqHeaders, ["ID בקשה", "Request ID", "RequestID"]);
   const jobNameCol = getRequiredColumn_(
     reqHeaders,
     ["סוג עבודה", "סוגי עבודה"],
@@ -1308,6 +1311,8 @@ function listRequestsByEmployee_(payload, logger) {
     const row = values[i];
     const rowEmpValue = stringValue(row[reqEmpCol - 1]);
     if (rowEmpValue !== tzValue && rowEmpValue !== employeeId) continue;
+    const requestId = requestIdCol ? stringValue(row[requestIdCol - 1]) : "";
+    const requestKey = requestId || stringValue(row[shiftIdCol - 1]);
     const jobName = stringValue(row[jobNameCol - 1]);
     let requestType = requestTypeCol
       ? stringValue(row[requestTypeCol - 1])
@@ -1337,7 +1342,7 @@ function listRequestsByEmployee_(payload, logger) {
     const workDate = workDateCol ? stringValue(row[workDateCol - 1]) : "";
 
     requests.push({
-      id: stringValue(row[shiftIdCol - 1]),
+      id: requestKey,
       status: stringValue(row[statusCol - 1]),
       jobName: jobName,
       workDate: workDate,
@@ -1350,6 +1355,7 @@ function listRequestsByEmployee_(payload, logger) {
       employeeId: employeeId,
       employeeName: fullName,
       shiftId: stringValue(row[shiftIdCol - 1]),
+      requestId: requestId,
       jobTypeId: stringValue(row[jobTypeIdCol - 1]),
       fixDate: fixDateCol ? stringValue(row[fixDateCol - 1]) : "",
       fixTime: fixTimeCol ? stringValue(row[fixTimeCol - 1]) : "",
@@ -2506,21 +2512,18 @@ function sendMonthlyBlockEmail_(details) {
   const reporterName = details.employeeName || "העובד";
   const contactEmail = details.employeeEmail || "";
   const contactPhone = details.employeePhone || details.phone || "";
-  const questionLine =
-    "האם " +
-    reporterName +
-    " צריך לדווח על " +
-    (jobLabel || "סוג העבודה") +
-    "?";
-
-  const subject = "ווב אפ - דף דיווח חדש";
+  const subject = "דיווח חדש – חסימת סוג עבודה חודשי";
 
   const textLines = [
     subject,
     jobLabel ? "סוג עבודה: " + jobLabel : "",
-    reporterName + " שלח דיווח על כך שיש טעות.",
+    "הווב-אפליקציה חסמה דיווח כי סוג העבודה מוגדר לתשלום חודשי עבור העובד.",
+    reporterName +
+      " סימן שמדובר בטעות ומבקש לבדוק אם יש לאפשר דיווחים או לעדכן את אופן התשלום.",
     "",
-    questionLine,
+    "מה צריך לבדוק?",
+    "1) האם סוג העבודה צריך להיות חודשי עבור העובד הזה?",
+    "2) אם לא, עדכנו את אופן התשלום או את שיוך העובד לסוג העבודה.",
     "",
     "ליצירת קשר עם העובד:",
     contactEmail ? "מייל: " + contactEmail : "",
@@ -2543,12 +2546,13 @@ function sendMonthlyBlockEmail_(details) {
     subject +
     "</strong></p>" +
     (jobLabel ? "<p>סוג עבודה: " + jobLabel + "</p>" : "") +
+    "<p>הווב-אפליקציה חסמה דיווח כי סוג העבודה מוגדר לתשלום חודשי עבור העובד.</p>" +
     "<p>" +
     reporterName +
-    " שלח דיווח על כך שיש טעות.</p>" +
-    "<p><strong>" +
-    questionLine +
-    "</strong></p>" +
+    " סימן שמדובר בטעות ומבקש לבדוק אם יש לאפשר דיווחים או לעדכן את אופן התשלום.</p>" +
+    "<p><strong>מה צריך לבדוק?</strong><br>" +
+    "1) האם סוג העבודה צריך להיות חודשי עבור העובד הזה?<br>" +
+    "2) אם לא, עדכנו את אופן התשלום או את שיוך העובד לסוג העבודה.</p>" +
     contactHtml +
     (details.timestamp ? "<p>נשלח ב: " + details.timestamp + "</p>" : "");
 
