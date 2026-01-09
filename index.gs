@@ -14,25 +14,21 @@ const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציו�
 const LEADERBOARD_SHEET_NAME = "leaderboard";
 const LEADERBOARD_MAX_ROWS = 500;
 
-// Canonical schema for the "משמרות" sheet. Do not change the sheet; code must adapt to it.
+// Canonical schema for the "משמרות" sheet (SCHEMA_SNAPSHOT 2026-01-06). Keep in sync with the sheet.
 const SHIFTS_HEADERS_CANONICAL = [
   "ID משמרת",
-  "מזהה עובד",
+  "ID עובד",
   "שם מלא",
-  "תאריך משמרת",
-  "שעת התחלה",
-  "שעת סיום",
+  "תאריך",
+  "כניסה",
+  "יציאה",
   "ID סוג עבודה",
   "סוג עבודה",
   "מחלקה",
   "שעות",
-  "שעות לשכר",
   "כמות יחידות",
+  "הערות",
   "סטטוס משמרת",
-  "הערות",
-  "מקור דיווחים",
-  "הערות",
-  "מקור דיווחים",
 ];
 
 const EMAIL_HEADER_CANDIDATES = [
@@ -3321,6 +3317,16 @@ function buildShiftsHeaderMap_(headers) {
     const h = normalizeShiftHeaderValue_(headers[i]);
     if (!h) continue;
     if (headerMap[h] === undefined) headerMap[h] = i; // zero-based index
+    if (h === "ID עובד" && headerMap["מזהה עובד"] === undefined)
+      headerMap["מזהה עובד"] = i;
+    if (h === "תאריך" && headerMap["תאריך משמרת"] === undefined)
+      headerMap["תאריך משמרת"] = i;
+    if (h === "כניסה" && headerMap["שעת התחלה"] === undefined)
+      headerMap["שעת התחלה"] = i;
+    if (h === "יציאה" && headerMap["שעת סיום"] === undefined)
+      headerMap["שעת סיום"] = i;
+    if (h === "הערות" && headerMap["הערות למשמרת"] === undefined)
+      headerMap["הערות למשמרת"] = i;
     if (h === "הערות") notesIdx.push(i);
     if (h === "מקור דיווחים") sourceIdx.push(i);
   }

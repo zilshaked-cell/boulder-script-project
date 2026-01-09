@@ -428,8 +428,12 @@ function buildShiftRows_(shifts, headerMap) {
     row[map["ID סוג עבודה"]] = shift.jobTypeId;
     row[map["סוג עבודה"]] = shift.jobName;
     row[map["מחלקה"]] = shift.department;
-    row[map["שעות"]] = shift.hoursDecimal === "" ? "" : Number(shift.hoursDecimal);
-    row[map["שעות לשכר"]] = shift.payHours === "" ? "" : Number(shift.payHours);
+    row[map["שעות"]] =
+      shift.hoursDecimal === "" ? "" : Number(shift.hoursDecimal);
+    if (map["שעות לשכר"] !== undefined && map["שעות לשכר"] !== null) {
+      row[map["שעות לשכר"]] =
+        shift.payHours === "" ? "" : Number(shift.payHours);
+    }
     row[map["כמות יחידות"]] = shift.units;
     row[map["סטטוס משמרת"]] = translated.statusDisplay;
 
@@ -567,9 +571,7 @@ function rebuildShiftsForRange_(opts) {
   sheet
     .getRange(startRow, startCol + 1, startBg.length, 1)
     .setBackgrounds(startBg);
-  sheet
-    .getRange(startRow, endCol + 1, endBg.length, 1)
-    .setBackgrounds(endBg);
+  sheet.getRange(startRow, endCol + 1, endBg.length, 1).setBackgrounds(endBg);
 
   return {
     ok: true,
