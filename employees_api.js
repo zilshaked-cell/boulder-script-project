@@ -242,6 +242,7 @@ function employeeExistsByEmail(params) {
   var colStatus = H[norm("סטטוס")];
   var colId = H[norm("ID עובד")];
   var colName = H[norm("שם מלא")];
+  var colSystemRole = H[norm("System Role")] || 0; // optional
 
   var dataRange = sheet.getRange(
     EMPLOYEE_HEADER_ROW + 1,
@@ -267,6 +268,13 @@ function employeeExistsByEmail(params) {
     var empId = colId ? String(row[colId - 1] || "").trim() : "";
     var empName = colName ? String(row[colName - 1] || "").trim() : "";
 
+    var rawRole = colSystemRole
+      ? String(row[colSystemRole - 1] || "")
+          .trim()
+          .toLowerCase()
+      : "";
+    var systemRole = rawRole === "admin" ? "ADMIN" : "EMPLOYEE";
+
     return jsonResponse({
       success: true,
       found: true,
@@ -275,6 +283,7 @@ function employeeExistsByEmail(params) {
         name: empName,
         email: rowEmail,
         active: active,
+        systemRole: systemRole,
       },
     });
   }

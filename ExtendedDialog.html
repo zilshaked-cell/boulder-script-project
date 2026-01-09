@@ -230,7 +230,11 @@
 
     <script>
       (function () {
-        window.DIALOG_PARAMS = window.DIALOG_PARAMS || {};
+        var _DIALOG_PARAMS_RAW = <?!= paramsJson || '{}' ?>;
+        window.DIALOG_PARAMS =
+          _DIALOG_PARAMS_RAW && typeof _DIALOG_PARAMS_RAW === "object"
+            ? _DIALOG_PARAMS_RAW
+            : {};
 
         var rootEl = document.getElementById("dialog-root");
         var dialogState = {

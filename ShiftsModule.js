@@ -237,16 +237,27 @@ var BONUSES = BONUSES || {};
     spanHours: [SHIFT_HEADER_PRIMARY.spanHours, "SpanHours", "Hours"],
     payHours: ["שעות לשכר", "PayHours"],
     units: [SHIFT_HEADER_PRIMARY.units, "דיווח יחידות", "Units", "units"],
+    unitsCount: ["כמות יחידות"],
     status: [SHIFT_HEADER_PRIMARY.status, "סטטוס", "Status"],
     note: [SHIFT_HEADER_PRIMARY.note, "הערות למשמרת", "Note"],
     sourceReportIds: ["מקור דיווחים", "SourceReportIds"],
   };
 
-  var REQUIRED_SHIFT_HEADERS = Object.keys(SHIFT_HEADER_CANDIDATES).map(
-    function (key) {
-      return { key: key, header: SHIFT_HEADER_CANDIDATES[key][0] };
-    }
-  );
+  var REQUIRED_SHIFT_HEADERS = [
+    { key: "shiftId", header: SHIFT_HEADER_PRIMARY.shiftId },
+    { key: "employeeId", header: SHIFT_HEADER_PRIMARY.employeeId },
+    { key: "employeeName", header: SHIFT_HEADER_PRIMARY.employeeName },
+    { key: "jobTypeId", header: SHIFT_HEADER_PRIMARY.jobTypeId },
+    { key: "jobTypeName", header: SHIFT_HEADER_PRIMARY.jobTypeName },
+    { key: "department", header: SHIFT_HEADER_PRIMARY.department },
+    { key: "shiftDate", header: SHIFT_HEADER_PRIMARY.shiftDate },
+    { key: "startTime", header: SHIFT_HEADER_PRIMARY.startTime },
+    { key: "endTime", header: SHIFT_HEADER_PRIMARY.endTime },
+    { key: "spanHours", header: SHIFT_HEADER_PRIMARY.spanHours },
+    { key: "unitsCount", header: "כמות יחידות" },
+    { key: "note", header: SHIFT_HEADER_PRIMARY.note },
+    { key: "status", header: SHIFT_HEADER_PRIMARY.status },
+  ];
 
   function formatNumericColumn_(sheet, colIndex) {
     if (!colIndex) return;
@@ -266,7 +277,11 @@ var BONUSES = BONUSES || {};
 
   function getShiftsHeaderMap_() {
     var ctx = getShiftsSheetAndHeaderMap_();
-    return ctx.headerMap;
+    var map = ctx.headerMap || {};
+    if (map["כמות יחידות"] !== undefined && map.unitsCount === undefined) {
+      map.unitsCount = map["כמות יחידות"];
+    }
+    return map;
   }
 
   function normalizeDirection_(raw) {
@@ -601,9 +616,18 @@ var BONUSES = BONUSES || {};
   }
 
   function deriveDate_(row, layout) {
-    var workDate = layout.workDate ? row[layout.workDate - 1] : "";
-    var fixDate = layout.fixDate ? row[layout.fixDate - 1] : "";
-    var ts = layout.timestamp ? row[layout.timestamp - 1] : "";
+    var workDate =
+      layout.workDate !== undefined && layout.workDate !== null
+        ? row[layout.workDate]
+        : "";
+    var fixDate =
+      layout.fixDate !== undefined && layout.fixDate !== null
+        ? row[layout.fixDate]
+        : "";
+    var ts =
+      layout.timestamp !== undefined && layout.timestamp !== null
+        ? row[layout.timestamp]
+        : "";
     return toIsoDate_(workDate || fixDate || ts);
   }
 
@@ -660,52 +684,172 @@ var BONUSES = BONUSES || {};
   }
 
   function getLayout_(sheet) {
+    var ctx = getShiftsSheetAndHeaderMap_();
+    var headerMap = ctx.headerMap;
+    var headerRow = CONFIG.HEADER_ROW || 1;
     var lastCol = sheet.getLastColumn();
     if (lastCol < 1) lastCol = 1;
-    var headers = sheet
-      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
-      .getValues()[0];
-    var map = buildHeaderMap_(headers);
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+    var legacyMap = buildHeaderMap_(headers); // 1-based positions for optional cols
 
-    var layout = {};
-    Object.keys(CONFIG.COLS).forEach(function (k) {
-      layout[k] = pickCol_(map, CONFIG.COLS[k]);
-    });
+    function findIndex_(names) {
+      if (!names) return null;
+      for (var i = 0; i < names.length; i++) {
+        var key = norm_(names[i]);
+        if (legacyMap[key]) return legacyMap[key] - 1; // convert to zero-based
+      }
+      return null;
+    }
 
-    return { map: map, layout: layout, lastCol: lastCol };
+    var layout = {
+      shiftId: headerMap["ID משמרת"],
+      employeeId: headerMap["מזהה עובד"],
+      employeeName: headerMap["שם מלא"],
+      email: findIndex_(["מייל", "email", "Email"]),
+      workDate: headerMap["תאריך משמרת"],
+      startTime: headerMap["שעת התחלה"],
+      endTime: headerMap["שעת סיום"],
+      status: headerMap["סטטוס משמרת"],
+      jobId: headerMap["ID סוג עבודה"],
+      jobName: headerMap["סוג עבודה"],
+      department: headerMap["מחלקה"],
+      spanHours: headerMap["שעות"],
+      payHours: headerMap["שעות לשכר"],
+      units: headerMap["כמות יחידות"],
+      notesPrimary: headerMap.notesPrimary,
+      notesLegacy: headerMap.notesLegacy,
+      sourcePrimary: headerMap.sourcePrimary,
+      timestamp: findIndex_(["חותמת זמן", "Timestamp"]),
+      direction: findIndex_(["כניסה / יציאה", "כיוון", "direction"]),
+      fixDate: findIndex_(["תיקון תאריך"]),
+      fixTime: findIndex_(["תיקון שעה"]),
+      bonusIds: findIndex_(["BonusIds", "Bonus IDs", "בונוסים"]),
+      manualEdited: findIndex_([
+        "ManualEdited",
+        "Manual Edited",
+        "עריכה ידנית",
+      ]),
+      manualNote: findIndex_(["ManualNote", "הערת מנהל", "הערת עריכה"]),
+      lastUpdatedBySidebar: findIndex_([
+        "LastUpdatedBySidebar",
+        "עודכן בסיידבר על ידי",
+      ]),
+      lastUpdatedAt: findIndex_([
+        "LastUpdatedAt",
+        "עודכן בסיידבר בתאריך",
+        "SidebarUpdatedAt",
+      ]),
+    };
+
+    return { map: headerMap, layout: layout, lastCol: lastCol };
   }
 
   function readShiftRow_(row, layout) {
     var shift = {
-      shiftId: layout.shiftId ? norm_(row[layout.shiftId - 1]) : "",
-      employeeId: layout.employeeId ? norm_(row[layout.employeeId - 1]) : "",
-      employeeName: layout.employeeName
-        ? norm_(row[layout.employeeName - 1])
-        : "",
-      email: layout.email ? norm_(row[layout.email - 1]) : "",
+      shiftId:
+        layout.shiftId !== undefined && layout.shiftId !== null
+          ? norm_(row[layout.shiftId])
+          : "",
+      employeeId:
+        layout.employeeId !== undefined && layout.employeeId !== null
+          ? norm_(row[layout.employeeId])
+          : "",
+      employeeName:
+        layout.employeeName !== undefined && layout.employeeName !== null
+          ? norm_(row[layout.employeeName])
+          : "",
+      email:
+        layout.email !== undefined && layout.email !== null
+          ? norm_(row[layout.email])
+          : "",
       date: deriveDate_(row, layout),
-      timestamp: layout.timestamp ? row[layout.timestamp - 1] : "",
-      startTime: layout.startTime ? toTimeStr_(row[layout.startTime - 1]) : "",
-      endTime: layout.endTime ? toTimeStr_(row[layout.endTime - 1]) : "",
-      status: layout.status ? norm_(row[layout.status - 1]) : "",
-      workType: layout.jobName ? norm_(row[layout.jobName - 1]) : "",
-      workTypeId: layout.jobId ? norm_(row[layout.jobId - 1]) : "",
-      department: layout.department ? norm_(row[layout.department - 1]) : "",
-      direction: layout.direction ? norm_(row[layout.direction - 1]) : "",
-      units: layout.units ? row[layout.units - 1] : "",
-      bonusIds: layout.bonusIds ? splitBonusIds_(row[layout.bonusIds - 1]) : [],
-      manualNote: layout.manualNote ? norm_(row[layout.manualNote - 1]) : "",
+      timestamp:
+        layout.timestamp !== undefined && layout.timestamp !== null
+          ? row[layout.timestamp]
+          : "",
+      startTime:
+        layout.startTime !== undefined && layout.startTime !== null
+          ? toTimeStr_(row[layout.startTime])
+          : "",
+      endTime:
+        layout.endTime !== undefined && layout.endTime !== null
+          ? toTimeStr_(row[layout.endTime])
+          : "",
+      status:
+        layout.status !== undefined && layout.status !== null
+          ? norm_(row[layout.status])
+          : "",
+      workType:
+        layout.jobName !== undefined && layout.jobName !== null
+          ? norm_(row[layout.jobName])
+          : "",
+      workTypeId:
+        layout.jobId !== undefined && layout.jobId !== null
+          ? norm_(row[layout.jobId])
+          : "",
+      department:
+        layout.department !== undefined && layout.department !== null
+          ? norm_(row[layout.department])
+          : "",
+      direction:
+        layout.direction !== undefined && layout.direction !== null
+          ? norm_(row[layout.direction])
+          : "",
+      spanHours:
+        layout.spanHours !== undefined && layout.spanHours !== null
+          ? row[layout.spanHours]
+          : "",
+      payHours:
+        layout.payHours !== undefined && layout.payHours !== null
+          ? row[layout.payHours]
+          : "",
+      units:
+        layout.units !== undefined && layout.units !== null
+          ? row[layout.units]
+          : "",
+      bonusIds:
+        layout.bonusIds !== undefined && layout.bonusIds !== null
+          ? splitBonusIds_(row[layout.bonusIds])
+          : [],
+      manualNote:
+        layout.manualNote !== undefined && layout.manualNote !== null
+          ? norm_(row[layout.manualNote])
+          : "",
       hasIssues: computeHasIssues_(
-        layout.status ? row[layout.status - 1] : "",
-        layout.notes ? row[layout.notes - 1] : ""
+        layout.status !== undefined && layout.status !== null
+          ? row[layout.status]
+          : "",
+        layout.notesPrimary !== undefined && layout.notesPrimary !== null
+          ? row[layout.notesPrimary]
+          : layout.notesLegacy !== undefined && layout.notesLegacy !== null
+          ? row[layout.notesLegacy]
+          : ""
       ),
-      isManualEdited: layout.manualEdited
-        ? normalizeBool_(row[layout.manualEdited - 1])
-        : false,
+      isManualEdited:
+        layout.manualEdited !== undefined && layout.manualEdited !== null
+          ? normalizeBool_(row[layout.manualEdited])
+          : false,
       rawRow: null,
     };
 
-    if (layout.notes) shift.notes = row[layout.notes - 1];
+    if (layout.notesPrimary !== undefined && layout.notesPrimary !== null) {
+      shift.notes = row[layout.notesPrimary];
+    } else if (
+      layout.notesLegacy !== undefined &&
+      layout.notesLegacy !== null &&
+      shift.notes === undefined
+    ) {
+      shift.notes = row[layout.notesLegacy];
+    }
+
+    if (layout.sourcePrimary !== undefined && layout.sourcePrimary !== null) {
+      shift.sourceReportIds = row[layout.sourcePrimary];
+    } else if (
+      layout.sourceLegacy !== undefined &&
+      layout.sourceLegacy !== null
+    ) {
+      shift.sourceReportIds = row[layout.sourceLegacy];
+    }
 
     return shift;
   }
@@ -1250,7 +1394,10 @@ var BONUSES = BONUSES || {};
 
   function findRowByShiftId_(sheet, layout, shiftId) {
     if (!shiftId) return null;
-    var targetCol = layout.shiftId || 2;
+    var targetCol =
+      layout.shiftId !== undefined && layout.shiftId !== null
+        ? layout.shiftId + 1
+        : 2;
     var lastRow = sheet.getLastRow();
     if (lastRow <= CONFIG.HEADER_ROW) return null;
     var range = sheet.getRange(
@@ -1361,16 +1508,19 @@ var BONUSES = BONUSES || {};
       var uniqueIds = splitBonusIds_(bonusIds);
       var bonusStr = uniqueIds.join(CONFIG.BONUS_SEPARATOR);
 
-      if (layout.bonusIds)
-        sheet.getRange(rowIndex, layout.bonusIds).setValue(bonusStr);
-      if (layout.manualEdited)
-        sheet.getRange(rowIndex, layout.manualEdited).setValue(true);
-      if (layout.lastUpdatedBySidebar)
+      if (layout.bonusIds !== undefined && layout.bonusIds !== null)
+        sheet.getRange(rowIndex, layout.bonusIds + 1).setValue(bonusStr);
+      if (layout.manualEdited !== undefined && layout.manualEdited !== null)
+        sheet.getRange(rowIndex, layout.manualEdited + 1).setValue(true);
+      if (
+        layout.lastUpdatedBySidebar !== undefined &&
+        layout.lastUpdatedBySidebar !== null
+      )
         sheet
-          .getRange(rowIndex, layout.lastUpdatedBySidebar)
+          .getRange(rowIndex, layout.lastUpdatedBySidebar + 1)
           .setValue(Session.getActiveUser().getEmail() || "sidebar");
-      if (layout.lastUpdatedAt)
-        sheet.getRange(rowIndex, layout.lastUpdatedAt).setValue(new Date());
+      if (layout.lastUpdatedAt !== undefined && layout.lastUpdatedAt !== null)
+        sheet.getRange(rowIndex, layout.lastUpdatedAt + 1).setValue(new Date());
 
       var updated = get_(shiftId);
       if (updated && updated.ok) {

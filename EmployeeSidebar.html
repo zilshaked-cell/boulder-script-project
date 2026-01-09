@@ -375,6 +375,37 @@
         border-color: #475569;
       }
 
+      .role-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      .role-toggle {
+        min-width: 104px;
+        text-transform: lowercase;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        font-weight: 700;
+        padding: 8px 12px;
+      }
+
+      .role-toggle.role-admin {
+        background: rgba(34, 197, 94, 0.2);
+        border-color: #16a34a;
+        color: #bbf7d0;
+        box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2);
+      }
+
+      .role-toggle.role-employee {
+        background: rgba(148, 163, 184, 0.14);
+        border-color: #475569;
+        color: #e2e8f0;
+      }
+
       .sidebar-layout {
         display: flex;
         align-items: flex-start;
@@ -1124,6 +1155,18 @@
               <span id="emp-status-pill" class="status-pill status-inactive">
                 לא פעיל
               </span>
+            </div>
+
+            <div class="role-row">
+              <span class="label">הרשאות Web-App</span>
+              <button
+                id="emp-system-role"
+                class="role-toggle role-employee"
+                type="button"
+                data-role="employee"
+              >
+                employee
+              </button>
             </div>
 
             <div class="field-row">
@@ -2222,6 +2265,43 @@
             });
           }
         });
+
+        var roleBtn = $("emp-system-role");
+        if (roleBtn) {
+          roleBtn.addEventListener("click", function () {
+            toggleSystemRole();
+          });
+        }
+      }
+
+      function normalizeSystemRole(role) {
+        var val = (role || "").toString().trim().toLowerCase();
+        if (val === "admin" || val === "administrator") return "admin";
+        return "employee";
+      }
+
+      function setSystemRoleUI(role) {
+        var btn = $("emp-system-role");
+        if (!btn) return;
+        var normalized = normalizeSystemRole(role || "employee");
+        btn.setAttribute("data-role", normalized);
+        btn.textContent = normalized;
+        btn.classList.toggle("role-admin", normalized === "admin");
+        btn.classList.toggle("role-employee", normalized !== "admin");
+      }
+
+      function getSystemRoleUI() {
+        var btn = $("emp-system-role");
+        if (!btn) return "employee";
+        var value = btn.getAttribute("data-role") || btn.textContent || "";
+        return normalizeSystemRole(value);
+      }
+
+      function toggleSystemRole() {
+        var next = getSystemRoleUI() === "admin" ? "employee" : "admin";
+        setSystemRoleUI(next);
+        markDirty();
+        scheduleLiveSave();
       }
 
       // איסוף הפיילוד מהטופס – משותף לשמירה ידנית ולשמירה חיה
@@ -2286,6 +2366,7 @@
         return {
           id: selectedEmployeeId,
           name: name,
+          systemRole: getSystemRoleUI(),
           gender: gender,
           idNumber: idNumber,
           phone: phone,
@@ -2747,6 +2828,8 @@
           statusPill.classList.toggle("status-active", isActive);
           statusPill.classList.toggle("status-inactive", !isActive);
         }
+
+        setSystemRoleUI(emp.systemRole || "employee");
 
         // פרטי עובד (אם השרת יספק אותם)
         var gender = emp.gender || emp.sex || "";

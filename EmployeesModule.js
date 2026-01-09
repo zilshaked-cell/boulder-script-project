@@ -544,10 +544,18 @@ var EMP = EMP || {};
     var colEmail = colIndexByHeader_(headers, "מייל");
     var colShirt = colIndexByHeader_(headers, "מידת חולצה");
     var colTravel = colIndexByHeader_(headers, "עלות החזרי נסיעות יומי");
+    var colSystemRole = colIndexByHeader_(headers, "System Role");
 
     function normalizeStr(val) {
       if (val === null || val === undefined) return "";
       return String(val).trim();
+    }
+
+    function normalizeSystemRole(val) {
+      var v = normalizeStr(val).toLowerCase();
+      if (v === "admin" || v === "administrator") return "admin";
+      if (v === "employee" || v === "user") return "employee";
+      return "";
     }
 
     var data = sheet
@@ -580,6 +588,7 @@ var EMP = EMP || {};
       var rawEmail = colEmail ? row[colEmail - 1] : "";
       var rawShirt = colShirt ? row[colShirt - 1] : "";
       var rawTravel = colTravel ? row[colTravel - 1] : "";
+      var rawSystemRole = colSystemRole ? row[colSystemRole - 1] : "";
 
       var gender = normalizeStr(rawGender);
       var idNum = normalizeStr(rawIdNum);
@@ -588,6 +597,7 @@ var EMP = EMP || {};
       var email = normalizeStr(rawEmail);
       var shirtSize = normalizeStr(rawShirt);
       var travelCost = normalizeStr(rawTravel);
+      var systemRole = normalizeSystemRole(rawSystemRole);
 
       var emp = employeesById[id];
       if (!emp) {
@@ -603,6 +613,7 @@ var EMP = EMP || {};
           email: email,
           shirtSize: shirtSize,
           travelCost: travelCost,
+          systemRole: systemRole,
         };
         employeesById[id] = emp;
       } else {
@@ -613,6 +624,11 @@ var EMP = EMP || {};
         if (!emp.email && email) emp.email = email;
         if (!emp.shirtSize && shirtSize) emp.shirtSize = shirtSize;
         if (!emp.travelCost && travelCost) emp.travelCost = travelCost;
+        if (systemRole === "admin") {
+          emp.systemRole = "admin";
+        } else if (!emp.systemRole && systemRole) {
+          emp.systemRole = systemRole;
+        }
       }
 
       emp.rows.push({
@@ -632,6 +648,7 @@ var EMP = EMP || {};
           email: rawEmail,
           shirtSize: rawShirt,
           travelCost: rawTravel,
+          systemRole: rawSystemRole,
         },
       });
 
@@ -1500,6 +1517,7 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
     var colEmail = colIndexByHeaderLocal("מייל");
     var colShirt = colIndexByHeaderLocal("מידת חולצה");
     var colTravel = colIndexByHeaderLocal("עלות החזרי נסיעות יומי");
+    var colSystemRole = colIndexByHeaderLocal("System Role");
 
     if (!colName || !colJobName || !colStatus) {
       return {
@@ -1532,6 +1550,13 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
       return String(val).replace(/\s+/g, " ").trim();
     }
 
+    function normalizeSystemRole(val) {
+      var v = normalizeStr(val).toLowerCase();
+      if (v === "admin" || v === "administrator") return "admin";
+      if (v === "employee" || v === "user") return "employee";
+      return "";
+    }
+
     function resolveJob(jobTypeText) {
       var key = normalizeStr(jobTypeText);
       if (!key) return null;
@@ -1545,6 +1570,9 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
       if (typeof OPT === "undefined" || !OPT.getPaymentByName) return null;
       return OPT.getPaymentByName(key);
     }
+
+    var targetSystemRole =
+      normalizeSystemRole(payload.systemRole) || "employee";
 
     // עדכון שורות קיימות + איסוף השורות החדשות (ללא rowIndex)
     var rowsPayload = payload.rows;
@@ -1601,6 +1629,9 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
         }
         if (colTravel) {
           rowArr[colTravel - 1] = normalizeStr(payload.travelCost);
+        }
+        if (colSystemRole) {
+          rowArr[colSystemRole - 1] = targetSystemRole;
         }
 
         // סכום
@@ -1726,6 +1757,9 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
         }
         if (colTravel) {
           newRow[colTravel - 1] = normalizeStr(payload.travelCost);
+        }
+        if (colSystemRole) {
+          newRow[colSystemRole - 1] = targetSystemRole;
         }
 
         // סכום
