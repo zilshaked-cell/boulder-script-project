@@ -3,6 +3,7 @@
 var SHIFTS = SHIFTS || {};
 var BONUSES = BONUSES || {};
 
+(function () {
   function ss_() {
     return SpreadsheetApp.getActiveSpreadsheet();
   }
@@ -535,7 +536,11 @@ var BONUSES = BONUSES || {};
       fixDate: pickIndex_(["תיקון תאריך"]),
       fixTime: pickIndex_(["תיקון שעה"]),
       bonusIds: pickIndex_(["BonusIds", "Bonus IDs", "בונוסים"]),
-      manualEdited: pickIndex_(["ManualEdited", "Manual Edited", "עריכה ידנית"]),
+      manualEdited: pickIndex_([
+        "ManualEdited",
+        "Manual Edited",
+        "עריכה ידנית",
+      ]),
       manualNote: pickIndex_(["ManualNote", "הערת מנהל", "הערת עריכה"]),
       lastUpdatedBySidebar: pickIndex_([
         "LastUpdatedBySidebar",

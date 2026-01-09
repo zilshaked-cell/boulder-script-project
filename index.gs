@@ -8,6 +8,7 @@ const EMPLOYEES_SHEET_NAMES = [
   "Employees",
   "employees",
 ];
+const EMPLOYEE_HEADER_ROW = 1;
 const WORK_LOGS_SHEET_NAME = "דיווח שעות עבודה";
 const REQUESTS_SHEET_NAMES = ["בקשות עובדים"];
 const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציות בחירה ו ID_S"];
@@ -1231,10 +1232,28 @@ function adminListEmployees_(payload, logger) {
     "Admin Role",
   ]);
 
-  const values = sheet.getDataRange().getValues();
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+
+  if (lastRow <= EMPLOYEE_HEADER_ROW) {
+    lg.info("read-sheet", {
+      sheetName: sheetName,
+      rows: 0,
+    });
+    return { employees: [] };
+  }
+
+  var dataRange = sheet.getRange(
+    EMPLOYEE_HEADER_ROW + 1,
+    1,
+    lastRow - EMPLOYEE_HEADER_ROW,
+    lastCol
+  );
+  var values = dataRange.getValues();
+
   lg.info("read-sheet", {
     sheetName: sheetName,
-    rows: Math.max(values.length - 1, 0),
+    rows: values.length,
   });
 
   const jobTypes = listJobTypes_();
@@ -1299,8 +1318,8 @@ function adminListEmployees_(payload, logger) {
 
   const employees = {};
 
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
     const employeeId = stringValue(row[idCol - 1]);
     if (!employeeId) continue;
 
@@ -1404,19 +1423,17 @@ function adminListEmployees_(payload, logger) {
         return {
           jobTypeId: jt.id,
           name: jt.name,
-          department: jt.department || "",
+          shortCode: jt.shortCode || "",
+          colorHex: jt.colorHex || "",
           isActive: jt.isActive !== false,
-          payTypeId: jt.payTypeId || "",
-          payTypeName: jt.payTypeName || "",
         };
       }
       return {
         jobTypeId: jobTypeId,
         name: "",
-        department: "",
+        shortCode: "",
+        colorHex: "",
         isActive: false,
-        payTypeId: "",
-        payTypeName: "",
       };
     });
 
@@ -1474,7 +1491,7 @@ function adminListEmployees_(payload, logger) {
 
   logDuration_(lg, "admin.listEmployees.total", startMs, {
     sheet: sheetName,
-    scannedRows: Math.max(values.length - 1, 0),
+    scannedRows: values.length,
     employees: allEmployees.length,
     returned: filtered.length,
     statusFilter: statusFilter,

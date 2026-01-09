@@ -35,9 +35,24 @@ var EMP = EMP || {};
   }
 
   function colIndexByHeader_(headers, name) {
-    if (!headers || !headers.length) return null;
+    if (!headers || !headers.length || !name) return null;
+
     var idx = headers.indexOf(name);
-    return idx >= 0 ? idx + 1 : null;
+    if (idx >= 0) return idx + 1;
+
+    var target = String(name).trim().toLowerCase();
+    for (var i = 0; i < headers.length; i++) {
+      var h = headers[i];
+      if (h === name) continue;
+      if (
+        String(h || "")
+          .trim()
+          .toLowerCase() === target
+      ) {
+        return i + 1;
+      }
+    }
+    return null;
   }
 
   /**
@@ -1496,8 +1511,7 @@ function EMP_saveEmployeePayload_LEGACY_(payload) {
     var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
 
     function colIndexByHeaderLocal(name) {
-      var idx = headers.indexOf(name);
-      return idx >= 0 ? idx + 1 : null;
+      return colIndexByHeader_(headers, name);
     }
 
     var colStatus = colIndexByHeaderLocal("סטטוס");
