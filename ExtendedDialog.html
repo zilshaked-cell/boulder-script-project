@@ -1447,14 +1447,6 @@
             body.appendChild(errBox);
           }
 
-          if (!data || !Array.isArray(data.shifts)) {
-            var info = document.createElement("div");
-            info.className = "placeholder";
-            info.textContent = "לא נמצאו נתוני משמרות.";
-            body.appendChild(info);
-            return;
-          }
-
           var filtersEcho = data.filtersEcho || {};
           var employeesLookup = data.employeesLookup || [];
           var jobTypesLookup = data.jobTypesLookup || [];
@@ -1573,6 +1565,13 @@
           });
           table.appendChild(tbody);
           tableWrap.appendChild(table);
+
+          if (!(data.shifts || []).length) {
+            var info = document.createElement("div");
+            info.className = "placeholder";
+            info.textContent = "לא נמצאו נתוני משמרות.";
+            tableWrap.appendChild(info);
+          }
           layout.appendChild(tableWrap);
 
           var formWrap = document.createElement("div");

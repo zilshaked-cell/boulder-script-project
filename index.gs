@@ -3357,34 +3357,25 @@ function getShiftsSheet_() {
 
 function listShifts_(payload) {
   const filters = payload || {};
-  const sheet = getShiftsSheet_();
-  const headerMap = getHeaderMap_(sheet);
-  const sheetName = sheet.getName();
+  const ctx = getShiftsSheetAndHeaderMap_();
+  const sheet = ctx.sheet;
+  const headerMap = ctx.headerMap;
 
-  const shiftIdCol = getRequiredColumn_(headerMap, ["ID משמרת"], sheetName);
-  const employeeCol = getRequiredColumn_(
-    headerMap,
-    ["מזהה עובד", "ID עובד"],
-    sheetName
-  );
-  const employeeNameCol = getOptionalColumn_(headerMap, ["שם מלא"]);
-  const workDateCol = getRequiredColumn_(headerMap, ["תאריך"], sheetName);
-  const startCol = getRequiredColumn_(headerMap, ["כניסה"], sheetName);
-  const endCol = getRequiredColumn_(headerMap, ["יציאה"], sheetName);
-  const jobTypeIdCol = getRequiredColumn_(
-    headerMap,
-    ["ID סוג עבודה", "ID סוגי עבודה"],
-    sheetName
-  );
-  const jobNameCol = getOptionalColumn_(headerMap, ["סוג עבודה", "סוגי עבודה"]);
-  const deptCol = getOptionalColumn_(headerMap, ["מחלקה", "מחלקות"]);
-  const hoursCol = getRequiredColumn_(headerMap, ["שעות"], sheetName);
-  const unitsCol = getOptionalColumn_(headerMap, [
-    "כמות יחידות",
-    "דיווח יחידות",
-  ]);
-  const noteCol = getOptionalColumn_(headerMap, ["הערות", "הערה"], sheetName);
-  const statusCol = getRequiredColumn_(headerMap, ["סטטוס משמרת"], sheetName);
+  const shiftIdCol = headerMap["ID משמרת"];
+  const employeeCol = headerMap["מזהה עובד"];
+  const employeeNameCol = headerMap["שם מלא"];
+  const workDateCol = headerMap["תאריך משמרת"];
+  const startCol = headerMap["שעת התחלה"];
+  const endCol = headerMap["שעת סיום"];
+  const jobTypeIdCol = headerMap["ID סוג עבודה"];
+  const jobNameCol = headerMap["סוג עבודה"];
+  const deptCol = headerMap["מחלקה"];
+  const hoursCol = headerMap["שעות"];
+  const payHoursCol = headerMap["שעות לשכר"];
+  const unitsCol = headerMap["כמות יחידות"];
+  const notePrimaryCol = headerMap.notesPrimary;
+  const statusCol = headerMap["סטטוס משמרת"];
+  const sourcePrimaryCol = headerMap.sourcePrimary;
 
   const dateFrom = toIsoDate_(filters.dateFrom || "");
   const dateTo = toIsoDate_(filters.dateTo || "");
@@ -3441,40 +3432,62 @@ function listShifts_(payload) {
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
 
-    const workDate = toIsoDate_(row[workDateCol - 1]);
+    const workDate = toIsoDate_(row[workDateCol]);
     if (dateFrom && workDate && workDate < dateFrom) continue;
     if (dateTo && workDate && workDate > dateTo) continue;
 
-    const employeeId = stringValue(row[employeeCol - 1]);
+    const employeeId = stringValue(row[employeeCol]);
     if (employeeFilter && employeeId !== employeeFilter) continue;
 
-    const statusRaw = stringValue(row[statusCol - 1]);
+    const statusRaw = stringValue(row[statusCol]);
     if (statusFilters.length && statusFilters.indexOf(statusRaw) === -1)
       continue;
 
-    const jobTypeId = stringValue(row[jobTypeIdCol - 1]);
+    const jobTypeId = stringValue(row[jobTypeIdCol]);
     if (jobTypeFilters.length && jobTypeFilters.indexOf(jobTypeId) === -1)
       continue;
 
-    const hoursDecimal = parseNumberOrNull_(row[hoursCol - 1]);
-    const unitsVal = unitsCol ? parseNumberOrNull_(row[unitsCol - 1]) : null;
+    const hoursDecimal = parseNumberOrNull_(row[hoursCol]);
+    const payHoursVal =
+      payHoursCol !== undefined && payHoursCol !== null
+        ? parseNumberOrNull_(row[payHoursCol])
+        : null;
+    const unitsVal =
+      unitsCol !== undefined && unitsCol !== null
+        ? parseNumberOrNull_(row[unitsCol])
+        : null;
 
     results.push({
-      shiftId: stringValue(row[shiftIdCol - 1]),
+      shiftId: stringValue(row[shiftIdCol]),
       employeeId: employeeId,
-      employeeName: employeeNameCol
-        ? stringValue(row[employeeNameCol - 1])
-        : "",
+      employeeName:
+        employeeNameCol !== undefined && employeeNameCol !== null
+          ? stringValue(row[employeeNameCol])
+          : "",
       workDate: workDate,
-      startTime: formatTime_(row[startCol - 1]),
-      endTime: formatTime_(row[endCol - 1]),
+      startTime: formatTime_(row[startCol]),
+      endTime: formatTime_(row[endCol]),
       jobTypeId: jobTypeId,
-      jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
-      department: deptCol ? stringValue(row[deptCol - 1]) : "",
+      jobName:
+        jobNameCol !== undefined && jobNameCol !== null
+          ? stringValue(row[jobNameCol])
+          : "",
+      department:
+        deptCol !== undefined && deptCol !== null
+          ? stringValue(row[deptCol])
+          : "",
       hoursDecimal: hoursDecimal,
+      payHours: payHoursVal,
       units: unitsVal,
       status: statusRaw,
-      note: noteCol ? stringValue(row[noteCol - 1]) : "",
+      note:
+        notePrimaryCol !== undefined && notePrimaryCol !== null
+          ? stringValue(row[notePrimaryCol])
+          : "",
+      sourceReportIds:
+        sourcePrimaryCol !== undefined && sourcePrimaryCol !== null
+          ? stringValue(row[sourcePrimaryCol])
+          : "",
     });
   }
 
