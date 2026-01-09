@@ -1021,13 +1021,23 @@ function UI_getRequestsDialogData(params) {
     ? safeParams.statuses
     : null;
 
-  var range = normalizeDateRange_(safeParams.fromDate, safeParams.toDate);
-  if (!range.ok) {
-    errors.push(range.error);
-  }
+  var fromDateStr = safeParams.fromDate || "";
+  var toDateStr = safeParams.toDate || "";
 
-  var fromIso = range.ok ? range.fromIso : "";
-  var toIso = range.ok ? range.toIso : "";
+  var range = null;
+  var fromIso = "";
+  var toIso = "";
+
+  // מפעילים נירמול טווח תאריכים רק אם המשתמש הגדיר from/to מפורשות
+  if (fromDateStr || toDateStr) {
+    range = normalizeDateRange_(fromDateStr, toDateStr);
+    if (!range.ok) {
+      errors.push(range.error);
+    } else {
+      fromIso = range.fromIso;
+      toIso = range.toIso;
+    }
+  }
 
   var rawRequests = [];
   var statusesCollected = [];
@@ -1035,10 +1045,15 @@ function UI_getRequestsDialogData(params) {
 
   if (errors.length === 0) {
     var filters = {
-      dateFrom: fromIso,
-      dateTo: toIso,
       includeClosed: true,
     };
+
+    if (fromIso) {
+      filters.dateFrom = fromIso;
+    }
+    if (toIso) {
+      filters.dateTo = toIso;
+    }
 
     if (statusesFilterArray && statusesFilterArray.length) {
       filters.statuses = statusesFilterArray
