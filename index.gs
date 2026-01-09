@@ -14,6 +14,27 @@ const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציו�
 const LEADERBOARD_SHEET_NAME = "leaderboard";
 const LEADERBOARD_MAX_ROWS = 500;
 
+// Canonical schema for the "משמרות" sheet. Do not change the sheet; code must adapt to it.
+const SHIFTS_HEADERS_CANONICAL = [
+  "ID משמרת",
+  "מזהה עובד",
+  "שם מלא",
+  "תאריך משמרת",
+  "שעת התחלה",
+  "שעת סיום",
+  "ID סוג עבודה",
+  "סוג עבודה",
+  "מחלקה",
+  "שעות",
+  "שעות לשכר",
+  "כמות יחידות",
+  "סטטוס משמרת",
+  "הערות",
+  "מקור דיווחים",
+  "הערות",
+  "מקור דיווחים",
+];
+
 const EMAIL_HEADER_CANDIDATES = [
   "מייל",
   "email",
@@ -1255,7 +1276,11 @@ function listRequestsByEmployee_(payload, logger) {
     ["סטטוס", "סטטוס בקשה"],
     reqSheetName
   );
-  const requestIdCol = getOptionalColumn_(reqHeaders, ["ID בקשה", "Request ID", "RequestID"]);
+  const requestIdCol = getOptionalColumn_(reqHeaders, [
+    "ID בקשה",
+    "Request ID",
+    "RequestID",
+  ]);
   const jobNameCol = getRequiredColumn_(
     reqHeaders,
     ["סוג עבודה", "סוגי עבודה"],
@@ -3232,43 +3257,102 @@ function ensureEmployeeSizeColumns_(sheet, headers) {
   return { sizeCol, sourceCol, headers: newHeaders };
 }
 
-function getShiftsSheet_() {
+function normalizeShiftHeaderValue_(v) {
+  return stringValue(v);
+}
+
+function validateShiftsHeaders_(headers) {
+  const logger = ensureModuleLoggerDefined_
+    ? ensureModuleLoggerDefined_("SHIFTS_HEADERS_VALIDATE")
+    : null;
+
+  const expected = SHIFTS_HEADERS_CANONICAL.map(normalizeShiftHeaderValue_);
+  const actual = (headers || []).map(normalizeShiftHeaderValue_);
+
+  const issues = [];
+  if (actual.length < expected.length) {
+    issues.push(
+      "Shifts sheet has fewer columns (" +
+        actual.length +
+        ") than expected (" +
+        expected.length +
+        ")"
+    );
+  }
+
+  for (let i = 0; i < expected.length; i++) {
+    const exp = expected[i];
+    const act = actual[i] || "";
+    if (exp !== act) {
+      issues.push(
+        "Mismatch at col " +
+          (i + 1) +
+          ": expected '" +
+          exp +
+          "' got '" +
+          act +
+          "'"
+      );
+    }
+  }
+
+  if (issues.length) {
+    if (logger && logger.error) {
+      logger.error({
+        layer: "shifts",
+        step: "headers.validate",
+        issues: issues.slice(0, 5),
+      });
+    } else {
+      Logger.log("[SHIFTS_HEADERS_VALIDATE] " + issues.join(" | "));
+    }
+    throw new Error("Shifts sheet headers do not match canonical schema");
+  }
+
+  return actual;
+}
+
+function buildShiftsHeaderMap_(headers) {
+  const headerMap = {};
+  const notesIdx = [];
+  const sourceIdx = [];
+
+  for (let i = 0; i < headers.length; i++) {
+    const h = normalizeShiftHeaderValue_(headers[i]);
+    if (!h) continue;
+    if (headerMap[h] === undefined) headerMap[h] = i; // zero-based index
+    if (h === "הערות") notesIdx.push(i);
+    if (h === "מקור דיווחים") sourceIdx.push(i);
+  }
+
+  headerMap.notesLegacy = notesIdx.length ? notesIdx[0] : null;
+  headerMap.notesPrimary =
+    notesIdx.length > 1 ? notesIdx[1] : headerMap.notesLegacy;
+  headerMap.sourceLegacy = sourceIdx.length ? sourceIdx[0] : null;
+  headerMap.sourcePrimary =
+    sourceIdx.length > 1 ? sourceIdx[1] : headerMap.sourceLegacy;
+  headerMap.length = SHIFTS_HEADERS_CANONICAL.length;
+
+  return headerMap;
+}
+
+function getShiftsSheetAndHeaderMap_() {
   const ss = getSpreadsheet_();
-  let sheet;
-  try {
-    sheet = getSheetOrThrow_("משמרות");
-  } catch (err) {
-    sheet = ss.insertSheet("משמרות");
-  }
+  const sheet = getSheetOrThrow_("משמרות");
 
-  const headers = [
-    "ID משמרת",
-    "מזהה עובד",
-    "שם מלא",
-    "תאריך",
-    "כניסה",
-    "יציאה",
-    "ID סוג עבודה",
-    "סוג עבודה",
-    "מחלקה",
-    "שעות",
-    "כמות יחידות",
-    "הערות",
-    "סטטוס משמרת",
-  ];
+  const maxCols = SHIFTS_HEADERS_CANONICAL.length;
+  const headersRange = sheet.getRange(1, 1, 1, maxCols);
+  const headers = headersRange.getValues()[0];
 
-  const lastCol = Math.max(sheet.getLastColumn(), headers.length);
-  const currentHeaders =
-    lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
-  const map = {};
-  for (let i = 0; i < currentHeaders.length; i++) {
-    const h = stringValue(currentHeaders[i]);
-    if (h) map[h] = i + 1;
-  }
+  const normalized = validateShiftsHeaders_(headers);
+  const headerMap = buildShiftsHeaderMap_(normalized);
 
-  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  return { sheet: sheet, headerMap: headerMap };
+}
 
-  return sheet;
+function getShiftsSheet_() {
+  const ctx = getShiftsSheetAndHeaderMap_();
+  return ctx.sheet;
 }
 
 function listShifts_(payload) {

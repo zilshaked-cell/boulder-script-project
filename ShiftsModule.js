@@ -150,10 +150,8 @@ var BONUSES = BONUSES || {};
   }
 
   function getSheet_() {
-    var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
-    if (!sh)
-      throw new Error('לא נמצאה כרטיסייה בשם "' + CONFIG.SHEET_NAME + '"');
-    return sh;
+    var ctx = getShiftsSheetAndHeaderMap_();
+    return ctx.sheet;
   }
 
   function getRawWorkLogSheet_() {
@@ -210,114 +208,19 @@ var BONUSES = BONUSES || {};
   }
 
   function ensureRequiredShiftHeaders_(sheet) {
-    var logger = getLogger_("SHIFTS_HEADERS");
-    var startMs = new Date().getTime();
-    var lastCol = sheet.getLastColumn();
-    if (lastCol < 1) lastCol = 1;
-    var headers = sheet
-      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
-      .getValues()[0];
-    var map = buildHeaderMap_(headers);
-
-    // Try to find existing headers by candidates before appending anything new.
-    var missing = [];
-    REQUIRED_SHIFT_HEADERS.forEach(function (item) {
-      var candidates = SHIFT_HEADER_CANDIDATES[item.key] || [item.header];
-      var found = candidates.some(function (c) {
-        return !!map[norm_(c)];
-      });
-      if (!found) missing.push(item.header);
-    });
-
-    // Do NOT append columns automatically. Only detect and report missing headers.
-    formatNumericColumn_(
-      sheet,
-      pickCol_(map, { candidates: SHIFT_HEADER_CANDIDATES.spanHours })
-    );
-    formatNumericColumn_(
-      sheet,
-      pickCol_(map, { candidates: SHIFT_HEADER_CANDIDATES.payHours })
-    );
-
-    if (typeof logDuration_ === "function") {
-      logDuration_(logger, "shifts.headers.ensure", startMs, {
-        existing: Object.keys(map).length,
-        missingDetected: missing.length,
-      });
-    } else if (logger && logger.info) {
-      logger.info({
-        layer: "shifts-module",
-        step: "headers.ensure",
-        details: {
-          existing: Object.keys(map).length,
-          missingDetected: missing.length,
-        },
-      });
-    }
-
-    return map;
+    void sheet;
+    var ctx = getShiftsSheetAndHeaderMap_();
+    return ctx.headerMap;
   }
 
   function getOrCreateShiftsSheet_() {
-    var logger = getLogger_("SHIFTS_HEADERS");
-    var startMs = new Date().getTime();
-    var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
-    if (!sh) {
-      sh = ss_().insertSheet(CONFIG.SHEET_NAME);
-      sh.getRange(
-        CONFIG.HEADER_ROW,
-        1,
-        1,
-        REQUIRED_SHIFT_HEADERS.length
-      ).setValues([
-        REQUIRED_SHIFT_HEADERS.map(function (h) {
-          return h.header;
-        }),
-      ]);
-      var mapNew = buildHeaderMap_(
-        REQUIRED_SHIFT_HEADERS.map(function (h) {
-          return h.header;
-        })
-      );
-      formatNumericColumn_(sh, mapNew[norm_("SpanHours")]);
-      formatNumericColumn_(sh, mapNew[norm_("PayHours")]);
-      if (typeof logDuration_ === "function") {
-        logDuration_(logger, "shifts.sheet.create", startMs, {
-          headers: REQUIRED_SHIFT_HEADERS.length,
-        });
-      }
-      return sh;
-    }
-
-    ensureRequiredShiftHeaders_(sh);
-    if (typeof logDuration_ === "function") {
-      logDuration_(logger, "shifts.sheet.exists", startMs, {});
-    }
-    return sh;
+    var ctx = getShiftsSheetAndHeaderMap_();
+    return ctx.sheet;
   }
 
   function getShiftsHeaderMap_() {
-    var logger = getLogger_("SHIFTS_HEADERS");
-    var startMs = new Date().getTime();
-    var sh = getOrCreateShiftsSheet_();
-    var lastCol = sh.getLastColumn();
-    if (lastCol < 1) lastCol = 1;
-    var headers = sh.getRange(CONFIG.HEADER_ROW, 1, 1, lastCol).getValues()[0];
-    var map = buildHeaderMap_(headers);
-
-    var logical = {};
-    REQUIRED_SHIFT_HEADERS.forEach(function (item) {
-      var candidates = SHIFT_HEADER_CANDIDATES[item.key] || [item.header];
-      logical[item.key] = pickCol_(map, { candidates: candidates });
-    });
-
-    if (typeof logDuration_ === "function") {
-      logDuration_(logger, "shifts.headers.map", startMs, {
-        mapped: Object.keys(logical).length,
-      });
-    }
-
-    return logical;
+    var ctx = getShiftsSheetAndHeaderMap_();
+    return ctx.headerMap;
   }
 
   function normalizeDirection_(raw) {
@@ -461,70 +364,30 @@ var BONUSES = BONUSES || {};
   }
 
   function ensureSpanAndPayFormats_(sheet, headerMap) {
-    var spanCol = headerMap[norm_("SpanHours")];
-    var payCol = headerMap[norm_("PayHours")];
+    var spanCol = headerMap["שעות"];
+    var payCol = headerMap["שעות לשכר"];
     var rows = Math.max(1, sheet.getMaxRows() - CONFIG.HEADER_ROW);
-    if (spanCol)
+    if (spanCol !== undefined && spanCol !== null)
       sheet
-        .getRange(CONFIG.HEADER_ROW + 1, spanCol, rows, 1)
+        .getRange(CONFIG.HEADER_ROW + 1, spanCol + 1, rows, 1)
         .setNumberFormat("0.00");
-    if (payCol)
+    if (payCol !== undefined && payCol !== null)
       sheet
-        .getRange(CONFIG.HEADER_ROW + 1, payCol, rows, 1)
+        .getRange(CONFIG.HEADER_ROW + 1, payCol + 1, rows, 1)
         .setNumberFormat("0.00");
   }
 
   function getOrCreateShiftsSheet_() {
-    var logger = getLogger_("SHIFTS_HEADERS");
-    var startMs = new Date().getTime();
-    var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
-    if (!sh) {
-      sh = ss_().insertSheet(CONFIG.SHEET_NAME);
-      var headers = REQUIRED_SHIFT_HEADERS.map(function (h) {
-        return h.header;
-      });
-      sh.getRange(CONFIG.HEADER_ROW, 1, 1, headers.length).setValues([headers]);
-      var headerMapNew = buildHeaderMap_(headers);
-      ensureSpanAndPayFormats_(sh, headerMapNew);
-      if (typeof logDuration_ === "function") {
-        logDuration_(logger, "shifts.sheet.create", startMs, {
-          headers: headers.length,
-        });
-      }
-      return sh;
-    }
-
-    var map = ensureRequiredShiftHeaders_(sh);
+    var ctx = getShiftsSheetAndHeaderMap_();
+    var sh = ctx.sheet;
+    var map = ctx.headerMap;
     ensureSpanAndPayFormats_(sh, map);
-    if (typeof logDuration_ === "function") {
-      logDuration_(logger, "shifts.sheet.ensureHeaders", startMs, {
-        totalHeaders: Object.keys(map).length,
-      });
-    }
     return sh;
   }
 
   function getShiftsHeaderMap_() {
-    var logger = getLogger_("SHIFTS_HEADERS");
-    var startMs = new Date().getTime();
-    var sh = getOrCreateShiftsSheet_();
-    var lastCol = Math.max(1, sh.getLastColumn());
-    var headers = sh.getRange(CONFIG.HEADER_ROW, 1, 1, lastCol).getValues()[0];
-    var map = buildHeaderMap_(headers);
-    var logicalMap = {};
-
-    REQUIRED_SHIFT_HEADERS.forEach(function (item) {
-      var candidates = SHIFT_HEADER_CANDIDATES[item.key] || [item.header];
-      logicalMap[item.key] = pickCol_(map, { candidates: candidates });
-    });
-
-    if (typeof logDuration_ === "function") {
-      logDuration_(logger, "shifts.headers.map", startMs, {
-        mapped: Object.keys(logicalMap).length,
-      });
-    }
-
-    return logicalMap;
+    var ctx = getShiftsSheetAndHeaderMap_();
+    return ctx.headerMap;
   }
 
   function norm_(v) {
@@ -992,31 +855,34 @@ var BONUSES = BONUSES || {};
     var jobIdNorm = normalizeId_(jobTypeId);
     var fromD = toDateOnly_(fromDate);
     var toD = toDateOnly_(toDate);
-
-    var sheet = getOrCreateShiftsSheet_();
-    var headerMap = getShiftsHeaderMap_();
+    var ctx = getShiftsSheetAndHeaderMap_();
+    var sheet = ctx.sheet;
+    var headerMap = ctx.headerMap;
     var headerRow = CONFIG.HEADER_ROW || 1;
     var lastRow = sheet.getLastRow();
-    var lastCol = sheet.getLastColumn();
+    var lastCol = headerMap.length;
+
+    var empCol = headerMap["מזהה עובד"];
+    var jobCol = headerMap["ID סוג עבודה"];
+    var dateCol = headerMap["תאריך משמרת"];
+    if (empCol === undefined || jobCol === undefined || dateCol === undefined) {
+      throw new Error("Shifts header map missing required columns");
+    }
 
     if (lastRow > headerRow) {
       var data = sheet
         .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
         .getValues();
       var rowsToDelete = [];
-      var empCol = headerMap.employeeId;
-      var jobCol = headerMap.jobTypeId;
-      var dateCol = headerMap.shiftDate;
 
       for (var i = 0; i < data.length; i++) {
         var row = data[i];
-        if (!empCol || !jobCol || !dateCol) break;
-        var rEmp = normalizeId_(row[empCol - 1]);
-        var rJob = normalizeId_(row[jobCol - 1]);
+        var rEmp = normalizeId_(row[empCol]);
+        var rJob = normalizeId_(row[jobCol]);
         if (rEmp !== empIdNorm) continue;
         if (rJob !== jobIdNorm) continue;
 
-        var rDate = toDateOnly_(row[dateCol - 1]);
+        var rDate = toDateOnly_(row[dateCol]);
         if (!rDate) continue;
         if (fromD && rDate.getTime() < fromD.getTime()) continue;
         if (toD && rDate.getTime() > toD.getTime()) continue;
@@ -1049,54 +915,59 @@ var BONUSES = BONUSES || {};
     );
     if (!shifts || !shifts.length) return;
 
-    sheet = getOrCreateShiftsSheet_();
-    headerMap = getShiftsHeaderMap_();
-    lastCol = sheet.getLastColumn();
-
     var startRow = sheet.getLastRow() + 1;
     var values = [];
     for (var j = 0; j < shifts.length; j++) {
-      values[j] = new Array(lastCol);
-      for (var c = 0; c < lastCol; c++) values[j][c] = "";
+      values[j] = new Array(lastCol).fill("");
     }
 
-    function set_(rowIdx, key, val) {
-      var col = headerMap[key];
-      if (!col) return;
-      values[rowIdx][col - 1] = val;
+    function setByHeader_(rowArr, headerName, val) {
+      var colIdx = headerMap[headerName];
+      if (colIdx === undefined || colIdx === null) return;
+      rowArr[colIdx] = val;
     }
 
     for (var s = 0; s < shifts.length; s++) {
       var shObj = shifts[s];
       var translated = translateShiftStatusAndNote_(shObj.status, shObj.note);
-      set_(s, "shiftId", shObj.shiftId || "");
-      set_(s, "employeeId", shObj.employeeId || "");
-      set_(s, "employeeName", shObj.employeeName || "");
-      set_(s, "jobTypeId", shObj.jobTypeId || "");
-      set_(s, "jobTypeName", shObj.jobTypeName || "");
-      set_(s, "department", shObj.department || "");
+      var rowArr = values[s];
+
+      setByHeader_(rowArr, "ID משמרת", shObj.shiftId || "");
+      setByHeader_(rowArr, "מזהה עובד", shObj.employeeId || "");
+      setByHeader_(rowArr, "שם מלא", shObj.employeeName || "");
+      setByHeader_(rowArr, "ID סוג עבודה", shObj.jobTypeId || "");
+      setByHeader_(rowArr, "סוג עבודה", shObj.jobTypeName || "");
+      setByHeader_(rowArr, "מחלקה", shObj.department || "");
 
       var sd = shObj.shiftDate
         ? toDateOnly_(shObj.shiftDate)
         : toDateOnly_(shObj.startDateTime);
-      set_(s, "shiftDate", sd);
+      setByHeader_(rowArr, "תאריך משמרת", sd);
 
       var st = shObj.startDateTime instanceof Date ? shObj.startDateTime : null;
       var et = shObj.endDateTime instanceof Date ? shObj.endDateTime : null;
-      set_(s, "startTime", st);
-      set_(s, "endTime", et);
-      set_(s, "startDateTime", st);
-      set_(s, "endDateTime", et);
+      setByHeader_(rowArr, "שעת התחלה", st);
+      setByHeader_(rowArr, "שעת סיום", et);
 
-      set_(s, "spanHours", shObj.spanHours || 0);
-      set_(s, "payHours", shObj.payHours || shObj.spanHours || 0);
-      set_(s, "status", translated.statusDisplay || "");
-      set_(s, "note", translated.noteDisplay || "");
-      set_(s, "sourceReportIds", shObj.sourceReportIds || "");
+      setByHeader_(rowArr, "שעות", shObj.spanHours || 0);
+      setByHeader_(rowArr, "שעות לשכר", shObj.payHours || shObj.spanHours || 0);
+      setByHeader_(rowArr, "כמות יחידות", shObj.units);
+      setByHeader_(rowArr, "סטטוס משמרת", translated.statusDisplay || "");
+
+      if (headerMap.notesPrimary !== undefined && headerMap.notesPrimary !== null) {
+        rowArr[headerMap.notesPrimary] = translated.noteDisplay || "";
+      }
+      if (
+        headerMap.sourcePrimary !== undefined &&
+        headerMap.sourcePrimary !== null
+      ) {
+        rowArr[headerMap.sourcePrimary] = shObj.sourceReportIds || "";
+      }
     }
 
     if (values.length) {
       sheet.getRange(startRow, 1, values.length, lastCol).setValues(values);
+      ensureSpanAndPayFormats_(sheet, headerMap);
       if (typeof logDuration_ === "function") {
         logDuration_(logger, "shifts.upsert.write", startMs, {
           written: values.length,
@@ -1479,117 +1350,79 @@ var BONUSES = BONUSES || {};
     }
 
     try {
-      var sheet = getSheet_();
-      var layoutInfo = getLayout_(sheet);
+      var ctx = getShiftsSheetAndHeaderMap_();
+      var sheet = ctx.sheet;
+      var headerMap = ctx.headerMap;
 
-      ensureColumnsForWrite_(
-        sheet,
-        layoutInfo.map,
-        [
-          "bonusIds",
-          "manualEdited",
-          "manualNote",
-          "lastUpdatedBySidebar",
-          "lastUpdatedAt",
-        ],
-        WRITE_ALLOWED_COLS
+      var shiftIdCol = headerMap["ID משמרת"];
+      if (shiftIdCol === undefined || shiftIdCol === null) {
+        return { ok: false, error: "ShiftId column missing" };
+      }
+
+      var headerRow = CONFIG.HEADER_ROW || 1;
+      var lastRow = sheet.getLastRow();
+      if (lastRow <= headerRow) {
+        return { ok: false, error: "No shift rows found" };
+      }
+
+      var colRange = sheet.getRange(
+        headerRow + 1,
+        shiftIdCol + 1,
+        lastRow - headerRow,
+        1
       );
+      var colValues = colRange.getValues();
+      var rowIndex = null;
+      for (var i = 0; i < colValues.length; i++) {
+        if (stringValue(colValues[i][0]) === stringValue(payload.shiftId)) {
+          rowIndex = headerRow + 1 + i;
+          break;
+        }
+      }
 
-      layoutInfo = getLayout_(sheet);
-      var layout = layoutInfo.layout;
-
-      var rowIndex = findRowByShiftId_(sheet, layout, payload.shiftId);
       if (!rowIndex)
         return {
           ok: false,
           error: "Shift not found for shiftId=" + payload.shiftId,
         };
 
-      if (
-        payload.status !== undefined &&
-        layout.status &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.status)
-      ) {
-        sheet.getRange(rowIndex, layout.status).setValue(payload.status);
-      }
-      if (
-        payload.workType !== undefined &&
-        layout.jobName &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.jobName)
-      ) {
-        sheet.getRange(rowIndex, layout.jobName).setValue(payload.workType);
-      }
-      if (
-        payload.workTypeId !== undefined &&
-        layout.jobId &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.jobId)
-      ) {
-        sheet.getRange(rowIndex, layout.jobId).setValue(payload.workTypeId);
-      }
-      if (
-        payload.department !== undefined &&
-        layout.department &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.department)
-      ) {
-        sheet
-          .getRange(rowIndex, layout.department)
-          .setValue(payload.department);
-      }
-      if (
-        payload.date !== undefined &&
-        layout.workDate &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.workDate)
-      ) {
-        sheet
-          .getRange(rowIndex, layout.workDate)
-          .setValue(toIsoDate_(payload.date));
-      }
-      if (
-        payload.startTime !== undefined &&
-        layout.startTime &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.startTime)
-      ) {
-        sheet
-          .getRange(rowIndex, layout.startTime)
-          .setValue(toTimeStr_(payload.startTime));
-      }
-      if (
-        payload.endTime !== undefined &&
-        layout.endTime &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.endTime)
-      ) {
-        sheet
-          .getRange(rowIndex, layout.endTime)
-          .setValue(toTimeStr_(payload.endTime));
-      }
-      if (
-        payload.bonusIds !== undefined &&
-        layout.bonusIds &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.bonusIds)
-      ) {
-        var ids = splitBonusIds_(payload.bonusIds);
-        sheet
-          .getRange(rowIndex, layout.bonusIds)
-          .setValue(ids.join(CONFIG.BONUS_SEPARATOR));
-      }
-      if (
-        payload.manualNote !== undefined &&
-        layout.manualNote &&
-        hasHeader_(layoutInfo.map, CONFIG.COLS.manualNote)
-      ) {
-        sheet
-          .getRange(rowIndex, layout.manualNote)
-          .setValue(payload.manualNote);
+      function setByHeader_(headerName, value) {
+        var idx = headerMap[headerName];
+        if (idx === undefined || idx === null) return;
+        sheet.getRange(rowIndex, idx + 1).setValue(value);
       }
 
-      if (layout.manualEdited)
-        sheet.getRange(rowIndex, layout.manualEdited).setValue(true);
-      if (layout.lastUpdatedBySidebar)
-        sheet
-          .getRange(rowIndex, layout.lastUpdatedBySidebar)
-          .setValue(Session.getActiveUser().getEmail() || "sidebar");
-      if (layout.lastUpdatedAt)
-        sheet.getRange(rowIndex, layout.lastUpdatedAt).setValue(new Date());
+      if (payload.status !== undefined) {
+        setByHeader_("סטטוס משמרת", payload.status);
+      }
+      if (payload.workType !== undefined) {
+        setByHeader_("סוג עבודה", payload.workType);
+      }
+      if (payload.workTypeId !== undefined) {
+        setByHeader_("ID סוג עבודה", payload.workTypeId);
+      }
+      if (payload.department !== undefined) {
+        setByHeader_("מחלקה", payload.department);
+      }
+      if (payload.date !== undefined) {
+        setByHeader_("תאריך משמרת", toIsoDate_(payload.date));
+      }
+      if (payload.startTime !== undefined) {
+        setByHeader_("שעת התחלה", toTimeStr_(payload.startTime));
+      }
+      if (payload.endTime !== undefined) {
+        setByHeader_("שעת סיום", toTimeStr_(payload.endTime));
+      }
+      if (payload.manualNote !== undefined) {
+        if (
+          headerMap.notesPrimary !== undefined &&
+          headerMap.notesPrimary !== null
+        ) {
+          sheet
+            .getRange(rowIndex, headerMap.notesPrimary + 1)
+            .setValue(payload.manualNote);
+        }
+      }
 
       var updated = get_(payload.shiftId);
       if (updated && updated.ok) return updated;

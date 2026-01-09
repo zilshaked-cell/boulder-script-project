@@ -413,26 +413,35 @@ function buildAggregatedShifts_(logs) {
 }
 
 function buildShiftRows_(shifts, headerMap) {
-  const sheet = getShiftsSheet_();
-  const map = headerMap || getHeaderMap_(sheet);
+  const map = headerMap || {};
   return shifts.map(function (shift) {
     const workDate = isoToDate_(shift.workDateIso);
     const translated = translateShiftStatusAndNote_(shift.status, shift.note);
-    return buildRowFromHeaders_(map, {
-      shiftId: shift.shiftId,
-      employeeId: shift.employeeId,
-      employeeName: shift.employeeName,
-      workDate: workDate,
-      startTime: shift.startTime || "",
-      endTime: shift.endTime || "",
-      jobTypeId: shift.jobTypeId,
-      jobName: shift.jobName,
-      department: shift.department,
-      hoursDecimal: shift.hoursDecimal === "" ? "" : Number(shift.hoursDecimal),
-      units: shift.units,
-      status: translated.statusDisplay,
-      note: translated.noteDisplay,
-    });
+
+    const row = new Array(SHIFTS_HEADERS_CANONICAL.length).fill("");
+    row[map["ID משמרת"]] = shift.shiftId;
+    row[map["מזהה עובד"]] = shift.employeeId;
+    row[map["שם מלא"]] = shift.employeeName;
+    row[map["תאריך משמרת"]] = workDate;
+    row[map["שעת התחלה"]] = shift.startTime || "";
+    row[map["שעת סיום"]] = shift.endTime || "";
+    row[map["ID סוג עבודה"]] = shift.jobTypeId;
+    row[map["סוג עבודה"]] = shift.jobName;
+    row[map["מחלקה"]] = shift.department;
+    row[map["שעות"]] = shift.hoursDecimal === "" ? "" : Number(shift.hoursDecimal);
+    row[map["שעות לשכר"]] = shift.payHours === "" ? "" : Number(shift.payHours);
+    row[map["כמות יחידות"]] = shift.units;
+    row[map["סטטוס משמרת"]] = translated.statusDisplay;
+
+    // Prefer primary duplicates for writes; leave legacy columns empty to avoid ambiguity.
+    if (map.notesPrimary !== undefined && map.notesPrimary !== null) {
+      row[map.notesPrimary] = translated.noteDisplay;
+    }
+    if (map.sourcePrimary !== undefined && map.sourcePrimary !== null) {
+      row[map.sourcePrimary] = shift.rawLogIds || "";
+    }
+
+    return row;
   });
 }
 
@@ -466,18 +475,14 @@ function rebuildShiftsForRange_(opts) {
   const lockActive = today.getDate() >= 9;
   const lockedCutoffIso = lockActive ? toIsoDate_(currentMonthStart) : "";
 
-  const sheet = getShiftsSheet_();
-  const headerMap = getHeaderMap_(sheet);
-  const sheetName = sheet.getName();
-  const workDateCol = getRequiredColumn_(headerMap, ["תאריך"], sheetName);
-  const employeeCol = getRequiredColumn_(
-    headerMap,
-    ["מזהה עובד", "ID עובד"],
-    sheetName
-  );
-  const startCol = getRequiredColumn_(headerMap, ["כניסה"], sheetName);
-  const endCol = getRequiredColumn_(headerMap, ["יציאה"], sheetName);
-  const hoursCol = getRequiredColumn_(headerMap, ["שעות"], sheetName);
+  const ctx = getShiftsSheetAndHeaderMap_();
+  const sheet = ctx.sheet;
+  const headerMap = ctx.headerMap;
+  const workDateCol = headerMap["תאריך משמרת"];
+  const employeeCol = headerMap["מזהה עובד"];
+  const startCol = headerMap["שעת התחלה"];
+  const endCol = headerMap["שעת סיום"];
+  const hoursCol = headerMap["שעות"];
 
   const shifts = buildAggregatedShifts_(readWorkLogsForRange_(filters));
   const rows = buildShiftRows_(shifts, headerMap);
@@ -487,13 +492,13 @@ function rebuildShiftsForRange_(opts) {
     const data = sheet.getDataRange().getValues();
     const toDelete = [];
     for (let i = 1; i < data.length; i++) {
-      const rowDate = toIsoDate_(data[i][workDateCol - 1]);
+      const rowDate = toIsoDate_(data[i][workDateCol]);
       if (!rowDate) continue;
       if (lockedCutoffIso && rowDate < lockedCutoffIso) continue; // locked past period
       if (rowDate < dateFrom || rowDate > dateTo) continue;
       if (
         employeeFilter &&
-        stringValue(data[i][employeeCol - 1]) !== employeeFilter
+        stringValue(data[i][employeeCol]) !== employeeFilter
       )
         continue;
       toDelete.push(i + 1);
@@ -526,8 +531,14 @@ function rebuildShiftsForRange_(opts) {
     .getRange(startRow, 1, writableRows.length, writableRows[0].length)
     .setValues(writableRows);
   sheet
-    .getRange(startRow, hoursCol, writableRows.length, 1)
+    .getRange(startRow, hoursCol + 1, writableRows.length, 1)
     .setNumberFormat("0.00");
+  const payCol = headerMap["שעות לשכר"];
+  if (payCol !== undefined && payCol !== null) {
+    sheet
+      .getRange(startRow, payCol + 1, writableRows.length, 1)
+      .setNumberFormat("0.00");
+  }
 
   const startBg = [];
   const endBg = [];
@@ -553,8 +564,12 @@ function rebuildShiftsForRange_(opts) {
     endBg.push([endColor]);
   }
 
-  sheet.getRange(startRow, startCol, startBg.length, 1).setBackgrounds(startBg);
-  sheet.getRange(startRow, endCol, endBg.length, 1).setBackgrounds(endBg);
+  sheet
+    .getRange(startRow, startCol + 1, startBg.length, 1)
+    .setBackgrounds(startBg);
+  sheet
+    .getRange(startRow, endCol + 1, endBg.length, 1)
+    .setBackgrounds(endBg);
 
   return {
     ok: true,
