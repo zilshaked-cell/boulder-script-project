@@ -6,7 +6,6 @@
  */
 
 const EMPLOYEE_SHEET_NAME = "פרטי עובדים";
-const EMPLOYEE_HEADER_ROW = 1;
 
 function handleGetEmployees(params) {
   params = params || {};
