@@ -940,7 +940,15 @@ var EMP = EMP || {};
       email: "מייל",
       shirtSize: "מידת חולצה",
       travelCost: "עלות החזרי נסיעות יומי",
+      systemRole: "System Role",
     };
+
+    function normalizeSystemRole(val) {
+      var v = (val || "").toString().trim().toLowerCase();
+      if (v === "admin" || v === "administrator") return "admin";
+      if (v === "employee" || v === "user") return "employee";
+      return "";
+    }
 
     var colEmpId = colIndexByHeader_(headers, "ID עובד") || CONFIG.COL.ID;
     if (!colEmpId) return;
@@ -1042,7 +1050,15 @@ var EMP = EMP || {};
       email: "מייל",
       shirtSize: "מידת חולצה",
       travelCost: "עלות החזרי נסיעות יומי",
+      systemRole: "System Role",
     };
+
+    function normalizeSystemRole(val) {
+      var v = (val || "").toString().trim().toLowerCase();
+      if (v === "admin" || v === "administrator") return "admin";
+      if (v === "employee" || v === "user") return "employee";
+      return "";
+    }
 
     var targetHeader = fieldHeaderMap[fieldKey];
     if (!targetHeader) {
@@ -1076,6 +1092,9 @@ var EMP = EMP || {};
 
       var oldVal = data[i][targetCol - 1];
       var newVal = value === undefined ? "" : value;
+      if (fieldKey === "systemRole") {
+        newVal = normalizeSystemRole(newVal);
+      }
       if (String(oldVal || "") === String(newVal || "")) continue;
 
       logEmployeeChange_(
