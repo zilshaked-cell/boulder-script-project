@@ -4,22 +4,24 @@ var SHIFTS = SHIFTS || {};
 var BONUSES = BONUSES || {};
 
 (function () {
-  function ss_() {
-    return SpreadsheetApp.getActiveSpreadsheet();
-  }
-
   // Local configuration for the Shifts module.
   // This does NOT affect other modules' CONFIG objects.
   var CONFIG = {
-    SHEET_NAME: "משמרות",
-    HEADER_ROW: 1,
+    SHEET_NAME:
+      typeof SHIFTS_SHEET_NAME !== "undefined" ? SHIFTS_SHEET_NAME : "משמרות",
+    HEADER_ROW: (typeof OPT !== "undefined" && OPT.shiftsHeaderRow) || 1,
   };
 
   // Local Work Logs sheet name for this module.
   // Prefer the shared constant if it exists, fallback to the literal name.
   var RAW_WORK_LOG_SHEET_NAME =
-    (typeof WORK_LOGS_SHEET_NAME !== "undefined" && WORK_LOGS_SHEET_NAME) ||
-    "דיווח שעות עבודה";
+    typeof WORK_LOGS_SHEET_NAME !== "undefined"
+      ? WORK_LOGS_SHEET_NAME
+      : "דיווח שעות עבודה";
+
+  function ss_() {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
 
   function getSheet_() {
     var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
@@ -92,7 +94,7 @@ var BONUSES = BONUSES || {};
     var d = normKey_(raw);
     if (d === "in" || d === "כניסה" || d === "כניסה / יציאה") return "IN";
     if (d === "out" || d === "יציאה") return "OUT";
-    return d ? d.toUpperCase() : "";
+    return d ? "UNKNOWN" : "";
   }
 
   function buildWorkLogLayout_() {
@@ -707,8 +709,8 @@ var BONUSES = BONUSES || {};
     function pushShift_(opts) {
       var startDt = opts.startDateTime;
       var endDt = opts.endDateTime;
-      var spanHours = computeHoursDiff_(startDt, endDt);
-      var payHours = spanHours;
+      var spanHours = "";
+      var payHours = "";
       var note = opts.note || "";
       var status = opts.status || "OK";
 
@@ -735,6 +737,24 @@ var BONUSES = BONUSES || {};
 
     for (var i = 0; i < events.length; i++) {
       var ev = events[i];
+
+      if (ev.direction === "UNKNOWN") {
+        // create a single CONFLICT shift for this log
+        pushShift_({
+          shiftId: ev.reportId || "",
+          employeeId: ev.employeeId,
+          employeeName: ev.employeeName,
+          jobTypeId: ev.jobTypeId,
+          jobTypeName: ev.jobTypeName,
+          department: ev.department,
+          startDateTime: ev.workDateTime,
+          endDateTime: null,
+          status: "CONFLICT",
+          note: appendNote_("", "Unknown direction"),
+          sourceReportIds: [ev.reportId],
+        });
+        continue;
+      }
 
       if (ev.direction === "IN") {
         if (!openIn) {
@@ -862,6 +882,18 @@ var BONUSES = BONUSES || {};
       }
     }
 
+    for (var m = 0; m < shifts.length; m++) {
+      var shift = shifts[m];
+      if (!shift.startDateTime || !shift.endDateTime) {
+        shift.spanHours = "";
+        shift.payHours = "";
+        continue;
+      }
+      var diffHours = computeHoursDiff_(shift.startDateTime, shift.endDateTime);
+      shift.spanHours = diffHours;
+      shift.payHours = shift.status === "OK" ? diffHours : "";
+    }
+
     return shifts;
   }
 
@@ -970,8 +1002,17 @@ var BONUSES = BONUSES || {};
       setByHeader_(rowArr, "שעת התחלה", st);
       setByHeader_(rowArr, "שעת סיום", et);
 
-      setByHeader_(rowArr, "שעות", shObj.spanHours || 0);
-      setByHeader_(rowArr, "שעות לשכר", shObj.payHours || shObj.spanHours || 0);
+      var spanVal =
+        shObj.spanHours === undefined || shObj.spanHours === null
+          ? ""
+          : shObj.spanHours;
+      var payVal =
+        shObj.payHours === undefined || shObj.payHours === null
+          ? ""
+          : shObj.payHours;
+
+      setByHeader_(rowArr, "שעות", spanVal === "" ? "" : spanVal);
+      setByHeader_(rowArr, "שעות לשכר", payVal === "" ? "" : payVal);
       setByHeader_(rowArr, "כמות יחידות", shObj.units);
       setByHeader_(rowArr, "סטטוס משמרת", translated.statusDisplay || "");
 
