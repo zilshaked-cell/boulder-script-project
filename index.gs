@@ -2545,6 +2545,7 @@ function handleEmployeeSave_(payload) {
   return { ok: true, status: "updated", employee: response };
 }
 
+// Returns employee match by email with normalized systemRole for auth.
 function employeeExistsByEmail_(payload) {
   const email = stringValue(
     payload && (payload.email || payload.mail)
@@ -2621,6 +2622,24 @@ function employeeExistsByEmail_(payload) {
     "סוגי עבודה",
   ]);
   const colNotes = getOptionalColumn_(headerMap, ["הערות", "notes"]);
+  const colSystemRole = getOptionalColumn_(headerMap, [
+    "System Role",
+    "system role",
+    "Role",
+    "Admin Role",
+  ]);
+
+  function normalizeSystemRole_(raw) {
+    const val = stringValue(raw).toUpperCase();
+    if (!val) return "EMPLOYEE";
+    if (val === "NONE") return "NONE";
+    if (val.indexOf("ADMIN") !== -1) return "ADMIN";
+    if (val.indexOf("SHIFT") !== -1 || val.indexOf("MANAGER") !== -1)
+      return "SHIFT_MANAGER";
+    if (val.indexOf("VIEW") !== -1) return "VIEWER";
+    if (val === "EMPLOYEE") return "EMPLOYEE";
+    return "EMPLOYEE";
+  }
 
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
@@ -2661,6 +2680,8 @@ function employeeExistsByEmail_(payload) {
       employee.jobTitle = jobName;
     }
     if (colNotes) employee.notes = stringValue(row[colNotes - 1]);
+    const systemRoleRaw = colSystemRole ? row[colSystemRole - 1] : "";
+    employee.systemRole = normalizeSystemRole_(systemRoleRaw);
 
     return {
       ok: true,
