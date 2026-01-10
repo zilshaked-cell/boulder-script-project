@@ -8,6 +8,19 @@ var BONUSES = BONUSES || {};
     return SpreadsheetApp.getActiveSpreadsheet();
   }
 
+  // Local configuration for the Shifts module.
+  // This does NOT affect other modules' CONFIG objects.
+  var CONFIG = {
+    SHEET_NAME: "משמרות",
+    HEADER_ROW: 1,
+  };
+
+  // Local Work Logs sheet name for this module.
+  // Prefer the shared constant if it exists, fallback to the literal name.
+  var RAW_WORK_LOG_SHEET_NAME =
+    (typeof WORK_LOGS_SHEET_NAME !== "undefined" && WORK_LOGS_SHEET_NAME) ||
+    "דיווח שעות עבודה";
+
   function getSheet_() {
     var sh = ss_().getSheetByName(CONFIG.SHEET_NAME);
     if (!sh)
