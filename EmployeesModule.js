@@ -1290,6 +1290,27 @@ var EMP = EMP || {};
     var colsResult = EMP_getEmployeeColumns_();
     if (!colsResult || !colsResult.ok) return;
     var jobTypeNameCol = colsResult.cols.jobTypeNameCol;
+
+    // אם עודכן System Role בשורה – מיישרים לכל השורות של העובד
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, sheet.getLastColumn())
+      .getValues()[0];
+    var colSystemRole = colIndexByHeader_(headers, "System Role") || 0;
+    var touchesSystemRole =
+      colSystemRole && startCol <= colSystemRole && colSystemRole <= endCol;
+    if (touchesSystemRole) {
+      var firstRow = range.getRow();
+      var numRows = range.getNumRows();
+      for (var r = 0; r < numRows; r++) {
+        var rowIndex = firstRow + r;
+        if (rowIndex <= CONFIG.HEADER_ROW) continue;
+        var empIdVal = sheet.getRange(rowIndex, CONFIG.COL.ID).getValue();
+        if (!empIdVal) continue;
+        var roleVal = sheet.getRange(rowIndex, colSystemRole).getValue();
+        applyPersonalFieldChoice_(String(empIdVal), "systemRole", roleVal);
+      }
+    }
+
     if (!jobTypeNameCol) return;
 
     var touchesJobTypeName =
