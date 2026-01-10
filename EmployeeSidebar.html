@@ -2023,9 +2023,12 @@
         if (!norm) return null;
         var parts = norm.split(/[\/\.\-]/);
         if (parts.length !== 3) return null;
-        var dd = parts[0];
-        var mm = parts[1];
-        var yyyy = parts[2];
+        var dd = (parts[0] || "").trim();
+        var mm = (parts[1] || "").trim();
+        var yyyyRaw = (parts[2] || "").trim();
+        // תופס רק את ארבע הספרות הראשונות של השנה למקרה שיש זמן בצד
+        var matchYear = yyyyRaw.match(/\d{4}/);
+        var yyyy = matchYear ? matchYear[0] : "";
         if (!dd || !mm || !yyyy) return null;
         return { day: dd, month: mm, year: yyyy, display: dd + "/" + mm };
       }
