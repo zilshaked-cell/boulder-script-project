@@ -33,6 +33,36 @@
         background: var(--color-page-bg);
         color: var(--color-text-primary);
         -webkit-font-smoothing: antialiased;
+
+          <div id="birthyear-overlay" class="birthyear-overlay hidden">
+            <div class="birthyear-modal">
+              <div class="birthyear-title">הזמן שנת לידה</div>
+              <div class="birthyear-sub">
+                שנה חסרה – השארנו עבורך את היום והחודש שמילאת.
+              </div>
+              <div class="birthyear-row">
+                <div id="birthyear-daymonth" class="birthyear-pill">--/--</div>
+                <input
+                  id="birthyear-year-input"
+                  class="birthyear-input"
+                  type="number"
+                  inputmode="numeric"
+                  placeholder="הקלד שנת לידה"
+                  min="1901"
+                  max="2100"
+                />
+              </div>
+              <div class="birthyear-actions">
+                <button
+                  id="birthyear-submit"
+                  type="button"
+                  class="btn-secondary"
+                >
+                  לא עכשיו
+                </button>
+              </div>
+            </div>
+          </div>
         line-height: 1.6;
       }
 
@@ -1043,6 +1073,70 @@
         border-top-color: var(--color-accent-strong);
         animation: spin 1s linear infinite;
       }
+
+      /* בקשת שנת לידה */
+      .birthyear-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(2px);
+      }
+      .birthyear-overlay.hidden {
+        display: none;
+      }
+      .birthyear-modal {
+        width: 320px;
+        background: #0f172a;
+        border: 1px solid var(--color-border-strong);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-strong);
+        padding: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .birthyear-title {
+        font-weight: 800;
+        font-size: 16px;
+        color: var(--color-text-primary);
+      }
+      .birthyear-sub {
+        font-size: 13px;
+        color: var(--color-text-muted);
+      }
+      .birthyear-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .birthyear-pill {
+        padding: 6px 10px;
+        border-radius: var(--radius-pill);
+        background: var(--color-surface-highlight);
+        border: 1px solid var(--color-border-strong);
+        font-weight: 700;
+        color: var(--color-text-primary);
+        min-width: 96px;
+        text-align: center;
+      }
+      .birthyear-input {
+        flex: 1;
+        background: var(--color-surface-2);
+        border: 1px solid var(--color-border-strong);
+        color: var(--color-text-primary);
+        border-radius: var(--radius-md);
+        padding: 8px 10px;
+        font-size: 13px;
+      }
+      .birthyear-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
       .loader-text {
         color: var(--color-text-primary);
         font-weight: 700;
@@ -1921,6 +2015,116 @@
         return str;
       }
 
+      // ---- Birthyear prompt helpers ----
+      var birthYearState = { day: "", month: "" };
+
+      function parseBirthdateParts(val) {
+        var norm = toDateInputValue(val);
+        if (!norm) return null;
+        var parts = norm.split(/[\/\.\-]/);
+        if (parts.length !== 3) return null;
+        var dd = parts[0];
+        var mm = parts[1];
+        var yyyy = parts[2];
+        if (!dd || !mm || !yyyy) return null;
+        return { day: dd, month: mm, year: yyyy, display: dd + "/" + mm };
+      }
+
+      function isValidBirthYear(val) {
+        var str = (val || "").trim();
+        if (!/^\d{4}$/.test(str)) return false;
+        var num = Number(str);
+        var currentYear = new Date().getFullYear();
+        return num >= 1901 && num <= currentYear + 1;
+      }
+
+      function closeBirthYearModal() {
+        var overlay = $("birthyear-overlay");
+        if (overlay) overlay.classList.add("hidden");
+      }
+
+      function updateBirthYearSubmitState() {
+        var btn = $("birthyear-submit");
+        var input = $("birthyear-year-input");
+        if (!btn || !input) return;
+        var val = input.value || "";
+        var valid = isValidBirthYear(val);
+        btn.textContent = valid ? "עדכן שנת לידה" : "לא עכשיו";
+        btn.classList.toggle("btn-primary", valid);
+        btn.classList.toggle("btn-secondary", !valid);
+        btn.classList.toggle("btn-disabled", false);
+        btn.disabled = false;
+      }
+
+      function openBirthYearModal(day, month) {
+        birthYearState.day = day || "";
+        birthYearState.month = month || "";
+        var overlay = $("birthyear-overlay");
+        var pill = $("birthyear-daymonth");
+        var input = $("birthyear-year-input");
+        if (pill) pill.textContent = (day || "--") + "/" + (month || "--");
+        if (input) {
+          input.value = "";
+          input.focus();
+        }
+        updateBirthYearSubmitState();
+        if (overlay) overlay.classList.remove("hidden");
+      }
+
+      function submitBirthYearUpdate() {
+        var input = $("birthyear-year-input");
+        if (!input) return;
+        var year = (input.value || "").trim();
+        if (!isValidBirthYear(year)) {
+          closeBirthYearModal();
+          return;
+        }
+        var day = birthYearState.day;
+        var month = birthYearState.month;
+        if (!day || !month || !selectedEmployeeId) {
+          closeBirthYearModal();
+          return;
+        }
+        var newDate = day + "/" + month + "/" + year;
+        setLoadingOverlay(true);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            setLoadingOverlay(false);
+            if (!res || !res.ok) {
+              setGlobalMessage(
+                (res && res.error) || "שגיאה בעדכון שנת לידה",
+                true
+              );
+              return;
+            }
+            if (currentEmployee) {
+              currentEmployee.birthdate = newDate;
+              if (currentEmployee.rows) {
+                for (var i = 0; i < currentEmployee.rows.length; i++) {
+                  if (!currentEmployee.rows[i].personal)
+                    currentEmployee.rows[i].personal = {};
+                  currentEmployee.rows[i].personal.birthdate = newDate;
+                }
+              }
+            }
+            if ($("emp-birthdate")) {
+              $("emp-birthdate").value = toDateInputValue(newDate);
+            }
+            renderMismatchUI(currentEmployee);
+            setGlobalMessage("שנת הלידה עודכנה בכל שורות העובד", false);
+            closeBirthYearModal();
+          })
+          .withFailureHandler(function (err) {
+            setLoadingOverlay(false);
+            setGlobalMessage("שגיאה בעדכון שנת לידה: " + err, true);
+          })
+          .EMP_applyPersonalFieldChoice(
+            selectedEmployeeId,
+            "birthdate",
+            newDate
+          );
+      }
+
       var PERSONAL_FIELDS = [
         {
           key: "name",
@@ -2497,6 +2701,15 @@
           mismatchDismissBtn.addEventListener("click", dismissMismatchBanner);
         }
 
+        var birthYearInput = $("birthyear-year-input");
+        if (birthYearInput) {
+          birthYearInput.addEventListener("input", updateBirthYearSubmitState);
+        }
+        var birthYearSubmit = $("birthyear-submit");
+        if (birthYearSubmit) {
+          birthYearSubmit.addEventListener("click", submitBirthYearUpdate);
+        }
+
         var modeBtn = $("edit-mode-toggle");
         if (modeBtn) {
           modeBtn.addEventListener("click", toggleEditMode);
@@ -2868,6 +3081,13 @@
         if ($("emp-email")) $("emp-email").value = email;
         if ($("emp-shirt-size")) $("emp-shirt-size").value = shirtSize;
         if ($("emp-travel")) $("emp-travel").value = travelCost;
+
+        var birthParts = parseBirthdateParts(birthdate);
+        if (birthParts && birthParts.year === "1900") {
+          openBirthYearModal(birthParts.day, birthParts.month);
+        } else {
+          closeBirthYearModal();
+        }
 
         var jobsList = $("jobs-list");
         jobsList.innerHTML = "";
