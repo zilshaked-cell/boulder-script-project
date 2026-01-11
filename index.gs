@@ -1677,6 +1677,40 @@ function listRequestsByEmployee_(payload, logger) {
 
   const values = reqSheet.getDataRange().getValues();
   const requests = [];
+
+  function pad2_(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  function normalizeTimeString_(val) {
+    if (val === null || val === undefined || val === "") return "";
+    const asDate = val instanceof Date ? val : new Date(val);
+    if (!isNaN(asDate.getTime())) {
+      return pad2_(asDate.getHours()) + ":" + pad2_(asDate.getMinutes());
+    }
+    const s = stringValue(val);
+    const hhmm = s.match(/(\d{1,2}):(\d{2})/);
+    if (hhmm) return pad2_(Number(hhmm[1])) + ":" + pad2_(Number(hhmm[2]));
+    return "";
+  }
+
+  function normalizeIsoDateTime_(primary, datePart, timePart) {
+    var candidate = primary instanceof Date ? primary : new Date(primary || "");
+    if (!isNaN(candidate.getTime())) return candidate.toISOString();
+
+    const baseDate = toIsoDate_(datePart || "");
+    if (!baseDate) return "";
+
+    const normalizedTime = normalizeTimeString_(timePart || "");
+    if (normalizedTime) {
+      const joined = new Date(baseDate + "T" + normalizedTime + ":00");
+      if (!isNaN(joined.getTime())) return joined.toISOString();
+    }
+
+    const midnight = new Date(baseDate + "T00:00:00");
+    return isNaN(midnight.getTime()) ? "" : midnight.toISOString();
+  }
+
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const rowEmpValue = stringValue(row[reqEmpCol - 1]);
@@ -1691,7 +1725,12 @@ function listRequestsByEmployee_(payload, logger) {
       requestType =
         jobTypeNames.indexOf(jobName) >= 0 ? "job_not_linked" : "new_job_type";
     }
-    const submittedAt = submittedCol ? stringValue(row[submittedCol - 1]) : "";
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : "";
+    const submittedAt = normalizeIsoDateTime_(
+      submittedCol ? row[submittedCol - 1] : "",
+      workDateRaw,
+      fixTimeCol ? row[fixTimeCol - 1] : ""
+    );
     const requestedSummary =
       stringValue(row[directionCol - 1]) ||
       (unitsCol ? stringValue(row[unitsCol - 1]) : "");
@@ -1711,6 +1750,9 @@ function listRequestsByEmployee_(payload, logger) {
     }
     const workDate = workDateCol ? stringValue(row[workDateCol - 1]) : "";
 
+    const fixDate = fixDateCol ? toIsoDate_(row[fixDateCol - 1]) : "";
+    const fixTime = fixTimeCol ? normalizeTimeString_(row[fixTimeCol - 1]) : "";
+
     requests.push({
       id: requestKey,
       status: stringValue(row[statusCol - 1]),
@@ -1720,15 +1762,19 @@ function listRequestsByEmployee_(payload, logger) {
       units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
       noteToManager: noteToManager,
       submittedAt: submittedAt,
-      decidedAt: decidedCol ? stringValue(row[decidedCol - 1]) : "",
+      decidedAt: normalizeIsoDateTime_(
+        decidedCol ? row[decidedCol - 1] : "",
+        workDateRaw,
+        fixTimeCol ? row[fixTimeCol - 1] : ""
+      ),
       type: requestType,
       employeeId: employeeId,
       employeeName: fullName,
       shiftId: stringValue(row[shiftIdCol - 1]),
       requestId: requestId,
       jobTypeId: stringValue(row[jobTypeIdCol - 1]),
-      fixDate: fixDateCol ? stringValue(row[fixDateCol - 1]) : "",
-      fixTime: fixTimeCol ? stringValue(row[fixTimeCol - 1]) : "",
+      fixDate: fixDate,
+      fixTime: fixTime,
       payType: payType,
       payTypeLabel: rawPayType,
       payTypeId: payTypeIdCol ? stringValue(row[payTypeIdCol - 1]) : "",
