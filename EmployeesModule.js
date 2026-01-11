@@ -897,6 +897,31 @@ var EMP = EMP || {};
       }
     }
 
+    // עדכון שדות אישיים שנשלחו מהסיידבר – מיישרים לכל השורות של העובד
+    var personalFields = {
+      name: baseName,
+      gender: payload.gender,
+      idNumber: payload.idNumber,
+      phone: payload.phone,
+      birthdate: payload.birthdate,
+      email: payload.email,
+      shirtSize: payload.shirtSize,
+      travelCost: payload.travelCost,
+      systemRole: payload.systemRole,
+    };
+
+    function hasNonEmptyValue_(val) {
+      if (val === null || val === undefined) return false;
+      if (typeof val === "number") return true;
+      return String(val).trim() !== "";
+    }
+
+    Object.keys(personalFields).forEach(function (key) {
+      var val = personalFields[key];
+      if (!hasNonEmptyValue_(val)) return;
+      applyPersonalFieldChoice_(employeeId, key, val);
+    });
+
     // השלמת ID סוג עבודה עבור שורות שנגעו (קיים או חדש) לפי שם סוג העבודה
     if (rowsTouched.length) {
       var colsResult = EMP_getEmployeeColumns_();
