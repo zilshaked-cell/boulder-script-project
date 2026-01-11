@@ -99,13 +99,21 @@
           background: var(--color-page-bg);
           border-radius: var(--radius-lg);
           padding: 6px;
+          min-height: calc(100vh - 24px);
         }
 
         .content-area {
           background: transparent;
           border-radius: var(--radius-md);
           padding: 6px 6px 10px;
-          overflow: auto;
+          flex: 1;
+          min-height: 0;
+          max-height: calc(100vh - 120px);
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding-bottom: 120px; /* מקום לכפתור הדביק שלא יכסה תוכן */
         }
 
         .section {
@@ -355,7 +363,7 @@
           );
           border-top: 1px solid var(--color-border-strong);
           box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.35);
-          z-index: 5;
+          z-index: 10;
         }
 
         .save-spinner {
