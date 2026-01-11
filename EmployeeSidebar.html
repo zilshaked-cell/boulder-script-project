@@ -234,6 +234,21 @@
           background: var(--color-surface);
         }
 
+        /* שומר על רקע כהה גם במצבי מילוי אוטומטי/ולידציה של הדפדפן */
+        .field-row input,
+        .field-row select {
+          background-color: var(--color-surface-2);
+          color: var(--color-text-primary);
+        }
+
+        .field-row input:-webkit-autofill,
+        .field-row input:-webkit-autofill:hover,
+        .field-row input:-webkit-autofill:focus,
+        .field-row select:-webkit-autofill {
+          -webkit-box-shadow: 0 0 0 1000px var(--color-surface-2) inset;
+          -webkit-text-fill-color: var(--color-text-primary);
+        }
+
         .jobs-container {
           margin-top: 6px;
           display: flex;
@@ -1380,7 +1395,11 @@
               </div>
               <div class="field-row">
                 <span class="label">מין</span>
-                <input id="emp-gender" type="text" />
+                <select id="emp-gender">
+                  <option value="">בחרו</option>
+                  <option value="ז">ז</option>
+                  <option value="נ">נ</option>
+                </select>
                 <div class="mismatch-options" data-field="gender"></div>
               </div>
               <div class="field-row">
@@ -2250,6 +2269,30 @@
         if (note) note.classList.add("hidden");
       }
 
+      function clearMismatchForField(fieldKey) {
+        if (!fieldKey) return;
+        var container = document.querySelector(
+          '.mismatch-options[data-field="' + fieldKey + '"]'
+        );
+        if (container) {
+          container.innerHTML = "";
+          var rowEl = container.closest(".field-row");
+          if (rowEl) rowEl.classList.remove("field-mismatch");
+        }
+
+        // אם אין יותר פערים – מסתירים את הבאנר וההערה
+        var stillMismatch = document.querySelector(".field-mismatch");
+        if (!stillMismatch) {
+          var banner = $("personal-mismatch-banner");
+          if (banner) banner.classList.add("hidden");
+          var note = $("mismatch-limit-note");
+          if (note) {
+            note.textContent = "";
+            note.classList.add("hidden");
+          }
+        }
+      }
+
       function computeMismatchData(emp) {
         var res = { fields: {}, limitHit: false };
         if (!emp || !emp.rows) return res;
@@ -2507,6 +2550,13 @@
 
       // live handlers גם לשדות פרטי העובד (שם, טלפון, מייל וכו')
       function attachTopLevelLiveHandlers() {
+        var idToFieldKey = {};
+        PERSONAL_FIELDS.forEach(function (cfg) {
+          if (cfg && cfg.inputId && cfg.key) {
+            idToFieldKey[cfg.inputId] = cfg.key;
+          }
+        });
+
         var ids = [
           "emp-name",
           "emp-gender",
@@ -2521,6 +2571,8 @@
           var el = $(id);
           if (el) {
             el.addEventListener("change", function () {
+              var fieldKey = idToFieldKey[id];
+              if (fieldKey) clearMismatchForField(fieldKey);
               markDirty();
               scheduleLiveSave();
             });

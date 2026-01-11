@@ -778,6 +778,20 @@ var EMP = EMP || {};
 
     ensureEmployeeIds_(sheet);
 
+    // שמירה על עיצוב קיים: אם הסייבר מוסיף שורה חדשה, מעתיקים לה את העיצוב מהשורה האחרונה בטווח הנתונים
+    function ensureRowFormatting_(targetRow) {
+      var currentLastRow = sheet.getLastRow();
+      if (targetRow <= currentLastRow) return;
+
+      var templateRow = Math.max(CONFIG.HEADER_ROW + 1, currentLastRow);
+      if (templateRow <= CONFIG.HEADER_ROW) return; // אין שורת נתונים ממנה ניתן להעתיק עיצוב
+
+      var lastColForCopy = sheet.getLastColumn();
+      sheet
+        .getRange(templateRow, 1, 1, lastColForCopy)
+        .copyFormatToRange(sheet, 1, lastColForCopy, targetRow, targetRow);
+    }
+
     var employeeId = (payload.id || "").trim();
     var baseName = (payload.name || "").trim();
     if (!employeeId) {
@@ -836,6 +850,8 @@ var EMP = EMP || {};
       if (!targetRow || targetRow <= CONFIG.HEADER_ROW) {
         targetRow = sheet.getLastRow() + 1;
       }
+
+      ensureRowFormatting_(targetRow);
 
       // נאסוף כל שורה שנעדכן כדי שנוכל להשלים לה ID סוג עבודה בהמשך
       rowsTouched.push(targetRow);
