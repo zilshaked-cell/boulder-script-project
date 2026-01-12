@@ -32,6 +32,21 @@
           </div>
         </div>
       </div>
+
+      <div id="notes-modal" class="sidebar-modal-overlay hidden">
+        <div class="sidebar-modal">
+          <h3>הערה</h3>
+          <p id="notes-modal-text"></p>
+          <button
+            id="notes-modal-close"
+            type="button"
+            class="btn-primary"
+            onclick="closeNotesModal()"
+          >
+            אישור
+          </button>
+        </div>
+      </div>
           --color-surface-2: #111827;
           --color-text-primary: #f8fafc;
           --color-text-muted: #cbd5e1;
@@ -114,6 +129,93 @@
           flex-direction: column;
           gap: 8px;
           padding-bottom: 120px; /* מקום לכפתור הדביק שלא יכסה תוכן */
+        }
+
+        /* כפתורים צרים יותר בכותרות העליונות */
+        #manual-load-btn {
+          padding: 6px 10px;
+          font-size: 12px;
+          border-radius: 10px;
+        }
+
+        /* כותרות מתקפלות לסקשנים */
+        .collapsible-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          cursor: pointer;
+          padding: 6px 8px;
+          border-radius: var(--radius-sm);
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--color-border-strong);
+        }
+
+        .collapsible-title {
+          font-weight: 700;
+          color: var(--color-text-primary);
+        }
+
+        .collapsible-caret {
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          border: 1px solid var(--color-border-strong);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          background: var(--color-surface-2);
+          transition: transform 0.15s ease;
+        }
+
+        .collapsible-header.collapsed .collapsible-caret {
+          transform: rotate(-90deg);
+        }
+
+        .collapsible-body {
+          margin-top: 8px;
+        }
+
+        .job-row.collapsed .job-row-body,
+        .employee-fields.collapsed .collapsible-body {
+          display: none;
+        }
+
+        .job-row.collapsed .collapsible-caret {
+          transform: rotate(-90deg);
+        }
+
+        /* פופאפים בתוך הסיידבר (להערות וכו') */
+        .sidebar-modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.55);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 9999;
+        }
+
+        .sidebar-modal {
+          background: var(--color-surface);
+          border: 1px solid var(--color-border-strong);
+          border-radius: var(--radius-md);
+          padding: 14px;
+          max-width: 320px;
+          box-shadow: var(--shadow-strong);
+        }
+
+        .sidebar-modal h3 {
+          margin: 0 0 8px 0;
+          font-size: 14px;
+        }
+
+        .sidebar-modal p {
+          margin: 0 0 12px 0;
+          font-size: 12px;
+          line-height: 1.5;
+          color: var(--color-text-primary);
         }
 
         .section {
@@ -277,9 +379,21 @@
           margin-bottom: 4px;
         }
 
+        .job-row-header-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
         .job-row-header-title {
           font-weight: bold;
           color: var(--color-text-primary);
+        }
+
+        .job-note-btn {
+          padding: 4px 8px;
+          font-size: 11px;
+          border-radius: var(--radius-pill);
         }
 
         button {
@@ -444,10 +558,10 @@
 
         .status-pill {
           display: inline-block;
-          min-width: 72px;
-          padding: 4px 12px;
+          min-width: 64px;
+          padding: 3px 10px;
           border-radius: var(--radius-pill);
-          font-size: 11px;
+          font-size: 10.5px;
           text-align: center;
           border: 1px solid transparent;
           font-weight: 700;
@@ -479,13 +593,14 @@
         }
 
         .role-toggle {
-          min-width: 92px;
+          min-width: 80px;
           text-transform: lowercase;
           background: var(--color-surface-2);
           border: 1px solid var(--color-border-strong);
           color: var(--color-text-primary);
           font-weight: 700;
-          padding: 6px 10px;
+          padding: 5px 10px;
+          font-size: 11px;
         }
 
         .role-toggle.role-admin {
@@ -1374,63 +1489,73 @@
           </div>
 
           <!-- פרטי עובד נוספים -->
-          <div class="section employee-fields">
-            <div class="field-group">
-              <div class="field-row">
-                <span class="label">טלפון</span>
-                <input id="emp-phone" type="text" placeholder="000-000-0000" />
-                <div class="mismatch-options" data-field="phone"></div>
-              </div>
-              <div class="field-row">
-                <span class="label">מייל</span>
-                <input id="emp-email" type="email" />
-                <div class="mismatch-options" data-field="email"></div>
-              </div>
-              <div class="field-row">
-                <span class="label">עלות החזרי נסיעות יומי</span>
-                <input id="emp-travel" type="number" step="0.01" />
-                <div class="mismatch-options" data-field="travelCost"></div>
-              </div>
+          <div class="section employee-fields collapsible">
+            <div class="collapsible-header" onclick="toggleCollapsible(this)">
+              <span class="collapsible-title">פרטים אישיים</span>
+              <span class="collapsible-caret">⌄</span>
             </div>
+            <div class="collapsible-body">
+              <div class="field-group">
+                <div class="field-row">
+                  <span class="label">טלפון</span>
+                  <input
+                    id="emp-phone"
+                    type="text"
+                    placeholder="000-000-0000"
+                  />
+                  <div class="mismatch-options" data-field="phone"></div>
+                </div>
+                <div class="field-row">
+                  <span class="label">מייל</span>
+                  <input id="emp-email" type="email" />
+                  <div class="mismatch-options" data-field="email"></div>
+                </div>
+                <div class="field-row">
+                  <span class="label">עלות החזרי נסיעות יומי</span>
+                  <input id="emp-travel" type="number" step="0.01" />
+                  <div class="mismatch-options" data-field="travelCost"></div>
+                </div>
+              </div>
 
-            <hr class="field-separator" />
+              <hr class="field-separator" />
 
-            <div class="field-group">
-              <div class="field-row">
-                <span class="label">תז</span>
-                <input id="emp-idnum" type="text" />
-                <div class="mismatch-options" data-field="idNumber"></div>
-              </div>
-              <div class="field-row">
-                <span class="label">מין</span>
-                <select id="emp-gender">
-                  <option value="">בחרו</option>
-                  <option value="ז">ז</option>
-                  <option value="נ">נ</option>
-                </select>
-                <div class="mismatch-options" data-field="gender"></div>
-              </div>
-              <div class="field-row">
-                <span class="label">ת. לידה</span>
-                <input
-                  id="emp-birthdate"
-                  type="text"
-                  placeholder="dd/mm/yyyy"
-                />
-                <div class="mismatch-options" data-field="birthdate"></div>
-              </div>
-              <div class="field-row">
-                <span class="label">מידת חולצה</span>
-                <select id="emp-shirt-size">
-                  <option value="">בחרו</option>
-                  <option value="XS">XS</option>
-                  <option value="S">S</option>
-                  <option value="M">M</option>
-                  <option value="L">L</option>
-                  <option value="XL">XL</option>
-                  <option value="XXL">XXL</option>
-                </select>
-                <div class="mismatch-options" data-field="shirtSize"></div>
+              <div class="field-group">
+                <div class="field-row">
+                  <span class="label">תז</span>
+                  <input id="emp-idnum" type="text" />
+                  <div class="mismatch-options" data-field="idNumber"></div>
+                </div>
+                <div class="field-row">
+                  <span class="label">מין</span>
+                  <select id="emp-gender">
+                    <option value="">בחרו</option>
+                    <option value="ז">ז</option>
+                    <option value="נ">נ</option>
+                  </select>
+                  <div class="mismatch-options" data-field="gender"></div>
+                </div>
+                <div class="field-row">
+                  <span class="label">ת. לידה</span>
+                  <input
+                    id="emp-birthdate"
+                    type="text"
+                    placeholder="dd/mm/yyyy"
+                  />
+                  <div class="mismatch-options" data-field="birthdate"></div>
+                </div>
+                <div class="field-row">
+                  <span class="label">מידת חולצה</span>
+                  <select id="emp-shirt-size">
+                    <option value="">בחרו</option>
+                    <option value="XS">XS</option>
+                    <option value="S">S</option>
+                    <option value="M">M</option>
+                    <option value="L">L</option>
+                    <option value="XL">XL</option>
+                    <option value="XXL">XXL</option>
+                  </select>
+                  <div class="mismatch-options" data-field="shirtSize"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -2510,6 +2635,44 @@
           .EMP_hasHiddenRowsForEmployee(selectedEmployeeId);
       }
 
+      function toggleCollapsible(headerEl) {
+        var parent = headerEl && headerEl.closest(".collapsible");
+        if (!parent) return;
+        var isCollapsed = parent.classList.toggle("collapsed");
+        headerEl.classList.toggle("collapsed", isCollapsed);
+      }
+
+      function toggleJobRow(caretEl) {
+        var row = caretEl && caretEl.closest(".job-row");
+        if (!row) return;
+        var isCollapsed = row.classList.toggle("collapsed");
+        var header = caretEl.closest(".job-row-header");
+        if (header) header.classList.toggle("collapsed", isCollapsed);
+      }
+
+      function openNotesModal(text) {
+        var overlay = $("notes-modal");
+        var textEl = $("notes-modal-text");
+        if (!overlay || !textEl) return;
+        textEl.textContent = text || "";
+        overlay.classList.remove("hidden");
+      }
+
+      function closeNotesModal() {
+        var overlay = $("notes-modal");
+        var textEl = $("notes-modal-text");
+        if (textEl) textEl.textContent = "";
+        if (overlay) overlay.classList.add("hidden");
+      }
+
+      function openJobNote(btn) {
+        var row = btn && btn.closest(".job-row");
+        if (!row) return;
+        var noteText = (row.getAttribute("data-note") || "").trim();
+        if (!noteText) return;
+        openNotesModal(noteText);
+      }
+
       function setEditMode(mode) {
         editMode = mode === "live" ? "live" : "manual";
         var btn = $("edit-mode-toggle");
@@ -2543,7 +2706,7 @@
 
       function attachLiveEditHandlers(rowEl) {
         var selectors =
-          ".field-job-type, .field-amount, .field-payment, .field-notes, .field-row-active";
+          ".field-job-type, .field-amount, .field-payment, .field-row-active";
         var fields = rowEl.querySelectorAll(selectors);
         for (var i = 0; i < fields.length; i++) {
           var evt = fields[i].classList.contains("field-row-active")
@@ -2657,7 +2820,7 @@
           var dept = (el.querySelector(".field-department").value || "").trim();
           var amount = (el.querySelector(".field-amount").value || "").trim();
           var payment = (el.querySelector(".field-payment").value || "").trim();
-          var notes = (el.querySelector(".field-notes").value || "").trim();
+          var notes = (el.getAttribute("data-note") || "").trim();
           var rowActiveBtn = el.querySelector(".field-row-active");
           var rowActive = rowActiveBtn
             ? rowActiveBtn.getAttribute("data-active") === "true"
@@ -3221,45 +3384,47 @@
         var active = data && data.rowActive ? true : false;
         var title = (data && data.jobType) || "סוג עבודה חדש";
         var amount = (data && data.amount) || "";
-        var notes = (data && data.notes) || "";
         // department & payment ימולאו בפועל בפונקציה initJobRow
         var html = "";
         html += '<div class="job-row" data-row-index="' + rid + '">';
         html += '  <div class="job-row-header">';
         html += '    <span class="job-row-header-title">' + title + "</span>";
+        html += '    <div class="job-row-header-actions">';
         html +=
-          '    <button type="button" class="row-active-btn field-row-active ' +
+          '      <button type="button" class="btn-secondary job-note-btn" onclick="openJobNote(this)" style="display: none">הערה</button>';
+        html +=
+          '      <span class="collapsible-caret" onclick="toggleJobRow(this)">⌄</span>';
+        html +=
+          '      <button type="button" class="row-active-btn field-row-active ' +
           (active ? "active" : "inactive") +
           '" data-active="' +
           (active ? "true" : "false") +
           '"></button>';
+        html += "    </div>";
         html += "  </div>";
 
+        html += '  <div class="job-row-body">';
         html +=
-          '  <div class="field-row"><span class="label">סוג העבודה</span>';
-        html += '    <select class="field-job-type"></select>';
-        html += "  </div>";
+          '    <div class="field-row"><span class="label">סוג העבודה</span>';
+        html += '      <select class="field-job-type"></select>';
+        html += "    </div>";
 
-        html += '  <div class="field-row"><span class="label">מחלקה</span>';
-        html += '    <input type="text" class="field-department" disabled />';
-        html += "  </div>";
+        html += '    <div class="field-row"><span class="label">מחלקה</span>';
+        html += '      <input type="text" class="field-department" disabled />';
+        html += "    </div>";
 
         html +=
-          '  <div class="field-row"><span class="label">סכום (ש&quot;ח)</span>';
+          '    <div class="field-row"><span class="label">סכום (ש&quot;ח)</span>';
         html +=
-          '    <input type="number" class="field-amount" value="' +
+          '      <input type="number" class="field-amount" value="' +
           amount +
           '">';
-        html += "  </div>";
+        html += "    </div>";
 
         html +=
-          '  <div class="field-row"><span class="label">אופן תשלום</span>';
-        html += '    <select class="field-payment"></select>';
-        html += "  </div>";
-
-        html += '  <div class="field-row"><span class="label">הערות</span>';
-        html +=
-          '    <input type="text" class="field-notes" value="' + notes + '">';
+          '    <div class="field-row"><span class="label">אופן תשלום</span>';
+        html += '      <select class="field-payment"></select>';
+        html += "    </div>";
         html += "  </div>";
         html += "</div>";
         return html;
@@ -3271,6 +3436,19 @@
         var paySelect = rowEl.querySelector(".field-payment");
         var deptInput = rowEl.querySelector(".field-department");
         var headerTitle = rowEl.querySelector(".job-row-header-title");
+        var noteBtn = rowEl.querySelector(".job-note-btn");
+
+        var noteText = (data.notes || "").toString().trim();
+        rowEl.setAttribute("data-note", noteText);
+        if (noteBtn) {
+          if (noteText) {
+            noteBtn.style.display = "inline-flex";
+            noteBtn.disabled = false;
+          } else {
+            noteBtn.style.display = "none";
+            noteBtn.disabled = true;
+          }
+        }
 
         var currentJobName = (data.jobType || "").trim();
         var currentDept = (data.department || "").trim();
