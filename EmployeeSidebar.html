@@ -2201,9 +2201,18 @@
       ];
 
       var REQUEST_STATUS_BUTTONS = {
-        open: { value: "פתוחה", label: "פתוחות" },
-        approved: { value: "אושרה", label: "אושרו" },
-        rejected: { value: "נדחת", label: "נדחו" },
+        open: {
+          values: DEFAULT_OPEN_REQUEST_STATUSES.slice(),
+          label: "פתוחות",
+        },
+        approved: {
+          values: ["אושרה", "מאושרת", "מאושר", "approved", "אושר"],
+          label: "אושרו",
+        },
+        rejected: {
+          values: ["נדחת", "נדחתה", "נדחה", "rejected"],
+          label: "נדחו",
+        },
       };
 
       function $(id) {
@@ -4768,30 +4777,56 @@
       }
 
       // ----- Requests tab helpers -----
-      function setActiveRequestStatus(statusKey) {
+      function setActiveRequestStatuses(statusKeys) {
+        var list = Array.isArray(statusKeys)
+          ? statusKeys
+              .map(function (k) {
+                return (k || "").trim();
+              })
+              .filter(Boolean)
+          : [];
         var buttons = document.querySelectorAll(
           "#requests-status-buttons .request-status-btn"
         );
         for (var i = 0; i < buttons.length; i++) {
           var key = buttons[i].getAttribute("data-status-key");
-          var active = statusKey && key === statusKey;
-          buttons[i].classList.toggle("active", !!active);
+          var active = list.indexOf(key) !== -1;
+          buttons[i].classList.toggle("active", active);
         }
         requestsState.filters = requestsState.filters || {
           limit: 200,
           offset: 0,
         };
-        requestsState.filters.statusKey = statusKey || "";
+        requestsState.filters.statusKeys = list;
       }
 
-      function getActiveRequestStatus() {
-        if (requestsState.filters && requestsState.filters.statusKey) {
-          return requestsState.filters.statusKey;
+      function getActiveRequestStatuses() {
+        if (
+          requestsState.filters &&
+          Array.isArray(requestsState.filters.statusKeys)
+        ) {
+          return requestsState.filters.statusKeys.slice();
         }
-        var btn = document.querySelector(
+        var buttons = document.querySelectorAll(
           "#requests-status-buttons .request-status-btn.active"
         );
-        return btn ? btn.getAttribute("data-status-key") : "";
+        var keys = [];
+        for (var i = 0; i < buttons.length; i++) {
+          var key = buttons[i].getAttribute("data-status-key");
+          if (key) keys.push(key);
+        }
+        return keys;
+      }
+
+      function toggleRequestStatus(key) {
+        var current = getActiveRequestStatuses();
+        var idx = current.indexOf(key);
+        if (idx === -1) {
+          current.push(key);
+        } else {
+          current.splice(idx, 1);
+        }
+        setActiveRequestStatuses(current);
       }
 
       function collectRequestFilters(resetOffset) {
@@ -4804,11 +4839,23 @@
         filters.dateTo = $("requests-date-to")
           ? $("requests-date-to").value
           : "";
-        var statusKey = getActiveRequestStatus();
-        filters.statuses = [];
-        if (statusKey && REQUEST_STATUS_BUTTONS[statusKey]) {
-          filters.statuses = [REQUEST_STATUS_BUTTONS[statusKey].value];
-        }
+        var statusKeys = getActiveRequestStatuses();
+        filters.statusKeys = statusKeys.slice();
+        var statusValues = [];
+        statusKeys.forEach(function (k) {
+          var cfg = REQUEST_STATUS_BUTTONS[k];
+          if (!cfg) return;
+          var vals = Array.isArray(cfg.values)
+            ? cfg.values
+            : cfg.value
+            ? [cfg.value]
+            : [];
+          vals.forEach(function (v) {
+            if (!v) return;
+            if (statusValues.indexOf(v) === -1) statusValues.push(v);
+          });
+        });
+        filters.statuses = statusValues;
         filters.includeClosed = false;
         if (resetOffset) filters.offset = 0;
         if (!filters.limit) filters.limit = 200;
@@ -4820,8 +4867,8 @@
         if ($("requests-search-term")) $("requests-search-term").value = "";
         if ($("requests-date-from")) $("requests-date-from").value = "";
         if ($("requests-date-to")) $("requests-date-to").value = "";
-        setActiveRequestStatus("");
-        requestsState.filters = { limit: 200, offset: 0 };
+        setActiveRequestStatuses(["open"]);
+        requestsState.filters = { limit: 200, offset: 0, statusKeys: ["open"] };
       }
 
       function scheduleRequestsFetch() {
@@ -4840,22 +4887,33 @@
         if (!fromInput || !toInput) return;
         if (fromInput.value || toInput.value) return;
 
-        var statusKey = getActiveRequestStatus();
-        var isOpenOnly = !statusKey || statusKey === "open";
-        if (!isOpenOnly) return;
+        var statusKeys = getActiveRequestStatuses();
+        var considerOpen =
+          statusKeys.length === 0 || statusKeys.indexOf("open") !== -1;
 
-        var oldest = null;
-        var newest = null;
+        var oldestOpen = null;
+        var oldestAny = null;
         (list || []).forEach(function (r) {
           var d = parseRequestDate(r && (r.timestampIso || r.timestamp));
           if (!d) return;
-          if (!oldest || d.getTime() < oldest.getTime()) oldest = d;
-          if (!newest || d.getTime() > newest.getTime()) newest = d;
+          if (!oldestAny || d.getTime() < oldestAny.getTime()) oldestAny = d;
+          if (considerOpen && isOpenRequestStatus(r && r.status)) {
+            if (!oldestOpen || d.getTime() < oldestOpen.getTime())
+              oldestOpen = d;
+          }
         });
 
-        if (!oldest || !newest) return;
-        fromInput.value = formatDateForInput(oldest);
-        toInput.value = formatDateForInput(newest);
+        var todayStr = formatDateForInput(new Date());
+        if (!fromInput.value) {
+          if (oldestOpen) {
+            fromInput.value = formatDateForInput(oldestOpen);
+          } else if (oldestAny) {
+            fromInput.value = formatDateForInput(oldestAny);
+          }
+        }
+        if (!toInput.value && todayStr) {
+          toInput.value = todayStr;
+        }
       }
 
       function renderRequestsResults() {
@@ -5596,7 +5654,6 @@
         if (reqClearBtn)
           reqClearBtn.addEventListener("click", function () {
             resetRequestFilters();
-            setActiveRequestStatus("open");
             fetchRequests(true);
           });
 
@@ -5617,14 +5674,14 @@
           (function (btn) {
             btn.addEventListener("click", function () {
               var key = btn.getAttribute("data-status-key") || "";
-              var current = getActiveRequestStatus();
-              setActiveRequestStatus(current === key ? "" : key);
+              if (!key) return;
+              toggleRequestStatus(key);
               scheduleRequestsFetch();
             });
           })(reqStatusButtons[rs]);
         }
 
-        setActiveRequestStatus("open");
+        setActiveRequestStatuses(["open"]);
         fetchRequests(true);
       }
 

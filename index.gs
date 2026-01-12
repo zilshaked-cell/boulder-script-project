@@ -2099,6 +2099,7 @@ function handleShiftReportSubmit_(payload, logger) {
         payload.noteToManager || payload.note || payload.shiftNote
       ),
       submittedAt: nowIso,
+      timestamp: nowIso,
       decidedAt: "",
       managerDecision: "",
       requestType: requestType,
