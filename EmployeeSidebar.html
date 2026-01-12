@@ -1112,6 +1112,35 @@
           border-radius: var(--radius-md);
         }
 
+        .requests-status-buttons {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+
+        .request-status-btn {
+          border: 1px solid var(--color-border-strong);
+          background: var(--color-surface-2);
+          color: var(--color-text-primary);
+          border-radius: var(--radius-pill);
+          padding: 6px 12px;
+          font-size: 12px;
+          cursor: pointer;
+          transition: background 0.2s ease, border-color 0.2s ease,
+            color 0.2s ease;
+        }
+
+        .request-status-btn.active {
+          background: var(--color-accent-strong);
+          color: #0b0b0b;
+          border-color: var(--color-accent-strong);
+          font-weight: 700;
+        }
+
+        .request-status-btn:hover {
+          border-color: var(--color-accent);
+        }
+
         .requests-actions {
           display: flex;
           gap: 6px;
@@ -1131,15 +1160,62 @@
           border-radius: var(--radius-md);
           padding: 8px;
           background: rgba(255, 255, 255, 0.03);
+          transition: border-color 0.2s ease, background 0.2s ease;
         }
 
         .request-card-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          gap: 6px;
+          gap: 10px;
           margin-bottom: 4px;
           font-weight: 700;
+          cursor: pointer;
+        }
+
+        .request-card-header .request-title {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .request-card-header .request-title-primary {
+          font-size: 13px;
+        }
+
+        .request-card-header .request-title-secondary {
+          font-size: 11px;
+          color: var(--color-text-muted);
+        }
+
+        .request-card-toggle {
+          border-radius: 8px;
+          border: 1px solid var(--color-border-strong);
+          width: 24px;
+          height: 24px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          transition: transform 0.18s ease, border-color 0.18s ease;
+        }
+
+        .request-card[data-open="true"] .request-card-toggle {
+          transform: rotate(180deg);
+          border-color: var(--color-accent);
+        }
+
+        .request-card-body {
+          display: none;
+          margin-top: 6px;
+          border-top: 1px solid var(--color-border-strong);
+          padding-top: 6px;
+          font-size: 12px;
+          color: var(--color-text-primary);
+        }
+
+        .request-card[data-open="true"] .request-card-body {
+          display: block;
         }
 
         .request-meta {
@@ -1147,6 +1223,14 @@
           flex-wrap: wrap;
           gap: 6px;
           font-size: 12px;
+          color: var(--color-text-muted);
+        }
+
+        .request-meta-inline {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
           color: var(--color-text-muted);
         }
 
@@ -1159,10 +1243,58 @@
           font-size: 11px;
         }
 
+        .request-status-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .request-status-actions {
+          display: inline-flex;
+          gap: 6px;
+          align-items: center;
+        }
+
+        .request-status-circle {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          border: 1px solid var(--color-border-strong);
+          background: var(--color-surface-2);
+          color: var(--color-text-primary);
+          font-size: 12px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          pointer-events: none;
+        }
+
+        .request-status-circle.approve {
+          border-color: #22c55e;
+          color: #22c55e;
+        }
+
+        .request-status-circle.reject {
+          border-color: #ef4444;
+          color: #ef4444;
+        }
+
         .request-note {
           margin-top: 6px;
           font-size: 12px;
           color: var(--color-text-primary);
+        }
+
+        .request-detail-row {
+          display: flex;
+          gap: 6px;
+          align-items: baseline;
+          margin-bottom: 4px;
+        }
+
+        .request-detail-label {
+          color: var(--color-text-muted);
+          min-width: 90px;
         }
 
         .requests-empty {
@@ -1624,13 +1756,41 @@
                   type="text"
                   placeholder="שם / ID בקשה / ID משמרת"
                 />
+                <div class="muted">כל שינוי בחיפוש מעדכן מיד את הרשימה.</div>
               </div>
               <div class="field-row" style="flex: 1">
-                <span class="label">סטטוס בקשה (רב בחירה)</span>
-                <select id="requests-status-select" multiple size="4"></select>
+                <span class="label">סטטוס בקשה</span>
+                <div
+                  class="requests-status-buttons"
+                  id="requests-status-buttons"
+                >
+                  <button
+                    type="button"
+                    class="request-status-btn"
+                    data-status-key="open"
+                    data-status-value="פתוחה"
+                  >
+                    פתוחות
+                  </button>
+                  <button
+                    type="button"
+                    class="request-status-btn"
+                    data-status-key="approved"
+                    data-status-value="אושרה"
+                  >
+                    אושרו
+                  </button>
+                  <button
+                    type="button"
+                    class="request-status-btn"
+                    data-status-key="rejected"
+                    data-status-value="נדחת"
+                  >
+                    נדחו
+                  </button>
+                </div>
                 <div class="muted">
-                  ברירת מחדל: מציג רק בקשות פתוחות. לסגורות – סמנו "כל
-                  הסטטוסים".
+                  ברירת מחדל: פתוחות בלבד, ללא צורך בסימון.
                 </div>
               </div>
             </div>
@@ -1645,21 +1805,11 @@
                 <input id="requests-date-to" type="date" />
               </div>
             </div>
-
-            <div class="pill-toggle">
-              <label
-                ><input type="checkbox" id="requests-include-closed" /> כל
-                הסטטוסים (כולל סגורות)</label
-              >
-            </div>
           </div>
 
           <div class="requests-actions">
-            <button id="requests-search-btn" class="btn-primary" type="button">
-              חיפוש
-            </button>
             <button id="requests-clear-btn" class="btn-secondary" type="button">
-              ניקוי
+              איפוס סינון
             </button>
           </div>
 
@@ -2033,11 +2183,28 @@
       // Requests tab state
       var requests = [];
       var requestsState = {
-        filters: { limit: 50, offset: 0 },
+        filters: { limit: 200, offset: 0 },
         hasMore: false,
         loading: false,
       };
       var requestStatuses = [];
+      var requestFilterTimer = null;
+
+      var DEFAULT_OPEN_REQUEST_STATUSES = [
+        "pending",
+        "פתוח",
+        "פתוחה",
+        "ממתין",
+        "ממתינה",
+        "open",
+        "todo",
+      ];
+
+      var REQUEST_STATUS_BUTTONS = {
+        open: { value: "פתוחה", label: "פתוחות" },
+        approved: { value: "אושרה", label: "אושרו" },
+        rejected: { value: "נדחת", label: "נדחו" },
+      };
 
       function $(id) {
         return document.getElementById(id);
@@ -2055,6 +2222,77 @@
         var overlay = $("loader-overlay");
         if (!overlay) return;
         overlay.classList.toggle("hidden", !visible);
+      }
+
+      function escapeHtml(str) {
+        if (str === null || str === undefined) return "";
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function parseRequestDate(val) {
+        if (val instanceof Date && !isNaN(val.getTime())) return val;
+        var d = new Date(val);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      function formatRequestDateTime(val) {
+        var d = parseRequestDate(val);
+        if (!d) return "";
+        var dd = ("0" + d.getDate()).slice(-2);
+        var mm = ("0" + (d.getMonth() + 1)).slice(-2);
+        var yyyy = d.getFullYear();
+        var hh = ("0" + d.getHours()).slice(-2);
+        var mi = ("0" + d.getMinutes()).slice(-2);
+        return dd + "/" + mm + "/" + yyyy + " " + hh + ":" + mi;
+      }
+
+      function formatRequestDate(val) {
+        var d = parseRequestDate(val);
+        if (!d) return "";
+        var dd = ("0" + d.getDate()).slice(-2);
+        var mm = ("0" + (d.getMonth() + 1)).slice(-2);
+        var yyyy = d.getFullYear();
+        return dd + "/" + mm + "/" + yyyy;
+      }
+
+      function isOpenRequestStatus(status) {
+        var key = (status || "").toString().trim().toLowerCase();
+        if (!key) return false;
+        for (var i = 0; i < DEFAULT_OPEN_REQUEST_STATUSES.length; i++) {
+          if (key === DEFAULT_OPEN_REQUEST_STATUSES[i].toLowerCase())
+            return true;
+        }
+        return false;
+      }
+
+      function describeRequestType(rec) {
+        if (!rec) return "";
+        if (rec.direction) return rec.direction;
+        if (rec.jobName) return rec.jobName;
+        return "בקשה";
+      }
+
+      function describeRequestWhen(rec) {
+        if (!rec) return "";
+        var datePart = formatRequestDate(rec.fixDate || rec.date);
+        var timePart = (rec.fixTime || rec.time || "").trim();
+        if (datePart && timePart) return datePart + " " + timePart;
+        if (datePart) return datePart;
+        if (rec.timestampIso || rec.timestamp) {
+          return formatRequestDateTime(rec.timestampIso || rec.timestamp);
+        }
+        return "";
+      }
+
+      function setRequestsLoading(loading) {
+        setLoadingOverlay(!!loading);
+        var results = $("requests-results");
+        if (results) results.classList.toggle("loading", !!loading);
       }
 
       function updateSaveButton(state) {
@@ -4530,43 +4768,34 @@
       }
 
       // ----- Requests tab helpers -----
-      function getSelectedRequestStatuses() {
-        var sel = $("requests-status-select");
-        if (!sel) return [];
-        var out = [];
-        for (var i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].selected) out.push(sel.options[i].value);
+      function setActiveRequestStatus(statusKey) {
+        var buttons = document.querySelectorAll(
+          "#requests-status-buttons .request-status-btn"
+        );
+        for (var i = 0; i < buttons.length; i++) {
+          var key = buttons[i].getAttribute("data-status-key");
+          var active = statusKey && key === statusKey;
+          buttons[i].classList.toggle("active", !!active);
         }
-        return out;
+        requestsState.filters = requestsState.filters || {
+          limit: 200,
+          offset: 0,
+        };
+        requestsState.filters.statusKey = statusKey || "";
       }
 
-      function populateRequestStatuses(options) {
-        var sel = $("requests-status-select");
-        if (!sel) return;
-        var prev = Array.prototype.slice
-          .call(sel.selectedOptions || [])
-          .map(function (o) {
-            return o.value;
-          });
-        sel.innerHTML = "";
-        var seen = {};
-        (options || []).forEach(function (st) {
-          var key = st || "";
-          if (seen[key]) return;
-          seen[key] = true;
-          var opt = document.createElement("option");
-          opt.value = st;
-          opt.textContent = st || "ללא סטטוס";
-          sel.appendChild(opt);
-        });
-        for (var i = 0; i < sel.options.length; i++) {
-          if (prev.indexOf(sel.options[i].value) !== -1)
-            sel.options[i].selected = true;
+      function getActiveRequestStatus() {
+        if (requestsState.filters && requestsState.filters.statusKey) {
+          return requestsState.filters.statusKey;
         }
+        var btn = document.querySelector(
+          "#requests-status-buttons .request-status-btn.active"
+        );
+        return btn ? btn.getAttribute("data-status-key") : "";
       }
 
       function collectRequestFilters(resetOffset) {
-        var filters = requestsState.filters || { limit: 50, offset: 0 };
+        var filters = requestsState.filters || { limit: 200, offset: 0 };
         filters.search =
           ($("requests-search-term") && $("requests-search-term").value) || "";
         filters.dateFrom = $("requests-date-from")
@@ -4575,12 +4804,14 @@
         filters.dateTo = $("requests-date-to")
           ? $("requests-date-to").value
           : "";
-        filters.statuses = getSelectedRequestStatuses();
-        filters.includeClosed = $("requests-include-closed")
-          ? $("requests-include-closed").checked
-          : false;
+        var statusKey = getActiveRequestStatus();
+        filters.statuses = [];
+        if (statusKey && REQUEST_STATUS_BUTTONS[statusKey]) {
+          filters.statuses = [REQUEST_STATUS_BUTTONS[statusKey].value];
+        }
+        filters.includeClosed = false;
         if (resetOffset) filters.offset = 0;
-        if (!filters.limit) filters.limit = 50;
+        if (!filters.limit) filters.limit = 200;
         requestsState.filters = filters;
         return filters;
       }
@@ -4589,14 +4820,42 @@
         if ($("requests-search-term")) $("requests-search-term").value = "";
         if ($("requests-date-from")) $("requests-date-from").value = "";
         if ($("requests-date-to")) $("requests-date-to").value = "";
-        if ($("requests-include-closed"))
-          $("requests-include-closed").checked = false;
-        if ($("requests-status-select")) {
-          for (var i = 0; i < $("requests-status-select").options.length; i++) {
-            $("requests-status-select").options[i].selected = false;
-          }
+        setActiveRequestStatus("");
+        requestsState.filters = { limit: 200, offset: 0 };
+      }
+
+      function scheduleRequestsFetch() {
+        if (requestFilterTimer) {
+          clearTimeout(requestFilterTimer);
+          requestFilterTimer = null;
         }
-        requestsState.filters = { limit: 50, offset: 0 };
+        requestFilterTimer = setTimeout(function () {
+          fetchRequests(true);
+        }, 250);
+      }
+
+      function applyDefaultRequestDateRange(list) {
+        var fromInput = $("requests-date-from");
+        var toInput = $("requests-date-to");
+        if (!fromInput || !toInput) return;
+        if (fromInput.value || toInput.value) return;
+
+        var statusKey = getActiveRequestStatus();
+        var isOpenOnly = !statusKey || statusKey === "open";
+        if (!isOpenOnly) return;
+
+        var oldest = null;
+        var newest = null;
+        (list || []).forEach(function (r) {
+          var d = parseRequestDate(r && (r.timestampIso || r.timestamp));
+          if (!d) return;
+          if (!oldest || d.getTime() < oldest.getTime()) oldest = d;
+          if (!newest || d.getTime() > newest.getTime()) newest = d;
+        });
+
+        if (!oldest || !newest) return;
+        fromInput.value = formatDateForInput(oldest);
+        toInput.value = formatDateForInput(newest);
       }
 
       function renderRequestsResults() {
@@ -4610,44 +4869,108 @@
         var html = "";
         for (var i = 0; i < requests.length; i++) {
           var r = requests[i];
-          html += '<div class="request-card">';
-          html += '<div class="request-card-header">';
+          var submitted = formatRequestDateTime(r.timestampIso || r.timestamp);
+          var statusText = r.status || "ללא סטטוס";
+          var requestType = describeRequestType(r);
+          var whenText = describeRequestWhen(r);
+
           html +=
-            "<span>" +
-            (r.employeeName || "עובד לא ידוע") +
-            (r.employeeId ? " (ID " + r.employeeId + ")" : "") +
-            "</span>";
+            '<div class="request-card" data-open="false" data-idx="' + i + '">';
+          html += '<div class="request-card-header" data-idx="' + i + '">';
+          html += '<div class="request-title">';
           html +=
-            '<span class="request-badge">' +
-            (r.status || "ללא סטטוס") +
-            "</span>";
+            '<div class="request-title-primary">' +
+            escapeHtml(r.employeeName || "עובד לא ידוע") +
+            "</div>";
+          html +=
+            '<div class="request-title-secondary">' +
+            escapeHtml(requestType) +
+            "</div>";
+          html += "</div>";
+          html += '<div class="request-meta-inline">';
+          html +=
+            '<span class="request-badge">' + escapeHtml(statusText) + "</span>";
+          if (submitted) {
+            html +=
+              '<span class="request-badge">' +
+              escapeHtml(submitted) +
+              "</span>";
+          }
+          html += "</div>";
+          html += '<span class="request-card-toggle">⌄</span>';
           html += "</div>";
 
-          html += '<div class="request-meta">';
-          if (r.requestId)
-            html +=
-              '<span class="request-badge">ID בקשה: ' + r.requestId + "</span>";
-          if (r.shiftId)
-            html +=
-              '<span class="request-badge">משמרת: ' + r.shiftId + "</span>";
-          if (r.timestampIso)
-            html += '<span class="request-badge">' + r.timestampIso + "</span>";
-          if (r.direction)
-            html += '<span class="request-badge">' + r.direction + "</span>";
-          if (r.jobName)
-            html += '<span class="request-badge">' + r.jobName + "</span>";
-          if (r.department)
-            html += '<span class="request-badge">' + r.department + "</span>";
-          html += "</div>";
-
-          if (r.note) {
-            html += '<div class="request-note">' + r.note + "</div>";
+          html += '<div class="request-card-body" aria-hidden="true">';
+          if (submitted) {
+            html += '<div class="request-detail-row">';
+            html += '<span class="request-detail-label">נשלחה</span>';
+            html += "<span>" + escapeHtml(submitted) + "</span>";
+            html += "</div>";
           }
 
+          if (requestType) {
+            html += '<div class="request-detail-row">';
+            html += '<span class="request-detail-label">סוג בקשה</span>';
+            html += "<span>" + escapeHtml(requestType) + "</span>";
+            html += "</div>";
+          }
+
+          if (whenText) {
+            html += '<div class="request-detail-row">';
+            html += '<span class="request-detail-label">תאריך/שעה</span>';
+            html += "<span>" + escapeHtml(whenText) + "</span>";
+            html += "</div>";
+          }
+
+          html += '<div class="request-detail-row">';
+          html += '<span class="request-detail-label">סטטוס</span>';
+          html += '<div class="request-status-row">';
+          html +=
+            '<span class="request-badge">' + escapeHtml(statusText) + "</span>";
+          html += '<div class="request-status-actions">';
+          html += '<span class="request-status-circle approve">V</span>';
+          html += '<span class="request-status-circle reject">X</span>';
+          html += "</div>";
+          html += "</div>";
+          html += "</div>";
+
+          if (r.jobName) {
+            html += '<div class="request-detail-row">';
+            html += '<span class="request-detail-label">סוג עבודה</span>';
+            html += "<span>" + escapeHtml(r.jobName) + "</span>";
+            html += "</div>";
+          }
+
+          if (r.department) {
+            html += '<div class="request-detail-row">';
+            html += '<span class="request-detail-label">מחלקה</span>';
+            html += "<span>" + escapeHtml(r.department) + "</span>";
+            html += "</div>";
+          }
+
+          if (r.note) {
+            html +=
+              '<div class="request-note">' + escapeHtml(r.note) + "</div>";
+          }
+
+          html += "</div>";
           html += "</div>";
         }
 
         box.innerHTML = html;
+
+        var headers = box.querySelectorAll(".request-card-header");
+        for (var h = 0; h < headers.length; h++) {
+          headers[h].addEventListener("click", function (e) {
+            var card = e.currentTarget.closest(".request-card");
+            if (!card) return;
+            var isOpen = card.getAttribute("data-open") === "true";
+            var nextState = isOpen ? "false" : "true";
+            card.setAttribute("data-open", nextState);
+            var body = card.querySelector(".request-card-body");
+            if (body) body.setAttribute("aria-hidden", nextState !== "true");
+          });
+        }
       }
 
       function fetchRequests(reset) {
@@ -4660,6 +4983,7 @@
 
         var filters = collectRequestFilters(reset);
         setRequestsMessage("טוען בקשות...", false);
+        setRequestsLoading(true);
 
         google.script.run
           .withSuccessHandler(function (res) {
@@ -4669,19 +4993,8 @@
                 (res && res.error) || "שגיאה בטעינת בקשות",
                 true
               );
+              setRequestsLoading(false);
               return;
-            }
-
-            if (res.statuses && res.statuses.length) {
-              var seen = {};
-              requestStatuses = [];
-              for (var i = 0; i < res.statuses.length; i++) {
-                var st = res.statuses[i] || "";
-                if (seen[st]) continue;
-                seen[st] = true;
-                requestStatuses.push(st);
-              }
-              populateRequestStatuses(requestStatuses);
             }
 
             if (reset) {
@@ -4699,10 +5012,13 @@
             }
 
             renderRequestsResults();
+            applyDefaultRequestDateRange(requests);
+            setRequestsLoading(false);
           })
           .withFailureHandler(function (err) {
             requestsState.loading = false;
             setRequestsMessage("שגיאה בטעינת בקשות: " + err, true);
+            setRequestsLoading(false);
           })
           .REQ_listRequests(filters);
       }
@@ -5276,17 +5592,40 @@
 
         fetchShifts(true);
 
-        var reqSearchBtn = $("requests-search-btn");
-        if (reqSearchBtn)
-          reqSearchBtn.addEventListener("click", function () {
-            fetchRequests(true);
-          });
         var reqClearBtn = $("requests-clear-btn");
         if (reqClearBtn)
           reqClearBtn.addEventListener("click", function () {
             resetRequestFilters();
+            setActiveRequestStatus("open");
             fetchRequests(true);
           });
+
+        var reqSearchInput = $("requests-search-term");
+        if (reqSearchInput)
+          reqSearchInput.addEventListener("input", scheduleRequestsFetch);
+        var reqDateFrom = $("requests-date-from");
+        if (reqDateFrom)
+          reqDateFrom.addEventListener("change", scheduleRequestsFetch);
+        var reqDateTo = $("requests-date-to");
+        if (reqDateTo)
+          reqDateTo.addEventListener("change", scheduleRequestsFetch);
+
+        var reqStatusButtons = document.querySelectorAll(
+          "#requests-status-buttons .request-status-btn"
+        );
+        for (var rs = 0; rs < reqStatusButtons.length; rs++) {
+          (function (btn) {
+            btn.addEventListener("click", function () {
+              var key = btn.getAttribute("data-status-key") || "";
+              var current = getActiveRequestStatus();
+              setActiveRequestStatus(current === key ? "" : key);
+              scheduleRequestsFetch();
+            });
+          })(reqStatusButtons[rs]);
+        }
+
+        setActiveRequestStatus("open");
+        fetchRequests(true);
       }
 
       window.addEventListener("load", init);
