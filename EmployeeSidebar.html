@@ -157,20 +157,28 @@
         }
 
         .collapsible-caret {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
+          width: 22px;
+          height: 22px;
+          border-radius: 6px;
           border: 1px solid var(--color-border-strong);
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-size: 12px;
-          background: var(--color-surface-2);
-          transition: transform 0.15s ease;
+          background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.05),
+            rgba(255, 255, 255, 0.01)
+          );
+          color: var(--color-accent);
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+          transition: transform 0.18s ease, border-color 0.18s ease,
+            background 0.18s ease;
         }
 
-        .collapsible-header.collapsed .collapsible-caret {
-          transform: rotate(-90deg);
+        .collapsible-caret:hover {
+          border-color: var(--color-accent);
+          background: var(--color-surface-highlight);
         }
 
         .collapsible-body {
@@ -182,6 +190,7 @@
           display: none;
         }
 
+        .collapsible.collapsed .collapsible-caret,
         .job-row.collapsed .collapsible-caret {
           transform: rotate(-90deg);
         }
@@ -1489,7 +1498,7 @@
           </div>
 
           <!-- פרטי עובד נוספים -->
-          <div class="section employee-fields collapsible">
+          <div class="section employee-fields collapsible collapsed">
             <div class="collapsible-header" onclick="toggleCollapsible(this)">
               <span class="collapsible-title">פרטים אישיים</span>
               <span class="collapsible-caret">⌄</span>
@@ -3386,7 +3395,7 @@
         var amount = (data && data.amount) || "";
         // department & payment ימולאו בפועל בפונקציה initJobRow
         var html = "";
-        html += '<div class="job-row" data-row-index="' + rid + '">';
+        html += '<div class="job-row collapsed" data-row-index="' + rid + '">';
         html += '  <div class="job-row-header">';
         html += '    <span class="job-row-header-title">' + title + "</span>";
         html += '    <div class="job-row-header-actions">';
