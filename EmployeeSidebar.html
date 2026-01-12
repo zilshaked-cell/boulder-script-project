@@ -805,29 +805,9 @@
           gap: 8px;
         }
 
-        .shifts-message {
-          font-size: 12px;
-          color: var(--color-text-muted);
-          min-height: 18px;
+        #global-message {
+          display: none;
         }
-        .shifts-message.error {
-          color: #fca5a5;
-        }
-
-        .shifts-filters {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid var(--color-border-strong);
-          padding: 8px;
-          border-radius: var(--radius-md);
-        }
-
-        .filters-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px;
         }
 
         .filters-row input,
@@ -2220,11 +2200,13 @@
       }
 
       function setGlobalMessage(text, isError) {
-        var el = $("global-message");
-        el.textContent = text || "";
-        el.className = "";
-        if (!text) return;
-        el.className = isError ? "error" : "info";
+        // Legacy inline banner is hidden; surface messages via modal instead.
+        if (!text) {
+          closeNotesModal();
+          return;
+        }
+        var prefix = isError ? "שגיאה: " : "";
+        openNotesModal(prefix + text);
       }
 
       function setLoadingOverlay(visible) {
@@ -2299,9 +2281,7 @@
       }
 
       function setRequestsLoading(loading) {
-        setLoadingOverlay(!!loading);
-        var results = $("requests-results");
-        if (results) results.classList.toggle("loading", !!loading);
+        // Loader intentionally no-op for requests filter changes.
       }
 
       function updateSaveButton(state) {
@@ -4878,7 +4858,7 @@
         }
         requestFilterTimer = setTimeout(function () {
           fetchRequests(true);
-        }, 250);
+        }, 2000);
       }
 
       function applyDefaultRequestDateRange(list) {
@@ -5041,7 +5021,6 @@
 
         var filters = collectRequestFilters(reset);
         setRequestsMessage("טוען בקשות...", false);
-        setRequestsLoading(true);
 
         google.script.run
           .withSuccessHandler(function (res) {
@@ -5051,7 +5030,6 @@
                 (res && res.error) || "שגיאה בטעינת בקשות",
                 true
               );
-              setRequestsLoading(false);
               return;
             }
 
@@ -5063,20 +5041,14 @@
 
             requestsState.hasMore = !!res.hasMore;
 
-            if (!requests.length) {
-              setRequestsMessage("לא נמצאו בקשות", false);
-            } else {
-              setRequestsMessage("", false);
-            }
+            setRequestsMessage("", false);
 
             renderRequestsResults();
             applyDefaultRequestDateRange(requests);
-            setRequestsLoading(false);
           })
           .withFailureHandler(function (err) {
             requestsState.loading = false;
             setRequestsMessage("שגיאה בטעינת בקשות: " + err, true);
-            setRequestsLoading(false);
           })
           .REQ_listRequests(filters);
       }
