@@ -85,7 +85,8 @@ function collectRawLogIds_(logs) {
   return ids.join(",");
 }
 
-function aggLogger_(operation) {
+function aggLogger_(operation, loggerOpt) {
+  if (loggerOpt) return loggerOpt;
   try {
     if (typeof ensureModuleLoggerDefined_ === "function") {
       return ensureModuleLoggerDefined_(operation || "SHIFTS_AGGREGATOR");
@@ -318,8 +319,8 @@ function readWorkLogsForRange_(opts) {
   return logs;
 }
 
-function buildAggregatedShifts_(logs) {
-  const logger = aggLogger_("AGG_BUILD_SHIFTS");
+function buildAggregatedShifts_(logs, debugExplain, loggerOpt) {
+  const logger = aggLogger_("AGG_BUILD_SHIFTS", loggerOpt);
   const startMs = new Date().getTime();
   const grouped = {};
   for (let i = 0; i < logs.length; i++) {
@@ -341,20 +342,63 @@ function buildAggregatedShifts_(logs) {
     const groupLogs = grouped[keys[k]].slice().sort(compareLogs_);
     const built = [];
     let open = null;
+    const groupKey =
+      "emp:" +
+      String((groupLogs[0] && groupLogs[0].employeeId) || "") +
+      "|date:" +
+      String((groupLogs[0] && groupLogs[0].workDateIso) || "") +
+      "|job:" +
+      String((groupLogs[0] && groupLogs[0].jobTypeId) || "none");
+
+    if (debugExplain && logger) {
+      logger.info("shifts.agg.debug.timeline", {
+        groupKey: groupKey,
+        logs: groupLogs.map(function (log) {
+          var dt = log && log.effectiveDateTime;
+          return {
+            rawLogId:
+              log && log.rawLogId !== undefined && log.rawLogId !== null
+                ? log.rawLogId
+                : log && log.shiftIdRaw,
+            direction: log && log.direction,
+            effectiveDateTimeIso: dt && dt.toISOString ? dt.toISOString() : "",
+            logRowIndex: log && log.logRowIndex,
+          };
+        }),
+      });
+    }
 
     for (let i = 0; i < groupLogs.length; i++) {
       const log = groupLogs[i];
       if (log.direction === "IN") {
         if (open) {
-          built.push(
-            buildShiftRecord_(
-              [open],
-              "CONFLICT",
-              "Extra IN before OUT",
-              open,
-              null
-            )
+          var shiftExtraIn = buildShiftRecord_(
+            [open],
+            "CONFLICT",
+            "Extra IN before OUT",
+            open,
+            null
           );
+          built.push(shiftExtraIn);
+          if (debugExplain && logger) {
+            logger.info("shifts.agg.debug.shift", {
+              groupKey: groupKey,
+              rule: "EXTRA_IN_BEFORE_OUT",
+              status: shiftExtraIn.status,
+              note: shiftExtraIn.note,
+              rawLogIds: shiftExtraIn.rawLogIds,
+              startTimeIso:
+                shiftExtraIn.startTime && shiftExtraIn.startTime.toISOString
+                  ? shiftExtraIn.startTime.toISOString()
+                  : "",
+              endTimeIso:
+                shiftExtraIn.endTime && shiftExtraIn.endTime.toISOString
+                  ? shiftExtraIn.endTime.toISOString()
+                  : "",
+              hoursDecimal: shiftExtraIn.hoursDecimal,
+              payHours: shiftExtraIn.payHours,
+            });
+          }
         }
         open = log;
         continue;
@@ -362,38 +406,199 @@ function buildAggregatedShifts_(logs) {
 
       if (log.direction === "OUT") {
         if (open) {
-          built.push(buildShiftRecord_([open, log], "OK", "", open, log));
+          var shiftPair = buildShiftRecord_([open, log], "OK", "", open, log);
+          built.push(shiftPair);
+          if (debugExplain && logger) {
+            logger.info("shifts.agg.debug.shift", {
+              groupKey: groupKey,
+              rule: "PAIR_IN_OUT",
+              status: shiftPair.status,
+              note: shiftPair.note,
+              rawLogIds: shiftPair.rawLogIds,
+              startTimeIso:
+                shiftPair.startTime && shiftPair.startTime.toISOString
+                  ? shiftPair.startTime.toISOString()
+                  : "",
+              endTimeIso:
+                shiftPair.endTime && shiftPair.endTime.toISOString
+                  ? shiftPair.endTime.toISOString()
+                  : "",
+              hoursDecimal: shiftPair.hoursDecimal,
+              payHours: shiftPair.payHours,
+            });
+          }
           open = null;
         } else {
-          built.push(
-            buildShiftRecord_([log], "MISSING_IN", "Missing IN", null, log)
+          var shiftMissingIn = buildShiftRecord_(
+            [log],
+            "MISSING_IN",
+            "Missing IN",
+            null,
+            log
           );
+          built.push(shiftMissingIn);
+          if (debugExplain && logger) {
+            logger.info("shifts.agg.debug.shift", {
+              groupKey: groupKey,
+              rule: "MISSING_IN",
+              status: shiftMissingIn.status,
+              note: shiftMissingIn.note,
+              rawLogIds: shiftMissingIn.rawLogIds,
+              startTimeIso:
+                shiftMissingIn.startTime && shiftMissingIn.startTime.toISOString
+                  ? shiftMissingIn.startTime.toISOString()
+                  : "",
+              endTimeIso:
+                shiftMissingIn.endTime && shiftMissingIn.endTime.toISOString
+                  ? shiftMissingIn.endTime.toISOString()
+                  : "",
+              hoursDecimal: shiftMissingIn.hoursDecimal,
+              payHours: shiftMissingIn.payHours,
+            });
+          }
         }
         continue;
       }
 
       if (open) {
-        built.push(
-          buildShiftRecord_(
-            [open, log],
-            "CONFLICT",
-            "Unknown direction",
-            open,
-            log
-          )
+        var shiftUnknownWithOpen = buildShiftRecord_(
+          [open, log],
+          "CONFLICT",
+          "Unknown direction",
+          open,
+          log
         );
+        built.push(shiftUnknownWithOpen);
+        if (debugExplain && logger) {
+          logger.info("shifts.agg.debug.shift", {
+            groupKey: groupKey,
+            rule: "UNKNOWN_DIRECTION",
+            status: shiftUnknownWithOpen.status,
+            note: shiftUnknownWithOpen.note,
+            rawLogIds: shiftUnknownWithOpen.rawLogIds,
+            startTimeIso:
+              shiftUnknownWithOpen.startTime &&
+              shiftUnknownWithOpen.startTime.toISOString
+                ? shiftUnknownWithOpen.startTime.toISOString()
+                : "",
+            endTimeIso:
+              shiftUnknownWithOpen.endTime &&
+              shiftUnknownWithOpen.endTime.toISOString
+                ? shiftUnknownWithOpen.endTime.toISOString()
+                : "",
+            hoursDecimal: shiftUnknownWithOpen.hoursDecimal,
+            payHours: shiftUnknownWithOpen.payHours,
+          });
+        }
         open = null;
       } else {
-        built.push(
-          buildShiftRecord_([log], "CONFLICT", "Unknown direction", log, null)
+        var shiftUnknown = buildShiftRecord_(
+          [log],
+          "CONFLICT",
+          "Unknown direction",
+          log,
+          null
         );
+        built.push(shiftUnknown);
+        if (debugExplain && logger) {
+          logger.info("shifts.agg.debug.shift", {
+            groupKey: groupKey,
+            rule: "UNKNOWN_DIRECTION",
+            status: shiftUnknown.status,
+            note: shiftUnknown.note,
+            rawLogIds: shiftUnknown.rawLogIds,
+            startTimeIso:
+              shiftUnknown.startTime && shiftUnknown.startTime.toISOString
+                ? shiftUnknown.startTime.toISOString()
+                : "",
+            endTimeIso:
+              shiftUnknown.endTime && shiftUnknown.endTime.toISOString
+                ? shiftUnknown.endTime.toISOString()
+                : "",
+            hoursDecimal: shiftUnknown.hoursDecimal,
+            payHours: shiftUnknown.payHours,
+          });
+        }
       }
     }
 
     if (open) {
-      built.push(
-        buildShiftRecord_([open], "MISSING_OUT", "Missing OUT", open, null)
+      var shiftMissingOut = buildShiftRecord_(
+        [open],
+        "MISSING_OUT",
+        "Missing OUT",
+        open,
+        null
       );
+      built.push(shiftMissingOut);
+      if (debugExplain && logger) {
+        logger.info("shifts.agg.debug.shift", {
+          groupKey: groupKey,
+          rule: "MISSING_OUT",
+          status: shiftMissingOut.status,
+          note: shiftMissingOut.note,
+          rawLogIds: shiftMissingOut.rawLogIds,
+          startTimeIso:
+            shiftMissingOut.startTime && shiftMissingOut.startTime.toISOString
+              ? shiftMissingOut.startTime.toISOString()
+              : "",
+          endTimeIso:
+            shiftMissingOut.endTime && shiftMissingOut.endTime.toISOString
+              ? shiftMissingOut.endTime.toISOString()
+              : "",
+          hoursDecimal: shiftMissingOut.hoursDecimal,
+          payHours: shiftMissingOut.payHours,
+        });
+      }
+    }
+
+    var statusCounts = {};
+    for (let i = 0; i < built.length; i++) {
+      const s = built[i].status || "UNKNOWN";
+      statusCounts[s] = (statusCounts[s] || 0) + 1;
+    }
+
+    if (debugExplain && logger) {
+      var allLogIds = {};
+      groupLogs.forEach(function (log) {
+        var rawId =
+          log && log.rawLogId !== undefined && log.rawLogId !== null
+            ? log.rawLogId
+            : log && log.shiftIdRaw;
+        if (rawId !== undefined && rawId !== null && rawId !== "") {
+          allLogIds[String(rawId)] = true;
+        }
+      });
+
+      var usedLogIds = {};
+      built.forEach(function (shift) {
+        if (!shift || !shift.rawLogIds) return;
+        String(shift.rawLogIds)
+          .split(",")
+          .map(function (s) {
+            return stringValue(s);
+          })
+          .filter(function (s) {
+            return !!s;
+          })
+          .forEach(function (id) {
+            usedLogIds[id] = true;
+          });
+      });
+
+      var unusedLogIds = [];
+      Object.keys(allLogIds).forEach(function (id) {
+        if (!usedLogIds[id]) unusedLogIds.push(id);
+      });
+
+      logger.info("shifts.agg.debug.group-summary", {
+        groupKey: groupKey,
+        logsCount: groupLogs.length,
+        shiftsCount: built.length,
+        statusCounts: statusCounts,
+        usedLogIds: Object.keys(usedLogIds),
+        unusedLogIds: unusedLogIds,
+      });
     }
 
     for (let i = 0; i < built.length; i++) {
@@ -406,6 +611,7 @@ function buildAggregatedShifts_(logs) {
     logDuration_(logger, "shifts.buildAggregated", startMs, {
       inputLogs: logs ? logs.length : 0,
       shifts: results.length,
+      debugExplain: !!debugExplain,
     });
   }
 
@@ -449,134 +655,289 @@ function buildShiftRows_(shifts, headerMap) {
   });
 }
 
-function rebuildShiftsForRange_(opts) {
-  const filters = opts || {};
-  const dateFrom = toIsoDate_(filters.dateFrom || "");
-  const dateTo = toIsoDate_(filters.dateTo || "");
-  const employeeFilter = stringValue(filters.employeeId);
-  if (!dateFrom || !dateTo) {
-    throw new Error("rebuildShiftsForRange_: dateFrom/dateTo are required");
-  }
+function rebuildShiftsForRange_(opts, loggerOpt) {
+  var logger = aggLogger_("SHIFTS_AGGREGATOR", loggerOpt);
+  var debugExplain = !!(opts && opts.debugExplain);
+  var fnStartMs = new Date().getTime();
 
-  const daysRequested = daysBetweenInclusive_(dateFrom, dateTo);
-  if (daysRequested === null) {
-    throw new Error("rebuildShiftsForRange_: invalid date range");
-  }
-  const MAX_DAYS = 40;
-  if (daysRequested > MAX_DAYS) {
-    throw new Error(
-      "rebuildShiftsForRange_: range too large (" +
-        daysRequested +
-        " days > " +
-        MAX_DAYS +
-        ")"
+  try {
+    const filters = opts || {};
+    const dateFrom = toIsoDate_(filters.dateFrom || "");
+    const dateTo = toIsoDate_(filters.dateTo || "");
+    const employeeFilter = stringValue(filters.employeeId);
+    if (!dateFrom || !dateTo) {
+      throw new Error("rebuildShiftsForRange_: dateFrom/dateTo are required");
+    }
+
+    const daysRequested = daysBetweenInclusive_(dateFrom, dateTo);
+    if (daysRequested === null) {
+      throw new Error("rebuildShiftsForRange_: invalid date range");
+    }
+    const MAX_DAYS = 40;
+    if (daysRequested > MAX_DAYS) {
+      throw new Error(
+        "rebuildShiftsForRange_: range too large (" +
+          daysRequested +
+          " days > " +
+          MAX_DAYS +
+          ")"
+      );
+    }
+
+    if (logger) {
+      logger.info("shifts.agg.rebuild.start", {
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        employeeId: employeeFilter,
+        jobTypeId: stringValue(filters.jobTypeId),
+        debugExplain: debugExplain,
+      });
+    }
+
+    // Lock previous month after the 9th of current month: do not edit/write rows before the start of the current month.
+    const today = new Date();
+    const currentMonthStart = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
     );
-  }
+    const lockActive = today.getDate() >= 9;
+    const lockedCutoffIso = lockActive ? toIsoDate_(currentMonthStart) : "";
 
-  // Lock previous month after the 9th of current month: do not edit/write rows before the start of the current month.
-  const today = new Date();
-  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const lockActive = today.getDate() >= 9;
-  const lockedCutoffIso = lockActive ? toIsoDate_(currentMonthStart) : "";
+    const ctx = getShiftsSheetAndHeaderMap_();
+    const sheet = ctx.sheet;
+    const headerMap = ctx.headerMap;
+    const workDateCol = headerMap["תאריך משמרת"];
+    const employeeCol = headerMap["מזהה עובד"];
+    const startCol = headerMap["שעת התחלה"];
+    const endCol = headerMap["שעת סיום"];
+    const hoursCol = headerMap["שעות"];
 
-  const ctx = getShiftsSheetAndHeaderMap_();
-  const sheet = ctx.sheet;
-  const headerMap = ctx.headerMap;
-  const workDateCol = headerMap["תאריך משמרת"];
-  const employeeCol = headerMap["מזהה עובד"];
-  const startCol = headerMap["שעת התחלה"];
-  const endCol = headerMap["שעת סיום"];
-  const hoursCol = headerMap["שעות"];
+    var readStartMs = new Date().getTime();
+    const workLogs = readWorkLogsForRange_(filters);
+    logDuration_(logger, "shifts.agg.read-logs", readStartMs, {
+      logs: workLogs.length,
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      employeeId: employeeFilter,
+    });
 
-  const shifts = buildAggregatedShifts_(readWorkLogsForRange_(filters));
-  const rows = buildShiftRows_(shifts, headerMap);
+    var aggregateStartMs = new Date().getTime();
+    const shifts = buildAggregatedShifts_(workLogs, debugExplain, logger);
+    logDuration_(logger, "shifts.agg.aggregate", aggregateStartMs, {
+      logs: workLogs.length,
+      shifts: shifts.length,
+      debugExplain: debugExplain,
+    });
 
-  // Delete only matching range/employee, and never touch locked dates.
-  if (sheet.getLastRow() > 1) {
-    const data = sheet.getDataRange().getValues();
-    const toDelete = [];
-    for (let i = 1; i < data.length; i++) {
-      const rowDate = toIsoDate_(data[i][workDateCol]);
-      if (!rowDate) continue;
-      if (lockedCutoffIso && rowDate < lockedCutoffIso) continue; // locked past period
-      if (rowDate < dateFrom || rowDate > dateTo) continue;
-      if (
-        employeeFilter &&
-        stringValue(data[i][employeeCol]) !== employeeFilter
-      )
-        continue;
-      toDelete.push(i + 1);
+    const rows = buildShiftRows_(shifts, headerMap);
+
+    // Delete only matching range/employee, and never touch locked dates.
+    var deleteStartMs = new Date().getTime();
+    var deleted = 0;
+    if (sheet.getLastRow() > 1) {
+      const data = sheet.getDataRange().getValues();
+      const toDelete = [];
+      for (let i = 1; i < data.length; i++) {
+        const rowDate = toIsoDate_(data[i][workDateCol]);
+        if (!rowDate) continue;
+        if (lockedCutoffIso && rowDate < lockedCutoffIso) continue; // locked past period
+        if (rowDate < dateFrom || rowDate > dateTo) continue;
+        if (
+          employeeFilter &&
+          stringValue(data[i][employeeCol]) !== employeeFilter
+        )
+          continue;
+        toDelete.push(i + 1);
+      }
+      deleted = toDelete.length;
+      for (let idx = toDelete.length - 1; idx >= 0; idx--) {
+        sheet.deleteRow(toDelete[idx]);
+      }
     }
-    for (let idx = toDelete.length - 1; idx >= 0; idx--) {
-      sheet.deleteRow(toDelete[idx]);
+    logDuration_(logger, "shifts.agg.delete-old", deleteStartMs, {
+      deleted: deleted,
+      lockedCutoff: lockedCutoffIso || "",
+    });
+
+    // Filter out shifts that fall into locked periods.
+    const writableRows = [];
+    for (let i = 0; i < rows.length; i++) {
+      const workDateIso = shifts[i] ? shifts[i].workDateIso : "";
+      if (lockedCutoffIso && workDateIso && workDateIso < lockedCutoffIso) {
+        continue; // skip locked
+      }
+      writableRows.push(rows[i]);
     }
-  }
 
-  // Filter out shifts that fall into locked periods.
-  const writableRows = [];
-  for (let i = 0; i < rows.length; i++) {
-    const workDateIso = shifts[i] ? shifts[i].workDateIso : "";
-    if (lockedCutoffIso && workDateIso && workDateIso < lockedCutoffIso) {
-      continue; // skip locked
+    const skippedLocked = rows.length - writableRows.length;
+    var writeStartMs = new Date().getTime();
+    var result;
+
+    if (!writableRows.length) {
+      logDuration_(logger, "shifts.agg.write-shifts", writeStartMs, {
+        rowsToWrite: 0,
+        skippedLocked: skippedLocked,
+      });
+      result = {
+        ok: true,
+        shiftsWritten: 0,
+        skippedLocked: skippedLocked,
+        daysRequested: daysRequested,
+      };
+      logDuration_(logger, "shifts.agg.total", fnStartMs, {
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        employeeId: employeeFilter,
+        shiftsWritten: result.shiftsWritten,
+        skippedLocked: result.skippedLocked,
+        debugExplain: debugExplain,
+      });
+      return result;
     }
-    writableRows.push(rows[i]);
-  }
 
-  if (!writableRows.length) {
-    return {
-      ok: true,
-      shiftsWritten: 0,
-      skippedLocked: rows.length - writableRows.length,
-    };
-  }
-
-  const startRow = sheet.getLastRow() + 1;
-  sheet
-    .getRange(startRow, 1, writableRows.length, writableRows[0].length)
-    .setValues(writableRows);
-  sheet
-    .getRange(startRow, hoursCol + 1, writableRows.length, 1)
-    .setNumberFormat("0.00");
-  const payCol = headerMap["שעות לשכר"];
-  if (payCol !== undefined && payCol !== null) {
+    const startRow = sheet.getLastRow() + 1;
     sheet
-      .getRange(startRow, payCol + 1, writableRows.length, 1)
+      .getRange(startRow, 1, writableRows.length, writableRows[0].length)
+      .setValues(writableRows);
+    sheet
+      .getRange(startRow, hoursCol + 1, writableRows.length, 1)
       .setNumberFormat("0.00");
-  }
-
-  const startBg = [];
-  const endBg = [];
-  for (let i = 0; i < shifts.length; i++) {
-    const workDateIso = shifts[i] ? shifts[i].workDateIso : "";
-    if (lockedCutoffIso && workDateIso && workDateIso < lockedCutoffIso) {
-      continue; // skipped locked
+    const payCol = headerMap["שעות לשכר"];
+    if (payCol !== undefined && payCol !== null) {
+      sheet
+        .getRange(startRow, payCol + 1, writableRows.length, 1)
+        .setNumberFormat("0.00");
     }
-    const status = shifts[i].status;
-    const startColor =
-      status === "MISSING_IN"
-        ? "#FCD34D"
-        : status === "CONFLICT"
-        ? "#FCA5A5"
-        : "";
-    const endColor =
-      status === "MISSING_OUT"
-        ? "#FCD34D"
-        : status === "CONFLICT"
-        ? "#FCA5A5"
-        : "";
-    startBg.push([startColor]);
-    endBg.push([endColor]);
+
+    const startBg = [];
+    const endBg = [];
+    for (let i = 0; i < shifts.length; i++) {
+      const workDateIso = shifts[i] ? shifts[i].workDateIso : "";
+      if (lockedCutoffIso && workDateIso && workDateIso < lockedCutoffIso) {
+        continue; // skipped locked
+      }
+      const status = shifts[i].status;
+      const startColor =
+        status === "MISSING_IN"
+          ? "#FCD34D"
+          : status === "CONFLICT"
+          ? "#FCA5A5"
+          : "";
+      const endColor =
+        status === "MISSING_OUT"
+          ? "#FCD34D"
+          : status === "CONFLICT"
+          ? "#FCA5A5"
+          : "";
+      startBg.push([startColor]);
+      endBg.push([endColor]);
+    }
+
+    sheet
+      .getRange(startRow, startCol + 1, startBg.length, 1)
+      .setBackgrounds(startBg);
+    sheet.getRange(startRow, endCol + 1, endBg.length, 1).setBackgrounds(endBg);
+
+    result = {
+      ok: true,
+      shiftsWritten: writableRows.length,
+      skippedLocked: skippedLocked,
+      daysRequested: daysRequested,
+    };
+
+    logDuration_(logger, "shifts.agg.write-shifts", writeStartMs, {
+      rowsToWrite: writableRows.length,
+      skippedLocked: skippedLocked,
+    });
+
+    logDuration_(logger, "shifts.agg.total", fnStartMs, {
+      dateFrom: dateFrom,
+      dateTo: dateTo,
+      employeeId: employeeFilter,
+      shiftsWritten: result.shiftsWritten,
+      skippedLocked: result.skippedLocked,
+      debugExplain: debugExplain,
+    });
+
+    return result;
+  } catch (err) {
+    if (logger && logger.error) {
+      logger.error(
+        "shifts.agg.error",
+        {
+          filters: opts,
+          errorMessage: String((err && err.message) || err),
+        },
+        "SHIFTS_AGG_ERROR",
+        err
+      );
+    }
+    throw err;
+  }
+}
+
+function explainShiftById_(shiftId, loggerOpt) {
+  var logger = aggLogger_("SHIFTS_EXPLAIN", loggerOpt);
+  var ss = ss_();
+  void ss; // keep reference explicit for clarity
+
+  var ctx = getShiftsSheetAndHeaderMap_();
+  var sheet = ctx && ctx.sheet ? ctx.sheet : null;
+  var headerMap = ctx && ctx.headerMap ? ctx.headerMap : {};
+  var sheetName = sheet ? sheet.getName() : "";
+
+  if (!sheet) {
+    if (logger) {
+      logger.info("shifts.explain.not-found", {
+        shiftId: shiftId,
+        reason: "no-sheet",
+      });
+    }
+    return;
   }
 
-  sheet
-    .getRange(startRow, startCol + 1, startBg.length, 1)
-    .setBackgrounds(startBg);
-  sheet.getRange(startRow, endCol + 1, endBg.length, 1).setBackgrounds(endBg);
+  var shiftIdCol = getRequiredColumn_(headerMap, ["ID משמרת"], sheetName);
 
-  return {
-    ok: true,
-    shiftsWritten: writableRows.length,
-    skippedLocked: rows.length - writableRows.length,
-    daysRequested: daysRequested,
-  };
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) {
+    if (logger) {
+      logger.info("shifts.explain.no-rows", { shiftId: shiftId });
+    }
+    return;
+  }
+
+  var range = sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn());
+  var values = range.getValues();
+
+  var foundRowIndex = null;
+  var foundEmployeeId = null;
+  var foundWorkDate = null;
+  var foundJobTypeId = null;
+
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    if (String(row[shiftIdCol - 1]) === String(shiftId)) {
+      foundRowIndex = i + 2;
+      // TODO: השלם חילוץ employeeId, workDate, jobTypeId לפי העמודות הידועות
+      break;
+    }
+  }
+
+  if (!foundRowIndex) {
+    if (logger) {
+      logger.info("shifts.explain.not-found", { shiftId: shiftId });
+    }
+    return;
+  }
+
+  if (logger) {
+    logger.info("shifts.explain.found-shift", {
+      shiftId: shiftId,
+      rowIndex: foundRowIndex,
+      // employeeId: foundEmployeeId,
+      // workDate: foundWorkDate,
+      // jobTypeId: foundJobTypeId,
+    });
+  }
 }

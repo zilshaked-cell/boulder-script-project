@@ -650,6 +650,12 @@ function doPost(e) {
     __activeTraceContext = traceContext;
     logger = createScriptLogger_(traceContext);
 
+    logger.info("http.action", {
+      action: body && body.action,
+      hasPayload: !!(body && body.payload),
+      hasMeta: !!(body && body.meta),
+    });
+
     var parseDetails = { hasPayload: !!(body && body.payload) };
     if (parsed.error) {
       parseDetails.parseError = String(parsed.error).slice(0, 120);
@@ -1880,6 +1886,14 @@ function handleShiftReportSubmit_(payload, logger) {
   if (!payload) throw new Error("Missing payload for shiftReport.submit");
   var fnStartMs = new Date().getTime();
   const nowIso = new Date().toISOString();
+
+  if (logger) {
+    logger.info("shift.submit.start", {
+      reportMode: payload && payload.reportMode,
+      employeeId: payload && payload.employeeId,
+      rawShiftId: payload && payload.shiftId,
+    });
+  }
   const shiftId = payload.shiftId || Utilities.getUuid();
   const employeeId = stringValue(payload.employeeId);
   if (!employeeId) throw new Error("Missing employeeId");
@@ -3024,6 +3038,12 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
   getRequiredColumn_(headers, ["מחלקה", "מחלקות"], logsSheetName);
   getRequiredColumn_(headers, ["כמות היחידות", "דיווח יחידות"], logsSheetName);
   getRequiredColumn_(headers, ["הערות", "הערה"], logsSheetName);
+  if (logger) {
+    logger.info("shift.worklog.header-map", {
+      sheet: logsSheetName,
+      headerKeys: Object.keys(headers),
+    });
+  }
   logDuration_(logger, "shift.worklog.headers", headerStartMs, {
     sheet: logsSheetName,
   });
@@ -3044,6 +3064,14 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
     workDate: normalized.workDate,
   });
 
+  if (logger) {
+    logger.info("shift.worklog.row-preview", {
+      hasShiftId: !!(normalized && normalized.shiftId),
+      hasEmployeeId: !!(meta && meta.employeeId),
+      workDate: normalized && normalized.workDate,
+    });
+  }
+
   var appendStartMs = new Date().getTime();
   logsSheet.appendRow(row);
   logDuration_(logger, "shift.worklog.append", appendStartMs, {
@@ -3053,18 +3081,49 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
   try {
     var upsertStartMs = new Date().getTime();
     var workDateForUpsert = buildWorkDateForUpsert_(normalized);
+
+    if (logger) {
+      logger.info("shift.worklog.upsert.check-fn", {
+        fnType: typeof SHIFTS_upsertAroundWorkLog_,
+      });
+    }
+
     if (workDateForUpsert) {
+      if (logger) {
+        logger.info("shift.worklog.upsert.start", {
+          employeeId: String(meta.employeeId || normalized.employeeId || ""),
+          jobTypeId: String(normalized.jobTypeId || ""),
+          workDate: workDateForUpsert,
+        });
+      }
+
       SHIFTS_upsertAroundWorkLog_(
-        stringValue(meta && meta.employeeId),
-        stringValue(normalized && normalized.jobTypeId),
+        String(meta.employeeId || normalized.employeeId || ""),
+        String(normalized.jobTypeId || ""),
         workDateForUpsert
       );
     }
+
     logDuration_(logger, "shift.worklog.upsert-shifts", upsertStartMs, {
       hasWorkDate: !!workDateForUpsert,
     });
   } catch (e) {
-    Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + e);
+    if (logger && logger.error) {
+      logger.error(
+        "shift.worklog.upsert.error",
+        {
+          employeeId: String(meta.employeeId || normalized.employeeId || ""),
+          jobTypeId: String(normalized.jobTypeId || ""),
+          workDate: workDateForUpsert,
+          fnType: typeof SHIFTS_upsertAroundWorkLog_,
+          errorMessage: String((e && e.message) || e),
+        },
+        "SHIFTS_UPSERT_FAILED",
+        e
+      );
+    } else {
+      Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + e);
+    }
   }
   logDuration_(logger, "shift.worklog.total", fnStartMs, {
     sheet: logsSheetName,
@@ -4180,7 +4239,15 @@ function onEdit(e) {
   if (startRow < 2) return; // skip header row
   if (numRows > 5) return; // avoid bulk edits triggering many rebuilds
 
+  var logger = getModuleLogger_("ON_EDIT");
   const headerMap = getHeaderMap_(sheet);
+  if (logger) {
+    logger.info("worklogs.onEdit", {
+      sheet: sheet.getName(),
+      startRow: startRow,
+      numRows: numRows,
+    });
+  }
   const empCol = getRequiredColumn_(
     headerMap,
     ["ID עובד", "מזהה עובד"],
@@ -4219,9 +4286,22 @@ function onEdit(e) {
   }
 
   const keys = Object.keys(rebuildRequests);
+  if (logger) {
+    logger.info("worklogs.onEdit.rebuild-requests", {
+      requestsCount: keys.length,
+    });
+  }
   for (let i = 0; i < keys.length; i++) {
     const req = rebuildRequests[keys[i]];
     try {
+      if (logger) {
+        logger.info("worklogs.onEdit.rebuild-call", {
+          dateFrom: req.date,
+          dateTo: req.date,
+          employeeId: req.employeeId,
+          jobTypeId: req.jobTypeId,
+        });
+      }
       rebuildShiftsForRange_({
         dateFrom: req.date,
         dateTo: req.date,
