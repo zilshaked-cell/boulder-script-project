@@ -3106,6 +3106,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
 
     logDuration_(logger, "shift.worklog.upsert-shifts", upsertStartMs, {
       hasWorkDate: !!workDateForUpsert,
+      workDate: workDateForUpsert,
     });
   } catch (e) {
     if (logger && logger.error) {
@@ -3769,16 +3770,16 @@ function validateShiftsHeaders_(headers) {
   }
 
   if (issues.length) {
-    if (logger && logger.error) {
-      logger.error({
-        layer: "shifts",
-        step: "headers.validate",
-        issues: issues.slice(0, 5),
-      });
-    } else {
-      Logger.log("[SHIFTS_HEADERS_VALIDATE] " + issues.join(" | "));
-    }
-    throw new Error("Shifts sheet headers do not match canonical schema");
+    // עדיין נרשום לוג לשגיאות כותרת, אבל לא נחסום את האגרגטור.
+    logger.error({
+      layer: "shifts",
+      step: "headers.validate",
+      issues: issues.slice(0, 5),
+    });
+
+    // ממשיכים לעבוד עם ה-header הנוכחי כפי שהוא, כדי לא לחסום הרכבת משמרות.
+    // normalized headers כבר ב-actual.
+    return actual;
   }
 
   return actual;

@@ -337,6 +337,7 @@ function buildAggregatedShifts_(logs, debugExplain, loggerOpt) {
 
   const keys = Object.keys(grouped).sort();
   const results = [];
+  const statusCountsTotal = {};
 
   for (let k = 0; k < keys.length; k++) {
     const groupLogs = grouped[keys[k]].slice().sort(compareLogs_);
@@ -353,6 +354,7 @@ function buildAggregatedShifts_(logs, debugExplain, loggerOpt) {
     if (debugExplain && logger) {
       logger.info("shifts.agg.debug.timeline", {
         groupKey: groupKey,
+        logsCount: groupLogs.length,
         logs: groupLogs.map(function (log) {
           var dt = log && log.effectiveDateTime;
           return {
@@ -602,8 +604,11 @@ function buildAggregatedShifts_(logs, debugExplain, loggerOpt) {
     }
 
     for (let i = 0; i < built.length; i++) {
-      built[i].shiftId = buildShiftId_(built[i], i + 1);
-      results.push(built[i]);
+      var shiftRecord = built[i];
+      shiftRecord.shiftId = buildShiftId_(shiftRecord, i + 1);
+      var statusKey = shiftRecord.status || "UNKNOWN";
+      statusCountsTotal[statusKey] = (statusCountsTotal[statusKey] || 0) + 1;
+      results.push(shiftRecord);
     }
   }
 
@@ -611,6 +616,15 @@ function buildAggregatedShifts_(logs, debugExplain, loggerOpt) {
     logDuration_(logger, "shifts.buildAggregated", startMs, {
       inputLogs: logs ? logs.length : 0,
       shifts: results.length,
+      debugExplain: !!debugExplain,
+    });
+  }
+
+  if (logger) {
+    logger.info("shifts.agg.aggregate.summary", {
+      groups: keys.length,
+      shifts: results.length,
+      statusCounts: statusCountsTotal,
       debugExplain: !!debugExplain,
     });
   }
@@ -778,6 +792,7 @@ function rebuildShiftsForRange_(opts, loggerOpt) {
       logDuration_(logger, "shifts.agg.write-shifts", writeStartMs, {
         rowsToWrite: 0,
         skippedLocked: skippedLocked,
+        startRow: null,
       });
       result = {
         ok: true,
@@ -849,6 +864,7 @@ function rebuildShiftsForRange_(opts, loggerOpt) {
     logDuration_(logger, "shifts.agg.write-shifts", writeStartMs, {
       rowsToWrite: writableRows.length,
       skippedLocked: skippedLocked,
+      startRow: startRow,
     });
 
     logDuration_(logger, "shifts.agg.total", fnStartMs, {
