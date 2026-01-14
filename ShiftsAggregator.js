@@ -205,37 +205,6 @@ function translateShiftStatusAndNote_(status, note) {
     "Missing OUT": "חסרה יציאה",
     "Unknown direction": "כיוון דיווח לא מזוהה",
     "issue: end time before or equal to start time":
-      var hasUnits = false;
-      if (log && log.unitsRaw !== undefined && log.unitsRaw !== null) {
-        var unitsStr = stringValue(log.unitsRaw);
-        var unitsNum = typeof log.unitsRaw === "number" ? log.unitsRaw : parseFloat(unitsStr);
-        hasUnits = unitsStr !== "" && !isNaN(unitsNum);
-      }
-
-      if (hasUnits && (!log.direction || log.direction === "UNKNOWN")) {
-        var shiftUnitsOnly = buildShiftRecord_([log], "OK", "", null, null);
-        built.push(shiftUnitsOnly);
-        if (debugExplain && logger) {
-          logger.info("shifts.agg.debug.shift", {
-            groupKey: groupKey,
-            rule: "UNITS_NO_DIRECTION",
-            status: shiftUnitsOnly.status,
-            note: shiftUnitsOnly.note,
-            rawLogIds: shiftUnitsOnly.rawLogIds,
-            startTimeIso:
-              shiftUnitsOnly.startTime && shiftUnitsOnly.startTime.toISOString
-                ? shiftUnitsOnly.startTime.toISOString()
-                : "",
-            endTimeIso:
-              shiftUnitsOnly.endTime && shiftUnitsOnly.endTime.toISOString
-                ? shiftUnitsOnly.endTime.toISOString()
-                : "",
-            hoursDecimal: shiftUnitsOnly.hoursDecimal,
-            payHours: shiftUnitsOnly.payHours,
-          });
-        }
-        continue;
-      }
       "שעת יציאה לפני או שווה לשעת כניסה",
     "issue: overlap with another shift for this employee/job":
       "חפיפה עם משמרת אחרת לאותו עובד/תפקיד",
@@ -496,7 +465,10 @@ function buildAggregatedShifts_(logs, debugExplain, loggerOpt) {
       var hasUnits = false;
       if (log && log.unitsRaw !== undefined && log.unitsRaw !== null) {
         var unitsStr = stringValue(log.unitsRaw);
-        var unitsNum = typeof log.unitsRaw === "number" ? log.unitsRaw : parseFloat(unitsStr);
+        var unitsNum =
+          typeof log.unitsRaw === "number"
+            ? log.unitsRaw
+            : parseFloat(unitsStr);
         hasUnits = unitsStr !== "" && !isNaN(unitsNum);
       }
 
