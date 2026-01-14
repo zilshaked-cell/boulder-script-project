@@ -1200,6 +1200,24 @@ function adminListEmployees_(payload, logger) {
     "phone",
     "mobile",
   ]);
+  const genderCol = getOptionalColumn_(headers, ["מין", "gender"]);
+  const nationalIdCol = getOptionalColumn_(headers, [
+    "תז",
+    "id",
+    "id number",
+    "תעודת זהות",
+  ]);
+  const birthDateCol = getOptionalColumn_(headers, [
+    "ת. לידה",
+    "תאריך לידה",
+    "birth date",
+    "birthday",
+  ]);
+  const shirtSizeCol = getOptionalColumn_(headers, [
+    "מידת חולצה",
+    "shirt size",
+    "shirt",
+  ]);
   const roleTitleCol = getOptionalColumn_(headers, [
     "תפקיד",
     "role title",
@@ -1211,6 +1229,12 @@ function adminListEmployees_(payload, logger) {
     "ID סוג עבודה",
     "ID סוגי עבודה",
     "Job Type ID",
+  ]);
+  const travelAllowanceCol = getOptionalColumn_(headers, [
+    "עלות החזרי נסיעות יומי",
+    "החזר נסיעות",
+    "נסיעות",
+    "travel allowance",
   ]);
   const statusCol = getOptionalColumn_(headers, [
     "סטטוס",
@@ -1347,6 +1371,11 @@ function adminListEmployees_(payload, logger) {
         fullName: "",
         email: "",
         phone: "",
+        gender: "",
+        nationalId: "",
+        birthDate: "",
+        shirtSize: "",
+        travelAllowanceDaily: "",
         roleTitle: "",
         notes: "",
         branch: "",
@@ -1368,11 +1397,23 @@ function adminListEmployees_(payload, logger) {
       record.email = stringValue(row[emailCol - 1]);
     if (!record.phone && phoneCol)
       record.phone = stringValue(row[phoneCol - 1]);
+    if (!record.gender && genderCol)
+      record.gender = stringValue(row[genderCol - 1]);
+    if (!record.nationalId && nationalIdCol)
+      record.nationalId = stringValue(row[nationalIdCol - 1]);
+    if (!record.birthDate && birthDateCol)
+      record.birthDate = toIsoDate_(row[birthDateCol - 1]);
+    if (!record.shirtSize && shirtSizeCol)
+      record.shirtSize = stringValue(row[shirtSizeCol - 1]);
     if (!record.roleTitle && roleTitleCol)
       record.roleTitle = stringValue(row[roleTitleCol - 1]);
     if (!record.notes && notesCol)
       record.notes = stringValue(row[notesCol - 1]);
     if (!record.branch && branchVal) record.branch = branchVal;
+    if (!record.travelAllowanceDaily && travelAllowanceCol)
+      record.travelAllowanceDaily = stringValue(
+        row[travelAllowanceCol - 1]
+      );
 
     const normalizedEmployment = normalizeEmploymentStatus_(
       employmentVal,
@@ -1432,6 +1473,10 @@ function adminListEmployees_(payload, logger) {
           shortCode: jt.shortCode || "",
           colorHex: jt.colorHex || "",
           isActive: jt.isActive !== false,
+          department: jt.department || "",
+          payTypeId: jt.payTypeId || "",
+          payTypeName: jt.payTypeName || "",
+          payType: jt.payTypeName || jt.payTypeId || "",
         };
       }
       return {
@@ -1440,6 +1485,10 @@ function adminListEmployees_(payload, logger) {
         shortCode: "",
         colorHex: "",
         isActive: false,
+        department: "",
+        payTypeId: "",
+        payTypeName: "",
+        payType: "",
       };
     });
 
@@ -1448,6 +1497,11 @@ function adminListEmployees_(payload, logger) {
       fullName: rec.fullName,
       email: rec.email,
       phone: rec.phone,
+      gender: rec.gender,
+      nationalId: rec.nationalId,
+      birthDate: rec.birthDate,
+      shirtSize: rec.shirtSize,
+      travelAllowanceDaily: rec.travelAllowanceDaily,
       roleTitle: rec.roleTitle,
       notes: rec.notes,
       branch: rec.branch,
