@@ -194,12 +194,28 @@ var REQ = REQ || {};
 
     var all = [];
     var statusesFound = {};
+    var oldestOpenDate = null;
 
     for (var i = 0; i < data.length; i++) {
       var rec = readRow_(data[i], cols);
       if (!rec) continue;
       var statusKey = norm_(rec.status).toLowerCase();
       if (statusKey) statusesFound[statusKey] = rec.status;
+
+      // track the oldest open/pending request for default filters
+      if (DEFAULT_OPEN_STATUS.indexOf(statusKey) !== -1) {
+        var ts =
+          rec.timestamp instanceof Date
+            ? rec.timestamp
+            : rec.timestampIso
+            ? new Date(rec.timestampIso)
+            : null;
+        if (ts instanceof Date && !isNaN(ts.getTime())) {
+          if (!oldestOpenDate || ts.getTime() < oldestOpenDate.getTime()) {
+            oldestOpenDate = ts;
+          }
+        }
+      }
 
       // default filter: only open statuses unless includeClosed or explicit statuses provided
       if (!includeClosed && statusesFilter.length === 0) {
@@ -260,6 +276,9 @@ var REQ = REQ || {};
       statuses: Object.keys(statusesFound).map(function (k) {
         return statusesFound[k];
       }),
+      oldestOpenTimestampIso: oldestOpenDate
+        ? oldestOpenDate.toISOString()
+        : "",
     };
 
     if (typeof logDuration_ === "function") {

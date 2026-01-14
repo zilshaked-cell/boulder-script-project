@@ -4860,7 +4860,7 @@
         }, 2000);
       }
 
-      function applyDefaultRequestDateRange(list) {
+      function applyDefaultRequestDateRange(list, oldestOpenIso) {
         var fromInput = $("requests-date-from");
         var toInput = $("requests-date-to");
         if (!fromInput || !toInput) return;
@@ -4872,6 +4872,10 @@
 
         var oldestOpen = null;
         var oldestAny = null;
+        var providedOldestOpen = parseRequestDate(oldestOpenIso);
+        if (providedOldestOpen && considerOpen) {
+          oldestOpen = providedOldestOpen;
+        }
         (list || []).forEach(function (r) {
           var d = parseRequestDate(r && (r.timestampIso || r.timestamp));
           if (!d) return;
@@ -5043,7 +5047,7 @@
             setRequestsMessage("", false);
 
             renderRequestsResults();
-            applyDefaultRequestDateRange(requests);
+            applyDefaultRequestDateRange(requests, res.oldestOpenTimestampIso);
           })
           .withFailureHandler(function (err) {
             requestsState.loading = false;
