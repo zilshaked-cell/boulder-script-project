@@ -1230,6 +1230,20 @@ function adminListEmployees_(payload, logger) {
     "ID סוגי עבודה",
     "Job Type ID",
   ]);
+  const jobTypeNameCol = getOptionalColumn_(headers, [
+    "סוג העבודה",
+    "סוג עבודה",
+  ]);
+  const jobDepartmentCol = getOptionalColumn_(headers, [
+    "מחלקה",
+    "מחלקות",
+  ]);
+  const jobAmountCol = getOptionalColumn_(headers, ["סכום"]);
+  const jobPayTypeIdCol = getOptionalColumn_(headers, [
+    "ID אופן תשלום",
+    "ID אופני תשלום",
+  ]);
+  const jobPayTypeNameCol = getOptionalColumn_(headers, ["אופן תשלום"]);
   const travelAllowanceCol = getOptionalColumn_(headers, [
     "עלות החזרי נסיעות יומי",
     "החזר נסיעות",
@@ -1288,8 +1302,13 @@ function adminListEmployees_(payload, logger) {
 
   const jobTypes = listJobTypes_();
   const jobMap = {};
+  const jobMapByName = {};
   jobTypes.forEach(function (jt) {
     jobMap[jt.id] = jt;
+    const nameKey = stringValue(jt.name).toLowerCase();
+    if (nameKey && !jobMapByName[nameKey]) {
+      jobMapByName[nameKey] = jt;
+    }
   });
 
   const statusFilterRaw = stringValue(payload.statusFilter).toUpperCase();
@@ -1384,6 +1403,7 @@ function adminListEmployees_(payload, logger) {
         jobTypeIds: [],
         jobTypesDetailed: [],
         systemRole: "EMPLOYEE",
+        _jobTypeDetailMap: {},
         _hasActiveRow: false,
         _hasInactiveRow: false,
         _roleRank: 0,
@@ -1433,11 +1453,68 @@ function adminListEmployees_(payload, logger) {
       record._hasActiveRow = true;
     }
 
-    if (jobTypeCol) {
-      const jobTypeId = stringValue(row[jobTypeCol - 1]);
-      if (jobTypeId && record.jobTypeIds.indexOf(jobTypeId) === -1) {
+    var jobTypeId = jobTypeCol ? stringValue(row[jobTypeCol - 1]) : "";
+    var jobTypeNameVal = jobTypeNameCol
+      ? stringValue(row[jobTypeNameCol - 1])
+      : "";
+    var jobTypeNameKey = jobTypeNameVal.toLowerCase();
+
+    if (!jobTypeId && jobTypeNameKey && jobMapByName[jobTypeNameKey]) {
+      jobTypeId = jobMapByName[jobTypeNameKey].id || "";
+    }
+
+    if (jobTypeId) {
+      if (record.jobTypeIds.indexOf(jobTypeId) === -1) {
         record.jobTypeIds.push(jobTypeId);
       }
+
+      var jobTypeFromMap =
+        jobMap[jobTypeId] || (jobTypeNameKey ? jobMapByName[jobTypeNameKey] : {}) || {};
+      var detailPrev = record._jobTypeDetailMap[jobTypeId] || {};
+      var jobDept = jobDepartmentCol
+        ? stringValue(row[jobDepartmentCol - 1])
+        : "";
+      var payTypeIdRaw = jobPayTypeIdCol
+        ? stringValue(row[jobPayTypeIdCol - 1])
+        : "";
+      var payTypeNameRaw = jobPayTypeNameCol
+        ? stringValue(row[jobPayTypeNameCol - 1])
+        : "";
+      var amountRaw = jobAmountCol ? row[jobAmountCol - 1] : "";
+      var amountValue =
+        amountRaw !== null && amountRaw !== undefined && amountRaw !== ""
+          ? amountRaw
+          : detailPrev.amount !== undefined
+          ? detailPrev.amount
+          : jobTypeFromMap.amount || "";
+
+      record._jobTypeDetailMap[jobTypeId] = {
+        jobTypeId: jobTypeId,
+        name:
+          jobTypeNameVal || detailPrev.name || jobTypeFromMap.name || "",
+        shortCode: detailPrev.shortCode || jobTypeFromMap.shortCode || "",
+        colorHex: detailPrev.colorHex || jobTypeFromMap.colorHex || "",
+        isActive:
+          detailPrev.isActive !== undefined
+            ? detailPrev.isActive
+            : jobTypeFromMap.isActive !== false,
+        department:
+          jobDept || detailPrev.department || jobTypeFromMap.department || "",
+        payTypeId:
+          payTypeIdRaw || detailPrev.payTypeId || jobTypeFromMap.payTypeId || "",
+        payTypeName:
+          payTypeNameRaw || detailPrev.payTypeName || jobTypeFromMap.payTypeName || "",
+        payType:
+          payTypeNameRaw ||
+          payTypeIdRaw ||
+          detailPrev.payType ||
+          detailPrev.payTypeName ||
+          detailPrev.payTypeId ||
+          jobTypeFromMap.payTypeName ||
+          jobTypeFromMap.payTypeId ||
+          "",
+        amount: amountValue,
+      };
     }
 
     const rawSystemRole = systemRoleCol
@@ -1465,30 +1542,32 @@ function adminListEmployees_(payload, logger) {
       !isActive
     );
     const jobTypesDetailed = rec.jobTypeIds.map(function (jobTypeId) {
-      const jt = jobMap[jobTypeId];
-      if (jt) {
-        return {
-          jobTypeId: jt.id,
-          name: jt.name,
-          shortCode: jt.shortCode || "",
-          colorHex: jt.colorHex || "",
-          isActive: jt.isActive !== false,
-          department: jt.department || "",
-          payTypeId: jt.payTypeId || "",
-          payTypeName: jt.payTypeName || "",
-          payType: jt.payTypeName || jt.payTypeId || "",
-        };
-      }
+      const jt = jobMap[jobTypeId] || {};
+      const detail = rec._jobTypeDetailMap[jobTypeId] || {};
+      const isActive =
+        detail.isActive !== undefined ? detail.isActive : jt.isActive !== false;
+      const amountValue =
+        detail.amount !== undefined && detail.amount !== ""
+          ? detail.amount
+          : jt.amount || "";
+
       return {
         jobTypeId: jobTypeId,
-        name: "",
-        shortCode: "",
-        colorHex: "",
-        isActive: false,
-        department: "",
-        payTypeId: "",
-        payTypeName: "",
-        payType: "",
+        name: detail.name || jt.name || "",
+        shortCode: detail.shortCode || jt.shortCode || "",
+        colorHex: detail.colorHex || jt.colorHex || "",
+        isActive: isActive,
+        department: detail.department || jt.department || "",
+        payTypeId: detail.payTypeId || jt.payTypeId || "",
+        payTypeName: detail.payTypeName || jt.payTypeName || "",
+        payType:
+          detail.payType ||
+          detail.payTypeName ||
+          detail.payTypeId ||
+          jt.payTypeName ||
+          jt.payTypeId ||
+          "",
+        amount: amountValue,
       };
     });
 
