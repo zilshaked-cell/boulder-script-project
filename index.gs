@@ -272,6 +272,9 @@ function getActionRegistry_() {
     "admin.listEmployees": function (payload, logger) {
       return adminListEmployees_(payload || {}, logger);
     },
+    "admin.listRequests": function (payload, logger) {
+      return adminListRequests_(payload || {}, logger);
+    },
     "employee.linkedJobs": function (payload, _logger) {
       return listEmployeeLinkedJobIds_(payload);
     },
@@ -1639,6 +1642,110 @@ function adminListEmployees_(payload, logger) {
   });
 
   return { employees: filtered };
+}
+
+// TODO(admin-requests): mapping based on existing sheet: id = requestId or shiftId; employeeId + employeeName; raw status from "סטטוס בקשה"; createdAt from "חותמת זמן"/"תאריך משמרת"; optional shiftId, jobTypeId/name, department, units, manager note.
+function adminListRequests_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("ADMIN_REQUESTS_LIST");
+  var startMs = new Date().getTime();
+
+  function normalizeRequestStatus_(raw) {
+    var val = stringValue(raw).toLowerCase();
+    if (!val) return "PENDING";
+    if (val.indexOf("approved") !== -1 || val.indexOf("מאושר") !== -1)
+      return "APPROVED";
+    if (val.indexOf("reject") !== -1 || val.indexOf("נדח") !== -1)
+      return "REJECTED";
+    if (val.indexOf("cancel") !== -1 || val.indexOf("בטל") !== -1)
+      return "CANCELLED";
+    return "PENDING";
+  }
+
+  function normalizeIsoDateTimeValue_(val) {
+    if (val === null || val === undefined || val === "") return "";
+    if (val instanceof Date && !isNaN(val.getTime())) return val.toISOString();
+    var s = stringValue(val);
+    if (!s) return "";
+    var parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString();
+    return s;
+  }
+
+  const sheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
+  const headers = getHeaderMap_(sheet);
+  const sheetName = sheet.getName();
+
+  const colRequestId = getRequiredColumn_(headers, ["ID בקשה", "Request ID", "RequestID"], sheetName);
+  const colEmployeeId = getRequiredColumn_(headers, ["מזהה עובד", "ID עובד", "Employee ID", "ת.ז", "תז"], sheetName);
+  const colEmployeeName = getOptionalColumn_(headers, ["שם מלא", "שם עובד", "Employee Name"], sheetName);
+  const colStatus = getRequiredColumn_(headers, ["סטטוס בקשה", "סטטוס", "Status"], sheetName);
+  const colTimestamp = getRequiredColumn_(headers, ["חותמת זמן", "תאריך משמרת", "תיקון תאריך"], sheetName);
+  const colShiftId = getOptionalColumn_(headers, ["ID משמרת", "Shift ID", "מזהה משמרת"], sheetName);
+  const colJobTypeId = getOptionalColumn_(headers, ["ID סוג עבודה", "ID סוגי עבודה", "Job Type ID"], sheetName);
+  const colJobTypeName = getOptionalColumn_(headers, ["סוג עבודה", "סוגי עבודה", "שם סוג עבודה"], sheetName);
+  const colDepartment = getOptionalColumn_(headers, ["מחלקה", "מחלקות", "Department"], sheetName);
+  const colUnits = getOptionalColumn_(headers, ["כמות היחידות", "דיווח יחידות", "Units"], sheetName);
+  const colManagerNotes = getOptionalColumn_(headers, ["הערה למנהל", "הערות", "הערות למשמרת", "Manager Notes"], sheetName);
+
+  var headerRow = 1;
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+
+  if (lastRow <= headerRow) {
+    lg.info("read-sheet", { sheetName: sheetName, rows: 0 });
+    return { requests: [] };
+  }
+
+  var dataRange = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
+  var values = dataRange.getValues();
+
+  lg.info("read-sheet", {
+    sheetName: sheetName,
+    rows: values.length,
+  });
+
+  var allRequests = [];
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+
+    var requestId = stringValue(row[colRequestId - 1]);
+    var shiftId = colShiftId ? stringValue(row[colShiftId - 1]) : "";
+    var id = requestId || shiftId;
+    if (!id) continue;
+
+    var employeeId = stringValue(row[colEmployeeId - 1]);
+    var employeeName = colEmployeeName ? stringValue(row[colEmployeeName - 1]) : "";
+    var statusRaw = stringValue(row[colStatus - 1]);
+    var status = normalizeRequestStatus_(statusRaw);
+    var createdAt = normalizeIsoDateTimeValue_(row[colTimestamp - 1]);
+
+    var request = {
+      id: id,
+      employeeId: employeeId,
+      employeeName: employeeName,
+      status: status,
+      rawStatus: statusRaw,
+      createdAt: createdAt,
+    };
+
+    if (requestId) request.requestId = requestId;
+    if (shiftId) request.shiftId = shiftId;
+    if (colJobTypeId) request.requestTypeId = stringValue(row[colJobTypeId - 1]);
+    if (colJobTypeName) request.requestTypeName = stringValue(row[colJobTypeName - 1]);
+    if (colDepartment) request.department = stringValue(row[colDepartment - 1]);
+    if (colUnits) request.units = stringValue(row[colUnits - 1]);
+    if (colManagerNotes) request.managerNotes = stringValue(row[colManagerNotes - 1]);
+
+    allRequests.push(request);
+  }
+
+  logDuration_(lg, "admin.listRequests.total", startMs, {
+    sheet: sheetName,
+    scannedRows: values.length,
+    returned: allRequests.length,
+  });
+
+  return { requests: allRequests };
 }
 
 function listWorkLogsByEmployee_(payload, logger) {
