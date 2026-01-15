@@ -238,6 +238,7 @@ function mapActionToOperation_(action) {
     "logs.list": "SYSTEM_LOG_LIST",
     "jobTypes.list": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
+    "admin.runBulkAction": "ADMIN_BULK_ACTION_RUN",
     "admin.listEmployees": "ADMIN_EMPLOYEES_LIST",
     "workLogs.listByEmployee": "WORK_LOG_LOAD",
     "requests.listByEmployee": "REQUEST_LIST",
@@ -268,6 +269,9 @@ function getActionRegistry_() {
     },
     "jobTypes.list": function (_payload, _logger) {
       return { jobTypes: listJobTypes_() };
+    },
+    "admin.runBulkAction": function (payload, logger) {
+      return adminRunBulkAction_(payload || {}, logger);
     },
     "admin.listEmployees": function (payload, logger) {
       return adminListEmployees_(payload || {}, logger);
@@ -1642,6 +1646,57 @@ function adminListEmployees_(payload, logger) {
   });
 
   return { employees: filtered };
+}
+
+function adminRunBulkAction_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("ADMIN_BULK_ACTION_RUN");
+  var startMs = new Date().getTime();
+
+  try {
+    var data = EmployeesModule_adminRunBulkAction_(payload || {}, {
+      logger: lg,
+    });
+
+    var targetCount =
+      data &&
+      data.result &&
+      data.result.summary &&
+      typeof data.result.summary.targetEmployeesCount === "number"
+        ? data.result.summary.targetEmployeesCount
+        : null;
+
+    logDuration_(lg, "admin.runBulkAction.total", startMs, {
+      mode: payload && payload.mode,
+      bulkType: payload && payload.bulkType,
+      targetEmployees: targetCount,
+    });
+
+    return {
+      ok: true,
+      data: data,
+    };
+  } catch (err) {
+    if (lg && lg.error) {
+      lg.error(
+        "admin.runBulkAction.error",
+        { message: err && err.message ? err.message : err },
+        ERROR_CODES.INTERNAL_ERROR,
+        err
+      );
+    }
+
+    return {
+      ok: false,
+      errorCode:
+        err && err.code === "VALIDATION_ERROR"
+          ? "VALIDATION_ERROR"
+          : ERROR_CODES.INTERNAL_ERROR,
+      errorMessage:
+        err && err.message
+          ? String(err.message)
+          : "Unknown error in admin.runBulkAction",
+    };
+  }
 }
 
 // TODO(admin-requests): mapping based on existing sheet: id = requestId or shiftId; employeeId + employeeName; raw status from "סטטוס בקשה"; createdAt from "חותמת זמן"/"תאריך משמרת"; optional shiftId, jobTypeId/name, department, units, manager note.

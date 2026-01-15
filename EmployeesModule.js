@@ -147,6 +147,26 @@ var EMP = EMP || {};
     return sh;
   }
 
+  function stringValue_(val) {
+    if (val === null || val === undefined) return "";
+    return String(val).trim();
+  }
+
+  function validationError_(msg) {
+    var e = new Error(msg);
+    e.code = "VALIDATION_ERROR";
+    return e;
+  }
+
+  function normalizeSystemRole_(val) {
+    var v = stringValue_(val).toLowerCase();
+    if (!v) return "";
+    if (v === "admin" || v === "administrator") return "ADMIN";
+    if (v === "shift_manager") return "SHIFT_MANAGER";
+    if (v === "viewer") return "VIEWER";
+    return "EMPLOYEE";
+  }
+
   function getScriptProps_() {
     return PropertiesService.getDocumentProperties();
   }
@@ -683,6 +703,483 @@ var EMP = EMP || {};
       ok: true,
       employees: list,
       cols: CONFIG.COL,
+    };
+  }
+
+  function validateBulkActionDefinition_(definition) {
+    if (!definition || typeof definition !== "object") {
+      throw validationError_("Missing bulk action definition");
+    }
+
+    var mode = definition.mode;
+    if (mode !== "DRY_RUN" && mode !== "EXECUTE") {
+      throw validationError_("Unsupported mode: " + mode);
+    }
+
+    var bulkType = definition.bulkType;
+    if (
+      bulkType !== "EMPLOYEE_JOBTYPE_ADD" &&
+      bulkType !== "EMPLOYEE_JOBTYPE_REMOVE"
+    ) {
+      throw validationError_("Unsupported bulkType: " + bulkType);
+    }
+
+    var params = definition.params || {};
+    var jobTypeId = stringValue_(params.jobTypeId);
+    if (!jobTypeId) {
+      throw validationError_("Missing jobTypeId in params");
+    }
+
+    var jobRecord = null;
+    if (typeof OPT !== "undefined" && OPT.getJobById) {
+      jobRecord = OPT.getJobById(jobTypeId) || null;
+    }
+    if (!jobRecord) {
+      throw validationError_("Unknown jobTypeId: " + jobTypeId);
+    }
+
+    var filters = definition.filters || {};
+    var statusFilter = stringValue_(filters.status || "ALL").toUpperCase();
+    var systemRoleFilter = stringValue_(
+      filters.systemRole || "ALL"
+    ).toUpperCase();
+    var branchFilterRaw =
+      filters.branch === null ? null : stringValue_(filters.branch);
+    var branchFilter = branchFilterRaw ? branchFilterRaw : null;
+    var filterJobTypeId = filters.jobTypeId
+      ? stringValue_(filters.jobTypeId)
+      : null;
+
+    var allowedStatus = { ALL: true, ACTIVE: true, INACTIVE: true };
+    if (!allowedStatus[statusFilter]) {
+      throw validationError_("Invalid status filter: " + statusFilter);
+    }
+
+    var allowedRoles = {
+      ALL: true,
+      ADMIN: true,
+      SHIFT_MANAGER: true,
+      EMPLOYEE: true,
+      VIEWER: true,
+    };
+    if (!allowedRoles[systemRoleFilter]) {
+      throw validationError_("Invalid systemRole filter: " + systemRoleFilter);
+    }
+
+    return {
+      mode: mode,
+      bulkType: bulkType,
+      params: { jobTypeId: jobTypeId },
+      jobRecord: jobRecord,
+      filters: {
+        status: statusFilter,
+        systemRole: systemRoleFilter,
+        branch: branchFilter,
+        jobTypeId: filterJobTypeId,
+      },
+    };
+  }
+
+  function loadEmployeesForBulkAction_(filters, logger) {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      throw new Error('לא נמצאה כרטיסייה "פרטי עובדים"');
+    }
+
+    ensureEmployeeIds_(sheet);
+
+    var colsResult = EMP_getEmployeeColumns_();
+    if (!colsResult || !colsResult.ok) {
+      throw new Error(
+        colsResult && colsResult.error
+          ? colsResult.error
+          : "Missing employee columns"
+      );
+    }
+    var cols = colsResult.cols;
+
+    var headerRow = CONFIG.HEADER_ROW;
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= headerRow) return [];
+
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+    var colEmail =
+      colIndexByHeader_(headers, "מייל") || colIndexByHeader_(headers, "email");
+    var colSystemRole =
+      colIndexByHeader_(headers, "System Role") ||
+      colIndexByHeader_(headers, "system role");
+    var colBranch =
+      colIndexByHeader_(headers, "branch") ||
+      colIndexByHeader_(headers, "Branch") ||
+      colIndexByHeader_(headers, "סניף");
+
+    var data = sheet
+      .getRange(headerRow + 1, 1, lastRow - headerRow, lastCol)
+      .getValues();
+
+    var byId = {};
+
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+      var absRow = headerRow + 1 + i;
+
+      var employeeId = stringValue_(row[cols.employeeIdCol - 1]);
+      var employeeName = stringValue_(row[CONFIG.COL.FULL_NAME - 1]);
+      if (!employeeId || !employeeName) continue;
+
+      var email = colEmail ? stringValue_(row[colEmail - 1]) : "";
+      var systemRole = colSystemRole
+        ? normalizeSystemRole_(row[colSystemRole - 1])
+        : "";
+      var branchVal = colBranch ? stringValue_(row[colBranch - 1]) : "";
+
+      var rowStatusVal = row[CONFIG.COL.ACTIVE - 1];
+      var rowActive = isRowActiveFlag_(rowStatusVal);
+      var jobTypeId = stringValue_(row[cols.jobTypeIdCol - 1]);
+      var jobTypeName = stringValue_(row[cols.jobTypeNameCol - 1]);
+      var department = stringValue_(row[cols.departmentCol - 1]);
+
+      var emp = byId[employeeId];
+      if (!emp) {
+        emp = {
+          id: employeeId,
+          name: employeeName,
+          email: email,
+          systemRole: systemRole,
+          branch: branchVal,
+          anyActive: false,
+          jobTypeIds: [],
+          rows: [],
+        };
+        byId[employeeId] = emp;
+      } else {
+        if (email && !emp.email) emp.email = email;
+        if (systemRole && !emp.systemRole) emp.systemRole = systemRole;
+        if (branchVal && !emp.branch) emp.branch = branchVal;
+      }
+
+      emp.rows.push({
+        rowIndex: absRow,
+        active: rowActive,
+        jobTypeId: jobTypeId,
+        jobTypeName: jobTypeName,
+        department: department,
+      });
+
+      if (rowActive) emp.anyActive = true;
+      if (rowActive && jobTypeId) {
+        if (emp.jobTypeIds.indexOf(jobTypeId) === -1) {
+          emp.jobTypeIds.push(jobTypeId);
+        }
+      }
+    }
+
+    var statusFilter = filters.status;
+    var branchFilter = filters.branch;
+    var systemRoleFilter = filters.systemRole;
+    var jobTypeFilter = filters.jobTypeId;
+
+    var employees = [];
+    Object.keys(byId).forEach(function (k) {
+      var emp = byId[k];
+
+      if (statusFilter === "ACTIVE" && !emp.anyActive) return;
+      if (statusFilter === "INACTIVE" && emp.anyActive) return;
+
+      if (branchFilter) {
+        var empBranch = emp.branch ? emp.branch.toLowerCase() : "";
+        if (!empBranch || empBranch !== branchFilter.toLowerCase()) return;
+      }
+
+      if (systemRoleFilter && systemRoleFilter !== "ALL") {
+        var empRole = emp.systemRole ? emp.systemRole.toUpperCase() : "";
+        if (empRole !== systemRoleFilter) return;
+      }
+
+      if (jobTypeFilter && emp.jobTypeIds.indexOf(jobTypeFilter) === -1) {
+        return;
+      }
+
+      employees.push(emp);
+    });
+
+    return employees;
+  }
+
+  function computeBulkJobTypeBulkAction_(employees, bulkType, params) {
+    var jobTypeId =
+      params && params.jobTypeId ? stringValue_(params.jobTypeId) : "";
+
+    var summary = {
+      targetEmployeesCount: employees.length,
+      affectedEmployeesCount: 0,
+      noChangeCount: 0,
+    };
+    var applied = [];
+    var skipped = [];
+    var errors = [];
+    var changes = [];
+
+    employees.forEach(function (emp) {
+      try {
+        var beforeIds = emp.jobTypeIds || [];
+        var afterIds = beforeIds.slice();
+        var had = beforeIds.indexOf(jobTypeId) !== -1;
+
+        if (bulkType === "EMPLOYEE_JOBTYPE_ADD") {
+          if (had) {
+            skipped.push({
+              employeeId: emp.id,
+              employeeName: emp.name,
+              email: emp.email || "",
+              reasonCode: "ALREADY_HAS_JOBTYPE",
+              reasonMessage: "העובד כבר מחזיק את סוג העבודה הזה",
+            });
+            summary.noChangeCount++;
+            return;
+          }
+          afterIds.push(jobTypeId);
+        } else if (bulkType === "EMPLOYEE_JOBTYPE_REMOVE") {
+          if (!had) {
+            skipped.push({
+              employeeId: emp.id,
+              employeeName: emp.name,
+              email: emp.email || "",
+              reasonCode: "JOBTYPE_NOT_ASSIGNED",
+              reasonMessage: "לעובד אין את סוג העבודה הזה",
+            });
+            summary.noChangeCount++;
+            return;
+          }
+          afterIds = beforeIds.filter(function (id) {
+            return id !== jobTypeId;
+          });
+        } else {
+          throw new Error("Unknown bulkType: " + bulkType);
+        }
+
+        applied.push({
+          employeeId: emp.id,
+          employeeName: emp.name,
+          email: emp.email || "",
+          changeDescription:
+            bulkType === "EMPLOYEE_JOBTYPE_ADD"
+              ? "נוסף סוג עבודה " + jobTypeId
+              : "הוסר סוג עבודה " + jobTypeId,
+        });
+
+        summary.affectedEmployeesCount++;
+
+        var targetRowIndex = null;
+        if (bulkType === "EMPLOYEE_JOBTYPE_REMOVE" && emp.rows) {
+          for (var iRow = 0; iRow < emp.rows.length; iRow++) {
+            var r = emp.rows[iRow];
+            if (!r.active) continue;
+            if (stringValue_(r.jobTypeId) === jobTypeId) {
+              targetRowIndex = r.rowIndex;
+              break;
+            }
+          }
+        }
+
+        var baseRowIndex =
+          emp.rows && emp.rows.length ? emp.rows[0].rowIndex : null;
+
+        changes.push({
+          employeeId: emp.id,
+          employeeName: emp.name,
+          email: emp.email || "",
+          action: bulkType,
+          rowIndex: targetRowIndex,
+          baseRowIndex: baseRowIndex,
+          beforeJobTypeIds: beforeIds,
+          afterJobTypeIds: afterIds,
+        });
+      } catch (e) {
+        errors.push({
+          employeeId: emp.id || null,
+          employeeName: emp.name || null,
+          email: emp.email || null,
+          errorCode: "ROW_PROCESSING_ERROR",
+          errorMessage:
+            e && e.message ? String(e.message) : "Unknown row error",
+        });
+        summary.noChangeCount++;
+      }
+    });
+
+    return {
+      result: {
+        summary: summary,
+        applied: applied,
+        skipped: skipped,
+        errors: errors,
+      },
+      changes: changes,
+    };
+  }
+
+  function applyBulkJobTypeChanges_(
+    computation,
+    bulkType,
+    params,
+    jobRecord,
+    logger
+  ) {
+    var changes = computation && computation.changes ? computation.changes : [];
+    if (!changes.length) return;
+
+    if (changes.length > 100) {
+      throw new Error("Too many rows to update in one run (max 100)");
+    }
+
+    var lock = LockService.getDocumentLock();
+    if (!lock.tryLock(5000)) {
+      throw new Error("לא ניתן לקבל נעילה לביצוע הפעולה");
+    }
+
+    try {
+      var sheet = getEmployeesSheet_();
+      if (!sheet) {
+        throw new Error('לא נמצאה כרטיסייה "פרטי עובדים"');
+      }
+
+      var colsResult = EMP_getEmployeeColumns_();
+      if (!colsResult || !colsResult.ok) {
+        throw new Error(
+          colsResult && colsResult.error
+            ? colsResult.error
+            : "Missing employee columns"
+        );
+      }
+      var cols = colsResult.cols;
+
+      var headerRow = CONFIG.HEADER_ROW;
+      var lastCol = sheet.getLastColumn();
+
+      var rowsToDeactivate = [];
+      var appendRows = [];
+      var appendMeta = [];
+
+      var currentLastRow = sheet.getLastRow();
+
+      for (var i = 0; i < changes.length; i++) {
+        var ch = changes[i];
+        if (ch.action === "EMPLOYEE_JOBTYPE_ADD") {
+          var templateRowIndex = ch.baseRowIndex || headerRow + 1;
+          var templateRow = sheet
+            .getRange(templateRowIndex, 1, 1, lastCol)
+            .getValues()[0];
+
+          var newRow = templateRow.slice();
+          newRow[CONFIG.COL.ACTIVE - 1] = "פעיל";
+          newRow[CONFIG.COL.ID - 1] = ch.employeeId;
+          newRow[CONFIG.COL.FULL_NAME - 1] =
+            ch.employeeName || templateRow[CONFIG.COL.FULL_NAME - 1];
+
+          if (cols.jobTypeIdCol)
+            newRow[cols.jobTypeIdCol - 1] = params.jobTypeId;
+          if (cols.jobTypeNameCol) {
+            var jobName =
+              jobRecord && jobRecord.name
+                ? jobRecord.name
+                : newRow[cols.jobTypeNameCol - 1];
+            newRow[cols.jobTypeNameCol - 1] = jobName;
+          }
+          if (cols.departmentCol) {
+            var deptVal =
+              jobRecord && jobRecord.department
+                ? jobRecord.department
+                : newRow[cols.departmentCol - 1];
+            newRow[cols.departmentCol - 1] = deptVal;
+          }
+
+          appendRows.push(newRow);
+          appendMeta.push({
+            employeeId: ch.employeeId,
+            templateRowIndex: templateRowIndex,
+          });
+        } else if (ch.action === "EMPLOYEE_JOBTYPE_REMOVE") {
+          if (!ch.rowIndex) {
+            // no specific row to deactivate – skip silently
+            continue;
+          }
+          rowsToDeactivate.push(ch.rowIndex);
+        }
+      }
+
+      if (appendRows.length) {
+        var startAppendRow = currentLastRow + 1;
+        sheet
+          .getRange(startAppendRow, 1, appendRows.length, lastCol)
+          .setValues(appendRows);
+
+        // copy formatting from template rows to preserve validation/number formats
+        for (var a = 0; a < appendMeta.length; a++) {
+          var tmplRowIdx = appendMeta[a].templateRowIndex || headerRow + 1;
+          var destRowIdx = startAppendRow + a;
+          try {
+            sheet
+              .getRange(tmplRowIdx, 1, 1, lastCol)
+              .copyFormatToRange(sheet, 1, lastCol, destRowIdx, destRowIdx);
+          } catch (_ignoredFmt) {}
+        }
+      }
+
+      if (rowsToDeactivate.length) {
+        for (var d = 0; d < rowsToDeactivate.length; d++) {
+          var rIdx = rowsToDeactivate[d];
+          sheet.getRange(rIdx, CONFIG.COL.ACTIVE).setValue("לא פעיל");
+        }
+      }
+
+      if (cols.jobTypeIdCol) {
+        try {
+          sheet
+            .getRange(
+              headerRow + 1,
+              cols.jobTypeIdCol,
+              sheet.getLastRow() - headerRow,
+              1
+            )
+            .setNumberFormat("@");
+        } catch (_ignored) {}
+      }
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  function EmployeesModule_adminRunBulkAction_(definition, context) {
+    var logger =
+      (context && context.logger) ||
+      ensureModuleLoggerDefined_("ADMIN_BULK_ACTION_RUN");
+
+    var validated = validateBulkActionDefinition_(definition);
+
+    var employees = loadEmployeesForBulkAction_(validated.filters, logger);
+    var computation = computeBulkJobTypeBulkAction_(
+      employees,
+      validated.bulkType,
+      validated.params
+    );
+
+    if (validated.mode === "EXECUTE") {
+      applyBulkJobTypeChanges_(
+        computation,
+        validated.bulkType,
+        validated.params,
+        validated.jobRecord,
+        logger
+      );
+    }
+
+    return {
+      mode: validated.mode,
+      bulkType: validated.bulkType,
+      definition: definition,
+      result: computation.result,
     };
   }
 
@@ -1392,11 +1889,16 @@ var EMP = EMP || {};
   EMP.getEmployeesSheet = getEmployeesSheet_;
   EMP.getLogSheet = getLogSheet_;
   EMP.CONFIG = CONFIG;
+  EMP.adminRunBulkAction = EmployeesModule_adminRunBulkAction_;
   // Expose for legacy callers that reference the global name directly
   if (typeof globalThis !== "undefined") {
     globalThis.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
+    globalThis.EmployeesModule_adminRunBulkAction_ =
+      EmployeesModule_adminRunBulkAction_;
   } else {
     this.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
+    this.EmployeesModule_adminRunBulkAction_ =
+      EmployeesModule_adminRunBulkAction_;
   }
   // Export column resolver for backfill functions defined outside the IIFE
   EMP.getEmployeeColumnsForBackfill = EMP_getEmployeeColumns_;
