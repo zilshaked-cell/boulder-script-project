@@ -158,6 +158,36 @@ var EMP = EMP || {};
     return e;
   }
 
+  function parseJobTypeIdsCell_(cellVal) {
+    var raw = stringValue_(cellVal);
+    if (!raw) return [];
+    // Split on comma/semicolon/whitespace; keep simple to match existing free-text cells.
+    var parts = raw
+      .split(/[,;\s]+/)
+      .map(function (p) {
+        return stringValue_(p);
+      })
+      .filter(function (p) {
+        return !!p;
+      });
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (out.indexOf(parts[i]) === -1) out.push(parts[i]);
+    }
+    return out;
+  }
+
+  function serializeJobTypeIds_(ids) {
+    if (!Array.isArray(ids) || !ids.length) return "";
+    var uniq = [];
+    ids.forEach(function (id) {
+      var v = stringValue_(id);
+      if (!v) return;
+      if (uniq.indexOf(v) === -1) uniq.push(v);
+    });
+    return uniq.join(",");
+  }
+
   function normalizeSystemRole_(val) {
     var v = stringValue_(val).toLowerCase();
     if (!v) return "";
@@ -836,8 +866,7 @@ var EMP = EMP || {};
 
       var rowStatusVal = row[CONFIG.COL.ACTIVE - 1];
       var rowActive = isRowActiveFlag_(rowStatusVal);
-      var jobTypeId = stringValue_(row[cols.jobTypeIdCol - 1]);
-      var jobTypeName = stringValue_(row[cols.jobTypeNameCol - 1]);
+      var jobTypeIdsCell = parseJobTypeIdsCell_(row[cols.jobTypeIdCol - 1]);
       var department = stringValue_(row[cols.departmentCol - 1]);
 
       var emp = byId[employeeId];
@@ -849,21 +878,25 @@ var EMP = EMP || {};
           systemRole: systemRole,
           branch: branchVal,
           anyActive: false,
-          jobTypeIds: [],
+          jobTypeIds: jobTypeIdsCell.slice(),
           rows: [],
+          rowIndexForWrite: absRow,
         };
         byId[employeeId] = emp;
       } else {
         if (email && !emp.email) emp.email = email;
         if (systemRole && !emp.systemRole) emp.systemRole = systemRole;
         if (branchVal && !emp.branch) emp.branch = branchVal;
+        // Merge job type ids from additional rows if present.
+        jobTypeIdsCell.forEach(function (jid) {
+          if (emp.jobTypeIds.indexOf(jid) === -1) emp.jobTypeIds.push(jid);
+        });
       }
 
       emp.rows.push({
         rowIndex: absRow,
         active: rowActive,
-        jobTypeId: jobTypeId,
-        jobTypeName: jobTypeName,
+        jobTypeIds: jobTypeIdsCell,
         department: department,
       });
 
@@ -971,28 +1004,16 @@ var EMP = EMP || {};
 
         summary.affectedEmployeesCount++;
 
-        var targetRowIndex = null;
-        if (bulkType === "EMPLOYEE_JOBTYPE_REMOVE" && emp.rows) {
-          for (var iRow = 0; iRow < emp.rows.length; iRow++) {
-            var r = emp.rows[iRow];
-            if (!r.active) continue;
-            if (stringValue_(r.jobTypeId) === jobTypeId) {
-              targetRowIndex = r.rowIndex;
-              break;
-            }
-          }
-        }
-
-        var baseRowIndex =
-          emp.rows && emp.rows.length ? emp.rows[0].rowIndex : null;
+        var targetRowIndex =
+          emp.rowIndexForWrite ||
+          (emp.rows && emp.rows.length ? emp.rows[0].rowIndex : null);
 
         changes.push({
           employeeId: emp.id,
           employeeName: emp.name,
           email: emp.email || "",
           action: bulkType,
-          rowIndex: targetRowIndex,
-          baseRowIndex: baseRowIndex,
+          rowIndexForWrite: targetRowIndex,
           beforeJobTypeIds: beforeIds,
           afterJobTypeIds: afterIds,
         });
@@ -1054,98 +1075,43 @@ var EMP = EMP || {};
         );
       }
       var cols = colsResult.cols;
+      if (!cols.jobTypeIdCol) {
+        throw new Error("Missing jobTypeId column");
+      }
 
       var headerRow = CONFIG.HEADER_ROW;
-      var lastCol = sheet.getLastColumn();
 
-      var rowsToDeactivate = [];
-      var appendRows = [];
-      var appendMeta = [];
-
-      var currentLastRow = sheet.getLastRow();
-
+      var updates = [];
       for (var i = 0; i < changes.length; i++) {
         var ch = changes[i];
-        if (ch.action === "EMPLOYEE_JOBTYPE_ADD") {
-          var templateRowIndex = ch.baseRowIndex || headerRow + 1;
-          var templateRow = sheet
-            .getRange(templateRowIndex, 1, 1, lastCol)
-            .getValues()[0];
-
-          var newRow = templateRow.slice();
-          newRow[CONFIG.COL.ACTIVE - 1] = "פעיל";
-          newRow[CONFIG.COL.ID - 1] = ch.employeeId;
-          newRow[CONFIG.COL.FULL_NAME - 1] =
-            ch.employeeName || templateRow[CONFIG.COL.FULL_NAME - 1];
-
-          if (cols.jobTypeIdCol)
-            newRow[cols.jobTypeIdCol - 1] = params.jobTypeId;
-          if (cols.jobTypeNameCol) {
-            var jobName =
-              jobRecord && jobRecord.name
-                ? jobRecord.name
-                : newRow[cols.jobTypeNameCol - 1];
-            newRow[cols.jobTypeNameCol - 1] = jobName;
-          }
-          if (cols.departmentCol) {
-            var deptVal =
-              jobRecord && jobRecord.department
-                ? jobRecord.department
-                : newRow[cols.departmentCol - 1];
-            newRow[cols.departmentCol - 1] = deptVal;
-          }
-
-          appendRows.push(newRow);
-          appendMeta.push({
-            employeeId: ch.employeeId,
-            templateRowIndex: templateRowIndex,
-          });
-        } else if (ch.action === "EMPLOYEE_JOBTYPE_REMOVE") {
-          if (!ch.rowIndex) {
-            // no specific row to deactivate – skip silently
-            continue;
-          }
-          rowsToDeactivate.push(ch.rowIndex);
+        var rowIndex = ch.rowIndexForWrite || ch.rowIndex || ch.baseRowIndex;
+        if (!rowIndex) {
+          continue;
         }
+
+        updates.push({
+          rowIndex: rowIndex,
+          value: serializeJobTypeIds_(ch.afterJobTypeIds || []),
+        });
       }
 
-      if (appendRows.length) {
-        var startAppendRow = currentLastRow + 1;
+      if (!updates.length) return;
+
+      for (var u = 0; u < updates.length; u++) {
+        var upd = updates[u];
+        sheet.getRange(upd.rowIndex, cols.jobTypeIdCol).setValue(upd.value);
+      }
+
+      try {
         sheet
-          .getRange(startAppendRow, 1, appendRows.length, lastCol)
-          .setValues(appendRows);
-
-        // copy formatting from template rows to preserve validation/number formats
-        for (var a = 0; a < appendMeta.length; a++) {
-          var tmplRowIdx = appendMeta[a].templateRowIndex || headerRow + 1;
-          var destRowIdx = startAppendRow + a;
-          try {
-            sheet
-              .getRange(tmplRowIdx, 1, 1, lastCol)
-              .copyFormatToRange(sheet, 1, lastCol, destRowIdx, destRowIdx);
-          } catch (_ignoredFmt) {}
-        }
-      }
-
-      if (rowsToDeactivate.length) {
-        for (var d = 0; d < rowsToDeactivate.length; d++) {
-          var rIdx = rowsToDeactivate[d];
-          sheet.getRange(rIdx, CONFIG.COL.ACTIVE).setValue("לא פעיל");
-        }
-      }
-
-      if (cols.jobTypeIdCol) {
-        try {
-          sheet
-            .getRange(
-              headerRow + 1,
-              cols.jobTypeIdCol,
-              sheet.getLastRow() - headerRow,
-              1
-            )
-            .setNumberFormat("@");
-        } catch (_ignored) {}
-      }
+          .getRange(
+            headerRow + 1,
+            cols.jobTypeIdCol,
+            sheet.getLastRow() - headerRow,
+            1
+          )
+          .setNumberFormat("@");
+      } catch (_ignored) {}
     } finally {
       lock.releaseLock();
     }
