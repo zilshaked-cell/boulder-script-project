@@ -1149,6 +1149,111 @@ var EMP = EMP || {};
     };
   }
 
+  /**
+   * Handles admin.reportBulkActionIssue.
+   *
+   * @param {Object} payload BulkActionIssueReportPayload
+   * @param {Object} context ActionContext
+   * @return {Object} BulkActionIssueReportResponse
+   */
+  function EmployeesModule_adminReportBulkActionIssue_(payload, context) {
+    if (!payload) {
+      return {
+        ok: false,
+        errorCode: "VALIDATION_ERROR",
+        errorMessage: "Missing payload for admin.reportBulkActionIssue",
+      };
+    }
+
+    var mode = payload.mode;
+    var bulkType = payload.bulkType;
+    var definition = payload.definition || {};
+    var summary = payload.summary || {};
+    var issueText = payload.issueText || "";
+    var requestedBy = payload.requestedBy || "UNKNOWN";
+
+    var filters = definition.filters || {};
+    var params = definition.params || {};
+
+    var filterJobTypeId = filters.jobTypeId || "";
+    var paramJobTypeId = params.jobTypeId || "";
+
+    var subject =
+      "[Boulder Admin] דיווח על בעיה בפעולה קבוצתית - " +
+      String(bulkType) +
+      " (" +
+      String(mode) +
+      ")";
+
+    var lines = [];
+    lines.push("דווחה בעיה בפעולה קבוצתית בממשק הניהול של בולדר.");
+    lines.push("");
+    lines.push("פרטי הדיווח:");
+    lines.push("מדווח/ת: " + String(requestedBy));
+    lines.push("מצב פעולה (mode): " + String(mode));
+    lines.push("סוג פעולה (bulkType): " + String(bulkType));
+    lines.push("");
+    lines.push("פילטרים:");
+    lines.push("סטטוס עובדים: " + String(filters.status || ""));
+    lines.push("סניף/מחלקה: " + String(filters.branch || ""));
+    lines.push("תפקיד מערכת: " + String(filters.systemRole || ""));
+    lines.push("jobTypeId בפילטר: " + String(filterJobTypeId));
+    lines.push("");
+    lines.push("פרמטרים:");
+    lines.push("jobTypeId בפרמטרים: " + String(paramJobTypeId));
+    lines.push("");
+    lines.push("סיכום פעולה (summary):");
+    lines.push('סה"כ בקהל היעד: ' + String(summary.targetEmployeesCount || 0));
+    lines.push("עודכנו בפועל: " + String(summary.affectedEmployeesCount || 0));
+    lines.push("ללא שינוי: " + String(summary.noChangeCount || 0));
+    lines.push("");
+    lines.push("תיאור הבעיה:");
+    lines.push(issueText);
+    lines.push("");
+    lines.push("זמן שרת: " + new Date().toISOString());
+
+    var body = lines.join("\n");
+
+    var recipients = [];
+    if (
+      typeof ACCESS_ISSUE_RECIPIENTS !== "undefined" &&
+      ACCESS_ISSUE_RECIPIENTS &&
+      ACCESS_ISSUE_RECIPIENTS.length
+    ) {
+      recipients = ACCESS_ISSUE_RECIPIENTS;
+    } else if (CONFIG && CONFIG.MAIL && CONFIG.MAIL.TO) {
+      recipients = [CONFIG.MAIL.TO];
+    }
+
+    if (!recipients.length) {
+      return {
+        ok: false,
+        errorCode: "CONFIGURATION_MISSING",
+        errorMessage:
+          "No admin notification recipients configured for bulk action issue report",
+      };
+    }
+
+    try {
+      MailApp.sendEmail({
+        to: recipients.join(","),
+        subject: subject,
+        body: body,
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        errorCode: "MAIL_SEND_FAILED",
+        errorMessage:
+          err && err.message ? String(err.message) : "Mail send failed",
+      };
+    }
+
+    return {
+      ok: true,
+    };
+  }
+
   function getSidebarBootstrap_() {
     try {
       var base = collectEmployees_();
@@ -1856,15 +1961,20 @@ var EMP = EMP || {};
   EMP.getLogSheet = getLogSheet_;
   EMP.CONFIG = CONFIG;
   EMP.adminRunBulkAction = EmployeesModule_adminRunBulkAction_;
+  EMP.adminReportBulkActionIssue = EmployeesModule_adminReportBulkActionIssue_;
   // Expose for legacy callers that reference the global name directly
   if (typeof globalThis !== "undefined") {
     globalThis.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
     globalThis.EmployeesModule_adminRunBulkAction_ =
       EmployeesModule_adminRunBulkAction_;
+    globalThis.EmployeesModule_adminReportBulkActionIssue_ =
+      EmployeesModule_adminReportBulkActionIssue_;
   } else {
     this.EMP_getEmployeeColumns_ = EMP_getEmployeeColumns_;
     this.EmployeesModule_adminRunBulkAction_ =
       EmployeesModule_adminRunBulkAction_;
+    this.EmployeesModule_adminReportBulkActionIssue_ =
+      EmployeesModule_adminReportBulkActionIssue_;
   }
   // Export column resolver for backfill functions defined outside the IIFE
   EMP.getEmployeeColumnsForBackfill = EMP_getEmployeeColumns_;

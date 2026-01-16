@@ -273,6 +273,9 @@ function getActionRegistry_() {
     "admin.runBulkAction": function (payload, logger) {
       return adminRunBulkAction_(payload || {}, logger);
     },
+    "admin.reportBulkActionIssue": function (payload, logger) {
+      return adminReportBulkActionIssue_(payload || {}, { logger: logger });
+    },
     "admin.listEmployees": function (payload, logger) {
       return adminListEmployees_(payload || {}, logger);
     },
@@ -1697,6 +1700,16 @@ function adminRunBulkAction_(payload, logger) {
           : "Unknown error in admin.runBulkAction",
     };
   }
+}
+
+/**
+ * Handles admin.reportBulkActionIssue from the web app.
+ * @param {Object} request BulkActionIssueReportPayload
+ * @param {Object} context ActionContext
+ * @return {Object} BulkActionIssueReportResponse
+ */
+function adminReportBulkActionIssue_(request, context) {
+  return EmployeesModule_adminReportBulkActionIssue_(request, context);
 }
 
 // TODO(admin-requests): mapping based on existing sheet: id = requestId or shiftId; employeeId + employeeName; raw status from "סטטוס בקשה"; createdAt from "חותמת זמן"/"תאריך משמרת"; optional shiftId, jobTypeId/name, department, units, manager note.
