@@ -1,0 +1,1685 @@
+var EMP = EMP || {};
+
+(function () {
+  var CONFIG = {
+    SHEET_NAME_EMPLOYEES: "פרטי עובדים",
+    SHEET_NAME_LOG: "LOG_EMPLOYEES",
+    HEADER_ROW: 1,
+    COL: {
+      ACTIVE: 1, // A – סטטוס
+      ID: 2, // B – ID עובד
+      FULL_NAME: 3, // C – שם מלא
+      JOB_TYPE: 11, // K – סוג העבודה
+      DEPARTMENT: 12, // L – מחלקה
+      AMOUNT: 13, // M – סכום
+      PAYMENT_MODE: 16, // P – אופן תשלום
+      NOTES: 17, // Q – הערות
+    },
+    PROPS: {
+      SCHEMA: "EMP_SCHEMA_SNAPSHOT",
+    },
+    MAIL: {
+      TO: "ZIL.SHAKED@GMAIL.COM",
+      SUBJECT_PREFIX: "שכר בולדר חיפה – שינוי מבנה עובדים",
+    },
+  };
+
+  function debugLog_(msg) {
+    try {
+      Logger.log("[EMP_DEBUG] " + msg);
+    } catch (_e) {
+      // no-op in environments without Logger
+    }
+  }
+
+  function colIndexByHeader_(headers, name) {
+    if (!headers || !headers.length) return null;
+    var idx = headers.indexOf(name);
+    return idx >= 0 ? idx + 1 : null;
+  }
+
+  function getSpreadsheet_() {
+    return SpreadsheetApp.getActive();
+  }
+
+  function getEmployeesSheet_() {
+    var ss = getSpreadsheet_();
+    return ss.getSheetByName(CONFIG.SHEET_NAME_EMPLOYEES);
+  }
+
+  function getLogSheet_() {
+    var ss = getSpreadsheet_();
+    var sh = ss.getSheetByName(CONFIG.SHEET_NAME_LOG);
+    if (!sh) {
+      sh = ss.insertSheet(CONFIG.SHEET_NAME_LOG);
+      sh.appendRow([
+        "timestamp",
+        "tx_id",
+        "employee_id",
+        "sheet",
+        "row",
+        "col",
+        "old_value",
+        "new_value",
+        "user",
+      ]);
+    }
+    return sh;
+  }
+
+  function getScriptProps_() {
+    return PropertiesService.getDocumentProperties();
+  }
+
+  function generateUuid_() {
+    return Utilities.getUuid();
+  }
+
+  /**
+   * קובע אם שורה נחשבת "פעילה" לפי הערך בעמודת סטטוס.
+   * תומך גם בטקסט ("פעיל"/"לא פעיל") וגם בבוליאן true/false.
+   */
+  function isRowActiveFlag_(val) {
+    if (val === true) return true;
+    if (val === false) return false;
+
+    var s = String(val || "").trim();
+    if (!s) return false;
+    if (s.toUpperCase() === "TRUE") return true;
+    if (s === "פעיל") return true;
+    if (s === "לא פעיל") return false;
+
+    // ברירת מחדל: אם יש ערך כלשהו בסטטוס והוא לא "לא פעיל" – נחשב פעיל
+    return true;
+  }
+
+  /**
+   * מבטיח ID עובד יציב לפי שם מלא:
+   * - אם קיימת שורה עם אותו שם מלא ו-ID קיים → משתמשים באותו ID בכל השורות
+   * - אם אין ID קיים לשם → מייצרים UUID פעם אחת ומשתמשים בו לכל השורות העתידיות עם אותו שם
+   * - אם נמצא אותו שם עם שני IDs שונים → קונפליקט: לא דורסים IDs קיימים ולא ממלאים חסרים לשם הזה, ונרשם ללוג פעם אחת
+   */
+  function ensureEmployeeIds_(sheet) {
+    if (!sheet) sheet = getEmployeesSheet_();
+    if (!sheet) return;
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) return;
+
+    var idCol = CONFIG.COL.ID; // B
+    var nameCol = CONFIG.COL.FULL_NAME; // C
+
+    var range = sheet.getRange(
+      CONFIG.HEADER_ROW + 1,
+      1,
+      lastRow - CONFIG.HEADER_ROW,
+      Math.max(idCol, nameCol)
+    );
+    var values = range.getValues();
+    var txId = Utilities.getUuid();
+
+    function normalizeName_(val) {
+      if (val === null || val === undefined) return "";
+      return String(val).replace(/\s+/g, " ").trim().toLowerCase();
+    }
+    function normalizeId_(val) {
+      if (val === null || val === undefined) return "";
+      return String(val).trim();
+    }
+
+    var existingIds = {};
+    var nameToId = {};
+    var conflictNames = {};
+    var changed = false;
+
+    // כדי לא להציף לוגים בכל עריכה, נשמור קאש של שמות בקונפליקט
+    var props = PropertiesService.getDocumentProperties();
+    var prevConflictArr;
+    try {
+      prevConflictArr = JSON.parse(
+        props.getProperty("EMP_CONFLICT_NAMES") || "[]"
+      );
+      if (!Array.isArray(prevConflictArr)) prevConflictArr = [];
+    } catch (e) {
+      prevConflictArr = [];
+    }
+    var prevConflictSet = {};
+    for (var pc = 0; pc < prevConflictArr.length; pc++)
+      prevConflictSet[prevConflictArr[pc]] = true;
+
+    // PASS 1: בונים מפה name->id מתוך IDs קיימים ומזהים קונפליקטים
+    for (var i = 0; i < values.length; i++) {
+      var row = values[i];
+      var name = normalizeName_(row[nameCol - 1]);
+      var id = normalizeId_(row[idCol - 1]);
+
+      if (id) existingIds[id] = true;
+      if (!name || !id) continue;
+
+      if (!nameToId[name]) {
+        nameToId[name] = id;
+      } else if (nameToId[name] !== id) {
+        conflictNames[name] = true;
+
+        // לוג פעם אחת לכל שם שמתנגש
+        if (!prevConflictSet[name]) {
+          logEmployeeChange_(
+            id,
+            CONFIG.SHEET_NAME_EMPLOYEES,
+            CONFIG.HEADER_ROW + 1 + i,
+            idCol,
+            nameToId[name],
+            id,
+            txId
+          );
+        }
+
+        // מונעים שימוש במיפוי הזה למילוי אוטומטי
+        nameToId[name] = null;
+      }
+    }
+
+    props.setProperty(
+      "EMP_CONFLICT_NAMES",
+      JSON.stringify(Object.keys(conflictNames))
+    );
+
+    // PASS 2: ממלאים IDs חסרים לפי המפה (או מייצרים פעם אחת)
+    for (var j = 0; j < values.length; j++) {
+      var row2 = values[j];
+      var name2 = normalizeName_(row2[nameCol - 1]);
+      if (!name2) continue;
+
+      var currId = normalizeId_(row2[idCol - 1]);
+      if (currId) continue; // לא דורסים ID קיים
+
+      if (conflictNames[name2]) {
+        // בקונפליקט לא ממלאים אוטומטית
+        continue;
+      }
+
+      if (nameToId[name2]) {
+        row2[idCol - 1] = nameToId[name2];
+        changed = true;
+        continue;
+      }
+
+      var newId;
+      do {
+        newId = generateUuid_();
+      } while (existingIds[newId]);
+
+      existingIds[newId] = true;
+      row2[idCol - 1] = newId;
+      nameToId[name2] = newId;
+      changed = true;
+    }
+
+    if (changed) {
+      range.setValues(values);
+    }
+  }
+
+  /** צילום סכימה (שם+אינדקס של כל עמודה) לקריאת שינויים */
+  function snapshotSchema_(sheet) {
+    if (!sheet) sheet = getEmployeesSheet_();
+    if (!sheet) return null;
+
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, sheet.getLastColumn())
+      .getValues()[0];
+
+    var result = [];
+    for (var i = 0; i < headers.length; i++) {
+      result.push((headers[i] || "") + "#" + (i + 1));
+    }
+    return result.join("||");
+  }
+
+  /** השוואת סכימה ושליחת מייל אם יש שינוי */
+  function checkSchemaAndMaybeEmail_(sheet, reason) {
+    if (!sheet) sheet = getEmployeesSheet_();
+    if (!sheet) return;
+
+    var props = getScriptProps_();
+    var prev = props.getProperty(CONFIG.PROPS.SCHEMA) || "";
+    var current = snapshotSchema_(sheet);
+    if (!current) return;
+
+    if (!prev) {
+      // הפעלה ראשונה – שומרים בסיס
+      props.setProperty(CONFIG.PROPS.SCHEMA, current);
+      return;
+    }
+
+    if (prev === current) return;
+
+    // הסכימה השתנתה – שולחים מייל, אבל לא משנים כלום
+    props.setProperty(CONFIG.PROPS.SCHEMA, current);
+    sendSchemaChangeEmail_(prev, current, reason);
+  }
+
+  function sendSchemaChangeEmail_(prev, current, reason) {
+    var user = Session.getActiveUser().getEmail() || "unknown";
+    var ss = getSpreadsheet_();
+
+    var body = "";
+    body +=
+      'זוהה שינוי במבנה כרטיסיית "פרטי עובדים" בקובץ: ' + ss.getName() + "\n\n";
+    body += "סיבה (טריגר): " + (reason || "לא ידוע") + "\n";
+    body += "משתמש מבצע: " + user + "\n\n";
+    body += 'תכנון המערכת בשיחה: "תכנון מערכת ID\'S"\n';
+    body += "שים לב לעדכן את הקוד בהתאם לשינוי בעמודות (שמות/מיקומים).\n\n";
+    body += "Snapshot קודם:\n" + prev + "\n\n";
+    body += "Snapshot נוכחי:\n" + current + "\n";
+
+    MailApp.sendEmail({
+      to: CONFIG.MAIL.TO,
+      subject:
+        CONFIG.MAIL.SUBJECT_PREFIX + " (" + (reason || "שינוי סכימה") + ")",
+      body: body,
+    });
+  }
+
+  /** Skeleton לוג */
+  function logEmployeeChange_(
+    employeeId,
+    sheetName,
+    row,
+    col,
+    oldVal,
+    newVal,
+    txId
+  ) {
+    var sh = getLogSheet_();
+    sh.appendRow([
+      new Date(),
+      txId || Utilities.getUuid(),
+      employeeId || "",
+      sheetName || "",
+      row || "",
+      col || "",
+      oldVal === undefined ? "" : oldVal,
+      newVal === undefined ? "" : newVal,
+      Session.getActiveUser().getEmail() || "",
+    ]);
+  }
+
+  /** אוסף את רשימת העובדים והסוגים שלהם לסטריפ */
+  function collectEmployees_() {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
+    }
+
+    // מוודא שלכל עובד יש ID עובד
+    ensureEmployeeIds_(sheet);
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) {
+      return { ok: true, employees: [], cols: CONFIG.COL };
+    }
+
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+    var colGender = colIndexByHeader_(headers, "מין");
+    var colIdNum = colIndexByHeader_(headers, "תז");
+    var colPhone = colIndexByHeader_(headers, "טלפון");
+    var colBirthdate = colIndexByHeader_(headers, "ת. לידה");
+    var colEmail = colIndexByHeader_(headers, "מייל");
+    var colShirt = colIndexByHeader_(headers, "מידת חולצה");
+    var colTravel = colIndexByHeader_(headers, "עלות החזרי נסיעות יומי");
+
+    function normalizeStr(val) {
+      if (val === null || val === undefined) return "";
+      return String(val).trim();
+    }
+
+    var data = sheet
+      .getRange(CONFIG.HEADER_ROW + 1, 1, lastRow - CONFIG.HEADER_ROW, lastCol)
+      .getValues();
+
+    var employeesById = {};
+
+    for (var r = 0; r < data.length; r++) {
+      var rowIndex = CONFIG.HEADER_ROW + 1 + r;
+      var row = data[r];
+
+      var name = String(row[CONFIG.COL.FULL_NAME - 1] || "").trim();
+      var id = String(row[CONFIG.COL.ID - 1] || "").trim();
+      if (!name || !id) continue; // לא שורת עובד
+
+      var statusVal = row[CONFIG.COL.ACTIVE - 1];
+      var rowActive = isRowActiveFlag_(statusVal);
+
+      var jobType = row[CONFIG.COL.JOB_TYPE - 1] || "";
+      var dept = row[CONFIG.COL.DEPARTMENT - 1] || "";
+      var amount = row[CONFIG.COL.AMOUNT - 1] || "";
+      var payment = row[CONFIG.COL.PAYMENT_MODE - 1] || "";
+      var notes = row[CONFIG.COL.NOTES - 1] || "";
+
+      var rawGender = colGender ? row[colGender - 1] : "";
+      var rawIdNum = colIdNum ? row[colIdNum - 1] : "";
+      var rawPhone = colPhone ? row[colPhone - 1] : "";
+      var rawBirthdate = colBirthdate ? row[colBirthdate - 1] : "";
+      var rawEmail = colEmail ? row[colEmail - 1] : "";
+      var rawShirt = colShirt ? row[colShirt - 1] : "";
+      var rawTravel = colTravel ? row[colTravel - 1] : "";
+
+      var gender = normalizeStr(rawGender);
+      var idNum = normalizeStr(rawIdNum);
+      var phone = normalizeStr(rawPhone);
+      var birthdate = normalizeStr(rawBirthdate);
+      var email = normalizeStr(rawEmail);
+      var shirtSize = normalizeStr(rawShirt);
+      var travelCost = normalizeStr(rawTravel);
+
+      var emp = employeesById[id];
+      if (!emp) {
+        emp = {
+          id: id,
+          name: name,
+          rows: [],
+          anyActive: false,
+          gender: gender,
+          idNumber: idNum,
+          phone: phone,
+          birthdate: birthdate,
+          email: email,
+          shirtSize: shirtSize,
+          travelCost: travelCost,
+        };
+        employeesById[id] = emp;
+      } else {
+        if (!emp.gender && gender) emp.gender = gender;
+        if (!emp.idNumber && idNum) emp.idNumber = idNum;
+        if (!emp.phone && phone) emp.phone = phone;
+        if (!emp.birthdate && birthdate) emp.birthdate = birthdate;
+        if (!emp.email && email) emp.email = email;
+        if (!emp.shirtSize && shirtSize) emp.shirtSize = shirtSize;
+        if (!emp.travelCost && travelCost) emp.travelCost = travelCost;
+      }
+
+      emp.rows.push({
+        rowIndex: rowIndex,
+        rowActive: rowActive,
+        jobType: jobType,
+        department: dept,
+        amount: amount,
+        paymentMode: payment,
+        notes: notes,
+        personal: {
+          fullName: name,
+          gender: rawGender,
+          idNumber: rawIdNum,
+          phone: rawPhone,
+          birthdate: rawBirthdate,
+          email: rawEmail,
+          shirtSize: rawShirt,
+          travelCost: rawTravel,
+        },
+      });
+
+      if (rowActive) emp.anyActive = true;
+    }
+
+    var list = [];
+    Object.keys(employeesById).forEach(function (idKey) {
+      list.push(employeesById[idKey]);
+    });
+
+    list.sort(function (a, b) {
+      return a.name.localeCompare(b.name);
+    });
+
+    return {
+      ok: true,
+      employees: list,
+      cols: CONFIG.COL,
+    };
+  }
+
+  function getJobsForSidebar_() {
+    try {
+      if (typeof OPT === "undefined" || !OPT.getAllJobs) {
+        return [];
+      }
+      var jobsRaw = OPT.getAllJobs(true) || [];
+      var jobs = [];
+      for (var i = 0; i < jobsRaw.length; i++) {
+        var j = jobsRaw[i] || {};
+        jobs.push({
+          id: j.id || "",
+          name: j.name || "",
+          department: j.department || "",
+        });
+      }
+      return jobs;
+    } catch (err) {
+      debugLog_(
+        "getJobsForSidebar failed: " + (err && err.message ? err.message : err)
+      );
+      return [];
+    }
+  }
+
+  function getPaymentsForSidebar_() {
+    try {
+      if (typeof OPT === "undefined" || !OPT.getAllPayments) {
+        return [];
+      }
+      var paysRaw = OPT.getAllPayments(true) || [];
+      var pays = [];
+      for (var i = 0; i < paysRaw.length; i++) {
+        var p = paysRaw[i] || {};
+        pays.push({
+          id: p.id || "",
+          name: p.name || "",
+        });
+      }
+      return pays;
+    } catch (err) {
+      debugLog_(
+        "getPaymentsForSidebar failed: " +
+          (err && err.message ? err.message : err)
+      );
+      return [];
+    }
+  }
+
+  function getSidebarBootstrap_() {
+    try {
+      var base = collectEmployees_();
+      if (!base || !base.ok) {
+        return (
+          base || {
+            ok: false,
+            error: "collectEmployees returned undefined/null",
+          }
+        );
+      }
+
+      var jobs = getJobsForSidebar_();
+      var payments = getPaymentsForSidebar_();
+
+      var bootstrap = {
+        ok: true,
+        employees: base.employees || [],
+        jobs: jobs,
+        payments: payments,
+        cols: base.cols,
+      };
+
+      debugLog_(
+        "bootstrap ok: employees=" +
+          bootstrap.employees.length +
+          " jobs=" +
+          bootstrap.jobs.length +
+          " payments=" +
+          bootstrap.payments.length
+      );
+
+      return bootstrap;
+    } catch (e) {
+      var msg = e && e.message ? e.message : e;
+      var stk = e && e.stack ? "\n" + e.stack : "";
+      debugLog_("bootstrap exception: " + msg);
+      return { ok: false, error: "EMP_getSidebarBootstrap: " + msg + stk };
+    }
+  }
+
+  function getEmployeeById_(employeeId) {
+    try {
+      var bootstrap = collectEmployees_();
+      if (!bootstrap.ok) return bootstrap;
+
+      var emp = null;
+      for (var i = 0; i < bootstrap.employees.length; i++) {
+        if (bootstrap.employees[i].id === employeeId) {
+          emp = bootstrap.employees[i];
+          break;
+        }
+      }
+      if (!emp) {
+        return { ok: false, error: "לא נמצא עובד עם ID הזה" };
+      }
+      return { ok: true, employee: emp, cols: CONFIG.COL };
+    } catch (e) {
+      var msg2 = e && e.message ? e.message : e;
+      var stk2 = e && e.stack ? "\n" + e.stack : "";
+      return { ok: false, error: "EMP_getEmployeeById: " + msg2 + stk2 };
+    }
+  }
+
+  /**
+   * שמירת payload מהסטריפ לתוך "פרטי עובדים".
+   * לא משנה מבנה, עובד רק על השורות הרלוונטיות.
+   */
+  function saveEmployeePayload_(payload) {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
+    }
+
+    ensureEmployeeIds_(sheet);
+
+    var employeeId = (payload.id || "").trim();
+    var baseName = (payload.name || "").trim();
+    if (!employeeId) {
+      return { ok: false, error: "חסר ID עובד (ID עובד בעמודה B)" };
+    }
+    if (!baseName) {
+      return { ok: false, error: "שם העובד לא יכול להיות ריק" };
+    }
+
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow <= CONFIG.HEADER_ROW) {
+      lastRow = CONFIG.HEADER_ROW;
+    }
+
+    var data = sheet
+      .getRange(CONFIG.HEADER_ROW + 1, 1, lastRow - CONFIG.HEADER_ROW, lastCol)
+      .getValues();
+
+    var idRel = CONFIG.COL.ID - 1;
+    var foundRows = [];
+
+    for (var r = 0; r < data.length; r++) {
+      var rowIdx = CONFIG.HEADER_ROW + 1 + r;
+      var row = data[r];
+      if (String(row[idRel] || "").trim() === employeeId) {
+        foundRows.push({ rel: r, abs: rowIdx, row: row });
+      }
+    }
+
+    var rowsPayload = payload.rows || [];
+    var txId = Utilities.getUuid();
+
+    foundRows.forEach(function (fr) {
+      var oldVal = fr.row[CONFIG.COL.ACTIVE - 1];
+      var newVal = "לא פעיל";
+      if (String(oldVal || "") !== String(newVal)) {
+        logEmployeeChange_(
+          employeeId,
+          sheet.getName(),
+          fr.abs,
+          CONFIG.COL.ACTIVE,
+          oldVal,
+          newVal,
+          txId
+        );
+      }
+      sheet.getRange(fr.abs, CONFIG.COL.ACTIVE).setValue(newVal);
+    });
+
+    for (var i = 0; i < rowsPayload.length; i++) {
+      var pr = rowsPayload[i];
+      var targetRow = pr.rowIndex ? parseInt(pr.rowIndex, 10) : null;
+
+      if (!targetRow || targetRow <= CONFIG.HEADER_ROW) {
+        targetRow = sheet.getLastRow() + 1;
+      }
+
+      var colsToUpdate = [];
+
+      colsToUpdate.push({
+        col: CONFIG.COL.ACTIVE,
+        newVal: pr.rowActive ? "פעיל" : "לא פעיל",
+      });
+
+      colsToUpdate.push({ col: CONFIG.COL.ID, newVal: employeeId });
+      colsToUpdate.push({ col: CONFIG.COL.FULL_NAME, newVal: baseName });
+
+      if (CONFIG.COL.JOB_TYPE) {
+        colsToUpdate.push({
+          col: CONFIG.COL.JOB_TYPE,
+          newVal: pr.jobType || "",
+        });
+      }
+      if (CONFIG.COL.DEPARTMENT) {
+        colsToUpdate.push({
+          col: CONFIG.COL.DEPARTMENT,
+          newVal: pr.department || "",
+        });
+      }
+      if (CONFIG.COL.AMOUNT) {
+        colsToUpdate.push({ col: CONFIG.COL.AMOUNT, newVal: pr.amount || "" });
+      }
+      if (CONFIG.COL.PAYMENT_MODE) {
+        colsToUpdate.push({
+          col: CONFIG.COL.PAYMENT_MODE,
+          newVal: pr.paymentMode || "",
+        });
+      }
+      if (CONFIG.COL.NOTES) {
+        colsToUpdate.push({ col: CONFIG.COL.NOTES, newVal: pr.notes || "" });
+      }
+
+      for (var j = 0; j < colsToUpdate.length; j++) {
+        var info = colsToUpdate[j];
+        if (!info.col) continue;
+
+        var oldCell = sheet.getRange(targetRow, info.col).getValue();
+        var newCell = info.newVal;
+
+        if (String(oldCell || "") !== String(newCell || "")) {
+          logEmployeeChange_(
+            employeeId,
+            sheet.getName(),
+            targetRow,
+            info.col,
+            oldCell,
+            newCell,
+            txId
+          );
+          sheet.getRange(targetRow, info.col).setValue(newCell);
+        }
+      }
+    }
+
+    return { ok: true, id: employeeId };
+  }
+
+  /** יישום בחירת ערך אחיד לשדה אישי בכל השורות של עובד */
+  function applyPersonalFieldChoice_(employeeId, fieldKey, value) {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
+    }
+
+    var eid = (employeeId || "").trim();
+    if (!eid) {
+      return { ok: false, error: "חסר ID עובד" };
+    }
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) {
+      return { ok: false, error: "אין שורות נתונים בגליון" };
+    }
+
+    var lastCol = sheet.getLastColumn();
+    var headers = sheet
+      .getRange(CONFIG.HEADER_ROW, 1, 1, lastCol)
+      .getValues()[0];
+
+    var fieldHeaderMap = {
+      name: "שם מלא",
+      gender: "מין",
+      idNumber: "תז",
+      phone: "טלפון",
+      birthdate: "ת. לידה",
+      email: "מייל",
+      shirtSize: "מידת חולצה",
+      travelCost: "עלות החזרי נסיעות יומי",
+    };
+
+    var targetHeader = fieldHeaderMap[fieldKey];
+    if (!targetHeader) {
+      return { ok: false, error: "שדה לא נתמך לעדכון: " + fieldKey };
+    }
+
+    var colEmpId = colIndexByHeader_(headers, "ID עובד") || CONFIG.COL.ID;
+    var targetCol = colIndexByHeader_(headers, targetHeader);
+
+    if (!colEmpId) {
+      return { ok: false, error: 'לא נמצאה עמודת "ID עובד" לזיהוי שורות' };
+    }
+    if (!targetCol) {
+      return { ok: false, error: 'לא נמצאה עמודה לשדה "' + targetHeader + '"' };
+    }
+
+    var dataRange = sheet.getRange(
+      CONFIG.HEADER_ROW + 1,
+      1,
+      lastRow - CONFIG.HEADER_ROW,
+      lastCol
+    );
+    var data = dataRange.getValues();
+    var txId = Utilities.getUuid();
+    var updated = 0;
+
+    for (var i = 0; i < data.length; i++) {
+      var rowNum = CONFIG.HEADER_ROW + 1 + i;
+      var rowEmpId = String(data[i][colEmpId - 1] || "").trim();
+      if (rowEmpId !== eid) continue;
+
+      var oldVal = data[i][targetCol - 1];
+      var newVal = value === undefined ? "" : value;
+      if (String(oldVal || "") === String(newVal || "")) continue;
+
+      logEmployeeChange_(
+        eid,
+        sheet.getName(),
+        rowNum,
+        targetCol,
+        oldVal,
+        newVal,
+        txId
+      );
+      sheet.getRange(rowNum, targetCol).setValue(newVal);
+      updated++;
+    }
+
+    if (updated && (fieldKey === "idNumber" || fieldKey === "phone")) {
+      sheet
+        .getRange(
+          CONFIG.HEADER_ROW + 1,
+          targetCol,
+          sheet.getLastRow() - CONFIG.HEADER_ROW,
+          1
+        )
+        .setNumberFormat("@");
+    }
+
+    return { ok: true, updated: updated };
+  }
+
+  /** יצירת עובד חדש מתוך שם בלבד */
+  function createEmployeeByName_(name) {
+    var nm = (name || "").trim();
+    if (!nm) {
+      return { ok: false, error: "שם עובד ריק" };
+    }
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
+    }
+
+    ensureEmployeeIds_(sheet);
+
+    var newId = generateUuid_();
+    var lastRow = sheet.getLastRow();
+    var newRow = lastRow + 1;
+
+    sheet.getRange(newRow, CONFIG.COL.ACTIVE).setValue("פעיל");
+    sheet.getRange(newRow, CONFIG.COL.ID).setValue(newId);
+    sheet.getRange(newRow, CONFIG.COL.FULL_NAME).setValue(nm);
+
+    return getEmployeeById_(newId);
+  }
+
+  /** מבטל Filter קיים בגליון (אם יש) */
+  function revealAllRowsIfFiltered_() {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) {
+      return { ok: false, error: 'לא נמצאה כרטיסייה "פרטי עובדים"' };
+    }
+    var filter = sheet.getFilter();
+    if (!filter) {
+      return { ok: true, changed: false };
+    }
+    filter.remove();
+    return { ok: true, changed: true };
+  }
+
+  /**
+   * בדיקה אם יש שורות של עובד שמוסתרות ע"י FILTER בגליון "פרטי עובדים".
+   * מחזיר true/false.
+   */
+  function hasHiddenRowsForEmployee_(employeeId) {
+    if (!employeeId) return false;
+
+    var sheet = getEmployeesSheet_();
+    if (!sheet) return false;
+
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= CONFIG.HEADER_ROW) return false;
+
+    var idCol = CONFIG.COL.ID;
+    var range = sheet.getRange(
+      CONFIG.HEADER_ROW + 1,
+      idCol,
+      lastRow - CONFIG.HEADER_ROW,
+      1
+    );
+    var values = range.getValues();
+
+    for (var i = 0; i < values.length; i++) {
+      var rowIndex = CONFIG.HEADER_ROW + 1 + i;
+      var val = String(values[i][0] || "").trim();
+      if (val === String(employeeId)) {
+        if (sheet.isRowHiddenByFilter && sheet.isRowHiddenByFilter(rowIndex)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /** פתיחת הסטריפ בפועל */
+  function showSidebar_(optEmployeeId) {
+    var tmpl = HtmlService.createTemplateFromFile("EmployeeSidebar");
+    tmpl.initialEmployeeId = optEmployeeId || "";
+    var html = tmpl
+      .evaluate()
+      .setTitle("ניהול עובדים – בולדר חיפה")
+      .setWidth(380);
+    SpreadsheetApp.getUi().showSidebar(html);
+  }
+
+  /** ריצה ב־onOpen (דרך EMP_onOpen) */
+  function handleOpen_(e) {
+    if (!e || e.authMode !== ScriptApp.AuthMode.FULL) {
+      debugLog_("handleOpen skipped: authMode=" + (e && e.authMode));
+      return;
+    }
+
+    var sheet = getEmployeesSheet_();
+    if (!sheet) return;
+
+    ensureEmployeeIds_(sheet);
+    checkSchemaAndMaybeEmail_(sheet, "onOpen");
+
+    showSidebar_("");
+  }
+
+  /** ריצה ב־onChange (אם נגדיר טריגר גלובלי) */
+  function handleChange_(e) {
+    var sheet = getEmployeesSheet_();
+    if (!sheet) return;
+    checkSchemaAndMaybeEmail_(sheet, "onChange");
+  }
+
+  /** ריצה ב־onSelectionChange – בחירת שורה בגליון */
+  function handleSelectionChange_(e) {
+    if (!e || !e.range) return;
+    var range = e.range;
+    var sheet = range.getSheet();
+    if (!sheet) return;
+    if (sheet.getName() !== CONFIG.SHEET_NAME_EMPLOYEES) return;
+
+    var row = range.getRow();
+    if (row <= CONFIG.HEADER_ROW) return;
+
+    ensureEmployeeIds_(sheet);
+
+    var id = sheet.getRange(row, CONFIG.COL.ID).getValue();
+    if (!id) return;
+
+    showSidebar_(String(id));
+  }
+
+  function handleEdit_(e) {
+    var range = e && e.range ? e.range : null;
+    if (!range) return;
+
+    var sheet = range.getSheet();
+    if (!sheet) return;
+
+    if (sheet.getName() !== CONFIG.SHEET_NAME_EMPLOYEES) return;
+
+    // רק אם העריכה נוגעת ב-B או C
+    var startCol = range.getColumn();
+    var endCol = startCol + range.getNumColumns() - 1;
+    var idCol = CONFIG.COL.ID; // 2
+    var nameCol = CONFIG.COL.FULL_NAME; // 3
+    if (endCol < idCol || startCol > nameCol) return;
+
+    ensureEmployeeIds_(sheet);
+  }
+
+  // חשיפה ל-EMP (API פנימי)
+  EMP.getSidebarBootstrap = getSidebarBootstrap_;
+  EMP.getEmployeeById = getEmployeeById_;
+  EMP.saveEmployeePayload = saveEmployeePayload_;
+  EMP.createEmployeeByName = createEmployeeByName_;
+  EMP.revealAllRowsIfFiltered = revealAllRowsIfFiltered_;
+  EMP.applyPersonalFieldChoice = applyPersonalFieldChoice_;
+  EMP.handleOpen = handleOpen_;
+  EMP.handleChange = handleChange_;
+  EMP.handleSelectionChange = handleSelectionChange_;
+  EMP.handleEdit = handleEdit_;
+  EMP.hasHiddenRowsForEmployee = hasHiddenRowsForEmployee_;
+  EMP.ensureEmployeeIds = ensureEmployeeIds_;
+})();
+
+/** === עטיפות גלובליות לטריגרים ול-HTML === */
+
+function EMP_onOpen(e) {
+  // אם הפונקציה הזו מוגדרת בקובץ אחר - מצוין. אם לא, אפשר להסיר.
+  OPT_onOpen(e);
+  if (typeof EMP_checkEmployeesHeader_ === "function") {
+    EMP_checkEmployeesHeader_();
+  }
+  if (typeof EMP !== "undefined" && EMP.handleOpen) {
+    EMP.handleOpen(e || {});
+  }
+}
+
+function onEdit(e) {
+  // עובדים
+  try {
+    if (typeof EMP !== "undefined" && EMP.handleEdit) {
+      EMP.handleEdit(e || {});
+    }
+  } catch (err) {
+    Logger.log("EMP.handleEdit error: " + err);
+  }
+
+  // קטלוגים
+  try {
+    OPT_onEdit(e || {});
+  } catch (err2) {
+    Logger.log("OPT_onEdit error: " + err2);
+  }
+  // בקשות עובדים
+  try {
+    if (typeof REQ_onEdit === "function") {
+      REQ_onEdit(e || {});
+    }
+  } catch (err3) {
+    Logger.log("REQ_onEdit error: " + err3);
+  }
+}
+
+function EMP_onChange(e) {
+  if (typeof EMP !== "undefined" && EMP.handleChange) {
+    EMP.handleChange(e || {});
+  }
+}
+
+function onChange(e) {
+  // אם כבר יש אצלך EMP_onChange — תשאיר את זה
+  try {
+    if (typeof EMP_onChange === "function") EMP_onChange(e || {});
+  } catch (err1) {
+    Logger.log("EMP_onChange error: " + err1);
+  }
+
+  // Schema monitor
+  try {
+    SCH_onChange(e || {});
+  } catch (err2) {
+    Logger.log("SCH_onChange error: " + err2);
+  }
+}
+
+function onSelectionChange(e) {
+  if (typeof EMP !== "undefined" && EMP.handleSelectionChange) {
+    EMP.handleSelectionChange(e || {});
+  }
+}
+
+function EMP_debugLog(msg) {
+  try {
+    Logger.log("[EMP_DEBUG] " + msg);
+  } catch (_e) {
+    // ignore
+  }
+}
+
+function EMP_ping() {
+  Logger.log("EMP_ping called");
+  return { ok: true, message: "ping from EmployeesModule" };
+}
+
+function EMP_getSidebarBootstrap() {
+  Logger.log("EMP_getSidebarBootstrap called");
+  try {
+    if (!EMP || typeof EMP.getSidebarBootstrap !== "function") {
+      var missing = {
+        ok: false,
+        error: "EMP.getSidebarBootstrap not available",
+      };
+      Logger.log(
+        "EMP_getSidebarBootstrap returning: " + JSON.stringify(missing)
+      );
+      return missing;
+    }
+
+    var bootstrap = EMP.getSidebarBootstrap();
+
+    if (!bootstrap || typeof bootstrap !== "object") {
+      Logger.log(
+        "[EMP_ERROR] getSidebarBootstrap returned invalid value: " +
+          typeof bootstrap
+      );
+      var invalid = { ok: false, error: "bootstrap is null or not an object" };
+      Logger.log(
+        "EMP_getSidebarBootstrap returning: " + JSON.stringify(invalid)
+      );
+      return invalid;
+    }
+
+    Logger.log(
+      "[EMP_DEBUG] bootstrap ok: employees=%s jobs=%s payments=%s",
+      (bootstrap.employees && bootstrap.employees.length) || 0,
+      (bootstrap.jobs && bootstrap.jobs.length) || 0,
+      (bootstrap.payments && bootstrap.payments.length) || 0
+    );
+    Logger.log(
+      "EMP_getSidebarBootstrap returning: " +
+        JSON.stringify(bootstrap).slice(0, 2000)
+    );
+    return bootstrap;
+  } catch (err) {
+    var errStr = err && err.stack ? err.stack : err;
+    Logger.log("[EMP_ERROR] EMP_getSidebarBootstrap failed: " + errStr);
+    return { ok: false, error: String(err) };
+  }
+}
+
+function EMP_getEmployeeById(id) {
+  Logger.log("EMP_getEmployeeById called with id=" + id);
+  try {
+    if (!EMP || typeof EMP.getEmployeeById !== "function") {
+      var missing = { ok: false, error: "EMP.getEmployeeById not available" };
+      Logger.log("EMP_getEmployeeById returning: " + JSON.stringify(missing));
+      return missing;
+    }
+    var res = EMP.getEmployeeById(id);
+    Logger.log("EMP_getEmployeeById returning: " + JSON.stringify(res));
+    if (!res) {
+      return { ok: false, error: "EMP_getEmployeeById returned empty" };
+    }
+    if (res.ok) {
+      return { ok: true, employee: res.employee || null, cols: res.cols };
+    }
+    return { ok: false, error: res.error || "EMP_getEmployeeById failed" };
+  } catch (e) {
+    Logger.log("EMP_getEmployeeById error: " + e);
+    return { ok: false, error: "EMP_getEmployeeById failed: " + e };
+  }
+}
+
+/**
+ * שמירת עובד מה-Sidebar:
+ * - ממפה סוג עבודה ואופן תשלום ל-ID לפי "אופציות בחירה ו ID'S"
+ * - עובד לפי כותרות ולא לפי אינדקסים קשיחים
+ * - מחזיר אובייקט עובד מעודכן (כולל rowIndex לכל שורת עבודה) כדי שהסיידבר יתעדכן ולא יווצרו כפילויות.
+ */
+function EMP_saveEmployeePayload(payload) {
+  Logger.log(
+    "EMP_saveEmployeePayload called: " + JSON.stringify(payload || {})
+  );
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) {
+    var lockErr = {
+      ok: false,
+      error: "לא ניתן לקבל נעילה למסמך לשמירה (נסה שוב).",
+    };
+    Logger.log("EMP_saveEmployeePayload returning: " + JSON.stringify(lockErr));
+    return lockErr;
+  }
+
+  try {
+    if (!payload || !payload.name || !payload.rows || !payload.rows.length) {
+      var invalid = { ok: false, error: "payload לא תקין מה-Sidebar" };
+      Logger.log(
+        "EMP_saveEmployeePayload returning: " + JSON.stringify(invalid)
+      );
+      return invalid;
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("פרטי עובדים");
+    if (!sheet) {
+      var missingSheet = {
+        ok: false,
+        error: 'לא נמצאה כרטיסייה "פרטי עובדים"',
+      };
+      Logger.log(
+        "EMP_saveEmployeePayload returning: " + JSON.stringify(missingSheet)
+      );
+      return missingSheet;
+    }
+
+    var headerRow = 1;
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow <= headerRow) {
+      var noData = { ok: false, error: 'אין נתונים בכרטיסייה "פרטי עובדים"' };
+      Logger.log(
+        "EMP_saveEmployeePayload returning: " + JSON.stringify(noData)
+      );
+      return noData;
+    }
+
+    var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
+
+    function colIndexByHeaderLocal(name) {
+      var idx = headers.indexOf(name);
+      return idx >= 0 ? idx + 1 : null;
+    }
+
+    var colStatus = colIndexByHeaderLocal("סטטוס");
+    var colName = colIndexByHeaderLocal("שם מלא");
+    var colEmpId = colIndexByHeaderLocal("ID עובד");
+    var colJobId = colIndexByHeaderLocal("ID סוגי עבודה");
+    var colJobName = colIndexByHeaderLocal("סוג העבודה");
+    var colDept = colIndexByHeaderLocal("מחלקה");
+    var colAmount = colIndexByHeaderLocal("סכום");
+    var colPayId = colIndexByHeaderLocal("ID אופן תשלום");
+    var colPayName = colIndexByHeaderLocal("אופן תשלום");
+    var colNotes = colIndexByHeaderLocal("הערות");
+    var colGender = colIndexByHeaderLocal("מין");
+    var colIdNum = colIndexByHeaderLocal("תז");
+    var colPhone = colIndexByHeaderLocal("טלפון");
+    var colBirthdate = colIndexByHeaderLocal("ת. לידה");
+    var colEmail = colIndexByHeaderLocal("מייל");
+    var colShirt = colIndexByHeaderLocal("מידת חולצה");
+    var colTravel = colIndexByHeaderLocal("עלות החזרי נסיעות יומי");
+
+    if (!colName || !colJobName || !colStatus) {
+      var missingCols = {
+        ok: false,
+        error:
+          'חסרות עמודות חובה (לפחות "שם מלא", "סוג העבודה", "סטטוס") – בדוק כותרות.',
+      };
+      Logger.log(
+        "EMP_saveEmployeePayload returning: " + JSON.stringify(missingCols)
+      );
+      return missingCols;
+    }
+
+    var dataRange = sheet.getRange(
+      headerRow + 1,
+      1,
+      lastRow - headerRow,
+      lastCol
+    );
+    var data = dataRange.getValues();
+    var rowsToFormat = [];
+
+    var rowNumToIndex = {};
+    for (var i = 0; i < data.length; i++) {
+      var rowNum = headerRow + 1 + i;
+      rowNumToIndex[rowNum] = i;
+    }
+
+    var name = String(payload.name).trim();
+    var employeeId = payload.id ? String(payload.id).trim() : "";
+
+    function normalizeStr(val) {
+      if (val === null || val === undefined) return "";
+      return String(val).replace(/\s+/g, " ").trim();
+    }
+
+    function resolveJob(jobTypeText) {
+      var key = normalizeStr(jobTypeText);
+      if (!key) return null;
+      if (typeof OPT === "undefined" || !OPT.getJobByName) return null;
+      return OPT.getJobByName(key);
+    }
+
+    function resolvePayment(paymentText) {
+      var key = normalizeStr(paymentText);
+      if (!key) return null;
+      if (typeof OPT === "undefined" || !OPT.getPaymentByName) return null;
+      return OPT.getPaymentByName(key);
+    }
+
+    // עדכון שורות קיימות + איסוף השורות החדשות (ללא rowIndex)
+    var rowsPayload = payload.rows;
+    var newRowsPayload = [];
+
+    for (var r = 0; r < rowsPayload.length; r++) {
+      var rp = rowsPayload[r];
+
+      var allEmpty =
+        !normalizeStr(rp.jobType) &&
+        !normalizeStr(rp.department) &&
+        !normalizeStr(rp.amount) &&
+        !normalizeStr(rp.paymentMode) &&
+        !normalizeStr(rp.notes);
+      if (allEmpty) continue;
+
+      var rowIndex = rp.rowIndex ? Number(rp.rowIndex) : null;
+
+      if (rowIndex && rowNumToIndex.hasOwnProperty(rowIndex)) {
+        var di = rowNumToIndex[rowIndex];
+        var rowArr = data[di];
+        rowsToFormat.push(rowIndex);
+
+        // שם ו-ID עובד
+        if (name) {
+          rowArr[colName - 1] = name;
+        }
+        if (colEmpId && employeeId) {
+          rowArr[colEmpId - 1] = employeeId;
+        }
+
+        // סטטוס
+        if (colStatus) {
+          rowArr[colStatus - 1] = rp.rowActive ? "פעיל" : "לא פעיל";
+        }
+
+        if (colGender) {
+          rowArr[colGender - 1] = normalizeStr(payload.gender);
+        }
+        if (colIdNum) {
+          rowArr[colIdNum - 1] = normalizeStr(payload.idNumber);
+        }
+        if (colPhone) {
+          rowArr[colPhone - 1] = normalizeStr(payload.phone);
+        }
+        if (colBirthdate) {
+          rowArr[colBirthdate - 1] = normalizeStr(payload.birthdate);
+        }
+        if (colEmail) {
+          rowArr[colEmail - 1] = normalizeStr(payload.email);
+        }
+        if (colShirt) {
+          rowArr[colShirt - 1] = normalizeStr(payload.shirtSize);
+        }
+        if (colTravel) {
+          rowArr[colTravel - 1] = normalizeStr(payload.travelCost);
+        }
+
+        // סכום
+        if (colAmount) {
+          var amountVal = normalizeStr(rp.amount);
+          rowArr[colAmount - 1] = amountVal ? Number(amountVal) : "";
+        }
+
+        // הערות
+        if (colNotes) {
+          rowArr[colNotes - 1] = normalizeStr(rp.notes);
+        }
+
+        // סוג עבודה
+        var jobRec = resolveJob(rp.jobType);
+        if (jobRec) {
+          if (colJobId) rowArr[colJobId - 1] = jobRec.id || "";
+          if (colJobName) rowArr[colJobName - 1] = jobRec.name || "";
+          if (colDept) rowArr[colDept - 1] = jobRec.department || "";
+        } else {
+          if (colJobId) rowArr[colJobId - 1] = "";
+          if (colJobName) rowArr[colJobName - 1] = normalizeStr(rp.jobType);
+          if (colDept) rowArr[colDept - 1] = normalizeStr(rp.department);
+        }
+
+        // אופן תשלום
+        if (colPayName || colPayId) {
+          var payRec = resolvePayment(rp.paymentMode);
+          if (payRec) {
+            if (colPayId) rowArr[colPayId - 1] = payRec.id || "";
+            if (colPayName) rowArr[colPayName - 1] = payRec.name || "";
+          } else {
+            if (colPayId) rowArr[colPayId - 1] = "";
+            if (colPayName)
+              rowArr[colPayName - 1] = normalizeStr(rp.paymentMode);
+          }
+        }
+      } else {
+        // שורה חדשה – נטפל בה אחרי setValues
+        newRowsPayload.push(rp);
+      }
+    }
+
+    // כתיבה מחדש של הבלוק הקיים (שורות עם rowIndex)
+    dataRange.setValues(data);
+
+    // טיפול בשורות חדשות – הוספה בתחתית הטבלה + העתקת פורמט
+    var appendedRowIndices = [];
+    if (newRowsPayload.length > 0) {
+      var appendRows = [];
+      var baseRowTemplate = null;
+      var baseRowTemplateRowNum = null;
+
+      // ניסיון לבחור שורת תבנית של אותו עובד – לפי ID עובד
+      if (colEmpId && employeeId) {
+        for (var i2 = 0; i2 < data.length; i2++) {
+          var rowEmpId = normalizeStr(data[i2][colEmpId - 1]);
+          if (rowEmpId && rowEmpId === employeeId) {
+            baseRowTemplate = data[i2].slice();
+            baseRowTemplateRowNum = headerRow + 1 + i2;
+            break;
+          }
+        }
+      }
+
+      // אם אין ID עובד, fallback לפי שם
+      if (!baseRowTemplate && colName) {
+        for (var i3 = 0; i3 < data.length; i3++) {
+          if (normalizeStr(data[i3][colName - 1]) === name) {
+            baseRowTemplate = data[i3].slice();
+            baseRowTemplateRowNum = headerRow + 1 + i3;
+            break;
+          }
+        }
+      }
+
+      // אם עדיין אין – נשתמש בשורת הנתונים הראשונה כטמפלט
+      if (!baseRowTemplate && data.length > 0) {
+        baseRowTemplate = data[0].slice();
+        baseRowTemplateRowNum = headerRow + 1;
+      }
+
+      // אם גם זה אין (קיצון) – מייצרים מערך ריק
+      if (!baseRowTemplate) {
+        baseRowTemplate = new Array(lastCol);
+        for (var c = 0; c < lastCol; c++) baseRowTemplate[c] = "";
+      }
+
+      for (var nr = 0; nr < newRowsPayload.length; nr++) {
+        var rpNew = newRowsPayload[nr];
+        var newRow = baseRowTemplate.slice();
+
+        // שם ו-ID עובד
+        if (colName && name) {
+          newRow[colName - 1] = name;
+        }
+        if (colEmpId && employeeId) {
+          newRow[colEmpId - 1] = employeeId;
+        }
+
+        // סטטוס
+        if (colStatus) {
+          newRow[colStatus - 1] = rpNew.rowActive ? "פעיל" : "לא פעיל";
+        }
+
+        if (colGender) {
+          newRow[colGender - 1] = normalizeStr(payload.gender);
+        }
+        if (colIdNum) {
+          newRow[colIdNum - 1] = normalizeStr(payload.idNumber);
+        }
+        if (colPhone) {
+          newRow[colPhone - 1] = normalizeStr(payload.phone);
+        }
+        if (colBirthdate) {
+          newRow[colBirthdate - 1] = normalizeStr(payload.birthdate);
+        }
+        if (colEmail) {
+          newRow[colEmail - 1] = normalizeStr(payload.email);
+        }
+        if (colShirt) {
+          newRow[colShirt - 1] = normalizeStr(payload.shirtSize);
+        }
+        if (colTravel) {
+          newRow[colTravel - 1] = normalizeStr(payload.travelCost);
+        }
+
+        // סכום
+        if (colAmount) {
+          var amountNew = normalizeStr(rpNew.amount);
+          newRow[colAmount - 1] = amountNew ? Number(amountNew) : "";
+        }
+
+        // הערות
+        if (colNotes) {
+          newRow[colNotes - 1] = normalizeStr(rpNew.notes);
+        }
+
+        // סוג עבודה
+        var jobRecNew = resolveJob(rpNew.jobType);
+        if (jobRecNew) {
+          if (colJobId) newRow[colJobId - 1] = jobRecNew.id || "";
+          if (colJobName) newRow[colJobName - 1] = jobRecNew.name || "";
+          if (colDept) newRow[colDept - 1] = jobRecNew.department || "";
+        } else {
+          if (colJobId) newRow[colJobId - 1] = "";
+          if (colJobName) newRow[colJobName - 1] = normalizeStr(rpNew.jobType);
+          if (colDept) newRow[colDept - 1] = normalizeStr(rpNew.department);
+        }
+
+        // אופן תשלום
+        if (colPayName || colPayId) {
+          var payRecNew = resolvePayment(rpNew.paymentMode);
+          if (payRecNew) {
+            if (colPayId) newRow[colPayId - 1] = payRecNew.id || "";
+            if (colPayName) newRow[colPayName - 1] = payRecNew.name || "";
+          } else {
+            if (colPayId) newRow[colPayId - 1] = "";
+            if (colPayName)
+              newRow[colPayName - 1] = normalizeStr(rpNew.paymentMode);
+          }
+        }
+
+        appendRows.push(newRow);
+      }
+
+      if (appendRows.length > 0) {
+        var startRow = lastRow + 1;
+        sheet
+          .getRange(startRow, 1, appendRows.length, lastCol)
+          .setValues(appendRows);
+
+        // העתקת פורמט ואימות נתונים מהתבנית (אם יש)
+        if (baseRowTemplateRowNum) {
+          var templateRange = sheet.getRange(
+            baseRowTemplateRowNum,
+            1,
+            1,
+            lastCol
+          );
+          for (var k = 0; k < appendRows.length; k++) {
+            var destRow = startRow + k;
+            templateRange.copyTo(sheet.getRange(destRow, 1, 1, lastCol), {
+              formatOnly: true,
+            });
+            appendedRowIndices.push(destRow);
+          }
+        } else {
+          for (var k2 = 0; k2 < appendRows.length; k2++) {
+            appendedRowIndices.push(startRow + k2);
+          }
+        }
+      }
+    }
+
+    // ריענון פורמט עבור עמודות ID (סוג עבודה / אופן תשלום) בשורות שעודכנו
+    var formatCols = [];
+    if (colJobId) formatCols.push(colJobId);
+    if (colPayId) formatCols.push(colPayId);
+
+    var templateRowForFormat = baseRowTemplateRowNum || headerRow + 1;
+    if (formatCols.length && templateRowForFormat) {
+      var allRowsNeedingFormat = rowsToFormat.concat(appendedRowIndices);
+      if (allRowsNeedingFormat.length) {
+        for (var fc = 0; fc < formatCols.length; fc++) {
+          var colFmt = formatCols[fc];
+          // העתקת פורמט מהשורה התבניתית
+          sheet
+            .getRange(templateRowForFormat, colFmt, 1, 1)
+            .copyFormatToRange(
+              sheet,
+              colFmt,
+              colFmt,
+              Math.min.apply(null, allRowsNeedingFormat),
+              Math.max.apply(null, allRowsNeedingFormat)
+            );
+          // שמירת ה-ID כטקסט כדי למנוע פורמט מספרי
+          sheet
+            .getRange(headerRow + 1, colFmt, sheet.getLastRow() - headerRow, 1)
+            .setNumberFormat("@");
+        }
+      }
+    }
+
+    // טעינת העובד המעודכן לתשובה – זה מה שהסיידבר ישתמש בו כדי לעדכן rowIndex
+    var employeeRes = null;
+    var employee = null;
+    if (employeeId && typeof getEmployeeById_ === "function") {
+      employeeRes = getEmployeeById_(employeeId);
+      if (employeeRes && employeeRes.ok) {
+        employee = employeeRes.employee || null;
+      } else if (employeeRes && employeeRes.error) {
+        var errRes = { ok: false, error: employeeRes.error };
+        Logger.log(
+          "EMP_saveEmployeePayload returning: " + JSON.stringify(errRes)
+        );
+        return errRes;
+      }
+    }
+
+    var success = {
+      ok: true,
+      employee: employee,
+      employeeId: employeeId,
+      appendedRowIndices: appendedRowIndices,
+    };
+    Logger.log("EMP_saveEmployeePayload returning: " + JSON.stringify(success));
+    return success;
+  } catch (err) {
+    var catchErr = {
+      ok: false,
+      error:
+        "שגיאה ב-EMP_saveEmployeePayload: " +
+        (err && err.message ? err.message : err),
+    };
+    Logger.log(
+      "EMP_saveEmployeePayload returning: " + JSON.stringify(catchErr)
+    );
+    return catchErr;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function EMP_applyPersonalFieldChoice(employeeId, fieldKey, value) {
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(5000)) {
+    return { ok: false, error: "לא ניתן לקבל נעילה למסמך לעדכון (נסה שוב)." };
+  }
+  try {
+    if (typeof EMP === "undefined" || !EMP.applyPersonalFieldChoice) {
+      return { ok: false, error: "פונקציית עדכון שדה אישי אינה זמינה" };
+    }
+    return EMP.applyPersonalFieldChoice(employeeId, fieldKey, value);
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        "שגיאה ב-EMP_applyPersonalFieldChoice: " +
+        (err && err.message ? err.message : err),
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function EMP_createEmployeeByName(name) {
+  return EMP.createEmployeeByName(name);
+}
+
+/**
+ * סנכרון:
+ * - J: "ID סוגי עבודה"
+ * - L: "מחלקה"
+ * - O: "ID אופן תשלום"
+ * בכרטיסייה "פרטי עובדים"
+ */
+function EMP_backfillJobAndPaymentIdsForAllEmployees() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("פרטי עובדים");
+  if (!sheet) {
+    throw new Error('לא נמצאה כרטיסייה "פרטי עובדים"');
+  }
+
+  var HEADER_ROW = 1;
+
+  var COL_ID_EMP = 2; // B
+  var COL_FULL_NAME = 3; // C
+  var COL_JOB_TYPE_ID = 10; // J
+  var COL_JOB_TYPE = 11; // K
+  var COL_DEPARTMENT = 12; // L
+  var COL_PAY_ID = 15; // O
+  var COL_PAY_NAME = 16; // P
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= HEADER_ROW) {
+    SpreadsheetApp.getActive().toast(
+      "אין נתוני עובדים לסנכרון",
+      "EMP_backfillJobAndPaymentIds",
+      5
+    );
+    return { ok: true, updated: 0, missingJobs: [], missingPayments: [] };
+  }
+
+  var data = sheet
+    .getRange(HEADER_ROW + 1, 1, lastRow - HEADER_ROW, lastCol)
+    .getValues();
+
+  var updated = 0;
+  var missingJobs = [];
+  var missingPayments = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var sheetRow = HEADER_ROW + 1 + i;
+
+    var empId = row[COL_ID_EMP - 1];
+    var fullName = row[COL_FULL_NAME - 1];
+
+    if (!empId && !fullName) continue;
+
+    var jobName = row[COL_JOB_TYPE - 1];
+    var currentJobId = row[COL_JOB_TYPE_ID - 1];
+    var currentDept = row[COL_DEPARTMENT - 1];
+
+    var payName = row[COL_PAY_NAME - 1];
+    var currentPayId = row[COL_PAY_ID - 1];
+
+    var needUpdateRow = false;
+
+    if (jobName) {
+      var job = OPT.getJobByName(jobName);
+      if (job) {
+        var newJobId = job.id || "";
+        var newDept = job.department || "";
+
+        if (currentJobId !== newJobId) {
+          sheet.getRange(sheetRow, COL_JOB_TYPE_ID).setValue(newJobId);
+          needUpdateRow = true;
+        }
+        if (currentDept !== newDept) {
+          sheet.getRange(sheetRow, COL_DEPARTMENT).setValue(newDept);
+          needUpdateRow = true;
+        }
+      } else {
+        missingJobs.push({ row: sheetRow, jobName: jobName });
+        Logger.log(
+          'EMP_backfillJobAndPaymentIds: אין התאמה לסוג עבודה "%s" בשורה %s',
+          jobName,
+          sheetRow
+        );
+      }
+    }
+
+    if (payName) {
+      var pay = OPT.getPaymentByName(payName);
+      if (pay) {
+        var newPayId = pay.id || "";
+        if (currentPayId !== newPayId) {
+          sheet.getRange(sheetRow, COL_PAY_ID).setValue(newPayId);
+          needUpdateRow = true;
+        }
+      } else {
+        missingPayments.push({ row: sheetRow, payName: payName });
+        Logger.log(
+          'EMP_backfillJobAndPaymentIds: אין התאמה לאופן תשלום "%s" בשורה %s',
+          payName,
+          sheetRow
+        );
+      }
+    }
+
+    if (needUpdateRow) updated++;
+  }
+
+  var msg =
+    "עודכנו " + updated + " עובדים (ID סוג עבודה / מחלקה / ID אופן תשלום).";
+  if (missingJobs.length)
+    msg +=
+      " אין התאמה ל-" + missingJobs.length + " סוגי עבודה (פירוט ב-Logger).";
+  if (missingPayments.length)
+    msg +=
+      " אין התאמה ל-" +
+      missingPayments.length +
+      " אופני תשלום (פירוט ב-Logger).";
+
+  SpreadsheetApp.getActive().toast(msg, "EMP_backfillJobAndPaymentIds", 7);
+
+  return {
+    ok: true,
+    updated: updated,
+    missingJobs: missingJobs,
+    missingPayments: missingPayments,
+  };
+}
