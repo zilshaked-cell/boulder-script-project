@@ -3,7 +3,7 @@
 /**
  * נקודת כניסה ל-POST מהווב-אפ (דיווח משמרת חדשה)
  */
-function doPost(e) {
+function doPost_legacy(e) {
   try {
     var action =
       e && e.parameter && e.parameter.action ? String(e.parameter.action) : "";
@@ -24,7 +24,7 @@ function doPost(e) {
   }
 }
 
-function doGet(e) {
+function doGet_legacy(e) {
   var params = (e && e.parameter) || {};
   // תומך גם ב-action (החדש) וגם ב-mode (הישן)
   var action = params.action || params.mode || "ping";
