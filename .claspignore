@@ -1,2 +1,15 @@
 entrypoints-SHAKED-ZILBERSTEIN.js
 **/*-SHAKED-ZILBERSTEIN*.js
+node_modules/
+**/node_modules/**
+**/@eslint/**
+.git/
+.vscode/
+dist/
+build/
+**/*.test.*
+*.md
+package-lock*.json
+package.json
+tsconfig*.json
+*.ts
