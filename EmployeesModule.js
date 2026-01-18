@@ -1010,8 +1010,8 @@ var EMP = EMP || {};
           email: emp.email || "",
           changeDescription:
             bulkType === "EMPLOYEE_JOBTYPE_ADD"
-              ? "נוסף לעובד סוג העבודה " + jobLabel + "."
-              : "הוסר מהעובד סוג העבודה " + jobLabel + ".",
+              ? "נוסף סוג העבודה " + jobLabel + "."
+              : "הוסר סוג העבודה " + jobLabel + ".",
         });
 
         summary.affectedEmployeesCount++;
@@ -1144,6 +1144,26 @@ var EMP = EMP || {};
       validated.jobRecord
     );
 
+    try {
+      appendSystemLog_({
+        layer: "admin.bulk",
+        operation: "admin.runBulkAction",
+        step: validated.mode,
+        severity: "info",
+        actor: (logger && logger.ctx && logger.ctx.actor) || "",
+        details: {
+          bulkType: validated.bulkType,
+          mode: validated.mode,
+          target: computation.result.summary.targetEmployeesCount,
+          affected: computation.result.summary.affectedEmployeesCount,
+          noChange: computation.result.summary.noChangeCount,
+          errors: computation.result.errors
+            ? computation.result.errors.length
+            : 0,
+        },
+      });
+    } catch (_ignored) {}
+
     if (logger && logger.info) {
       try {
         logger.info("admin.runBulkAction.summary", {
@@ -1268,6 +1288,28 @@ var EMP = EMP || {};
         subject: subject,
         body: body,
       });
+
+      try {
+        appendSystemLog_({
+          layer: "admin.bulk",
+          operation: "admin.reportBulkActionIssue",
+          step: "reported",
+          severity: "warn",
+          actor:
+            (context &&
+              context.logger &&
+              context.logger.ctx &&
+              context.logger.ctx.actor) ||
+            requestedBy,
+          details: {
+            bulkType: bulkType,
+            mode: mode,
+            target: summary.targetEmployeesCount || 0,
+            affected: summary.affectedEmployeesCount || 0,
+            noChange: summary.noChangeCount || 0,
+          },
+        });
+      } catch (_ignored) {}
     } catch (err) {
       return {
         ok: false,
