@@ -46,6 +46,15 @@ function onOpen(e) {
     if (typeof buildShiftsSubMenu_ === "function") {
       root.addSubMenu(buildShiftsSubMenu_(ui));
     }
+
+    // פריט חדש: בדיקת כפילות דיווחי עובדים
+    if (typeof SHIFTS_showDuplicateCleanupDialog === "function") {
+      root.addItem(
+        "בדיקת כפילות דיווחי עובדים",
+        "SHIFTS_showDuplicateCleanupDialog"
+      );
+    }
+
     root.addToUi();
   } catch (errMenu) {
     Logger.log("onOpen Boulder menu error: " + errMenu);
