@@ -1170,9 +1170,30 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     sheetName
   );
   const statusCol = getRequiredColumn_(headerMap, ["סטטוס"], sheetName);
+  const jobTypeNameCol = getOptionalColumn_(
+    headerMap,
+    ["סוג העבודה", "סוג עבודה"],
+    sheetName
+  );
+  const jobPayTypeIdCol = getOptionalColumn_(
+    headerMap,
+    ["ID אופן תשלום", "ID אופני תשלום"],
+    sheetName
+  );
+  const jobPayTypeNameCol = getOptionalColumn_(
+    headerMap,
+    ["אופן תשלום"],
+    sheetName
+  );
+  const jobDepartmentCol = getOptionalColumn_(
+    headerMap,
+    ["מחלקה", "מחלקות"],
+    sheetName
+  );
   const values = sheet.getDataRange().getValues();
   lg.info("read-sheet", { sheetName: sheetName, rows: values.length - 1 });
   const jobTypeIds = [];
+  const jobTypeDetailMap = {};
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const rowEmpId = stringValue(row[idCol - 1]);
@@ -1180,13 +1201,43 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     const status = stringValue(row[statusCol - 1]);
     if (status === "לא פעיל") continue;
     const jobTypeId = stringValue(row[jobTypeCol - 1]);
-    if (jobTypeId) jobTypeIds.push(jobTypeId);
+    if (!jobTypeId) continue;
+
+    jobTypeIds.push(jobTypeId);
+
+    const payTypeId = jobPayTypeIdCol
+      ? stringValue(row[jobPayTypeIdCol - 1])
+      : "";
+    const payTypeName = jobPayTypeNameCol
+      ? stringValue(row[jobPayTypeNameCol - 1])
+      : "";
+    const normalizedPayType = normalizePayType_(payTypeId || payTypeName);
+    const existing = jobTypeDetailMap[jobTypeId] || {};
+    const jobName = jobTypeNameCol ? stringValue(row[jobTypeNameCol - 1]) : "";
+    const department = jobDepartmentCol
+      ? stringValue(row[jobDepartmentCol - 1])
+      : "";
+
+    jobTypeDetailMap[jobTypeId] = {
+      jobTypeId: jobTypeId,
+      name: existing.name || jobName,
+      department: existing.department || department,
+      payTypeId: existing.payTypeId || payTypeId,
+      payTypeName: existing.payTypeName || payTypeName,
+      payType:
+        normalizedPayType || existing.payType || payTypeName || payTypeId || "",
+    };
   }
+
+  const jobTypesDetailed = Object.keys(jobTypeDetailMap).map(function (key) {
+    return jobTypeDetailMap[key];
+  });
   logDuration_(lg, "employee.linkedJobs.total", startMs, {
     employeeId: employeeId,
     linkedCount: jobTypeIds.length,
+    detailedCount: jobTypesDetailed.length,
   });
-  return { employeeId, jobTypeIds };
+  return { employeeId, jobTypeIds, jobTypesDetailed };
 }
 
 function adminListEmployees_(payload, logger) {
@@ -1244,10 +1295,7 @@ function adminListEmployees_(payload, logger) {
     "סוג העבודה",
     "סוג עבודה",
   ]);
-  const jobDepartmentCol = getOptionalColumn_(headers, [
-    "מחלקה",
-    "מחלקות",
-  ]);
+  const jobDepartmentCol = getOptionalColumn_(headers, ["מחלקה", "מחלקות"]);
   const jobAmountCol = getOptionalColumn_(headers, ["סכום"]);
   const jobPayTypeIdCol = getOptionalColumn_(headers, [
     "ID אופן תשלום",
@@ -1441,9 +1489,7 @@ function adminListEmployees_(payload, logger) {
       record.notes = stringValue(row[notesCol - 1]);
     if (!record.branch && branchVal) record.branch = branchVal;
     if (!record.travelAllowanceDaily && travelAllowanceCol)
-      record.travelAllowanceDaily = stringValue(
-        row[travelAllowanceCol - 1]
-      );
+      record.travelAllowanceDaily = stringValue(row[travelAllowanceCol - 1]);
 
     const normalizedEmployment = normalizeEmploymentStatus_(
       employmentVal,
@@ -1479,7 +1525,9 @@ function adminListEmployees_(payload, logger) {
       }
 
       var jobTypeFromMap =
-        jobMap[jobTypeId] || (jobTypeNameKey ? jobMapByName[jobTypeNameKey] : {}) || {};
+        jobMap[jobTypeId] ||
+        (jobTypeNameKey ? jobMapByName[jobTypeNameKey] : {}) ||
+        {};
       var detailPrev = record._jobTypeDetailMap[jobTypeId] || {};
       var jobDept = jobDepartmentCol
         ? stringValue(row[jobDepartmentCol - 1])
@@ -1500,8 +1548,7 @@ function adminListEmployees_(payload, logger) {
 
       record._jobTypeDetailMap[jobTypeId] = {
         jobTypeId: jobTypeId,
-        name:
-          jobTypeNameVal || detailPrev.name || jobTypeFromMap.name || "",
+        name: jobTypeNameVal || detailPrev.name || jobTypeFromMap.name || "",
         shortCode: detailPrev.shortCode || jobTypeFromMap.shortCode || "",
         colorHex: detailPrev.colorHex || jobTypeFromMap.colorHex || "",
         isActive:
@@ -1511,9 +1558,15 @@ function adminListEmployees_(payload, logger) {
         department:
           jobDept || detailPrev.department || jobTypeFromMap.department || "",
         payTypeId:
-          payTypeIdRaw || detailPrev.payTypeId || jobTypeFromMap.payTypeId || "",
+          payTypeIdRaw ||
+          detailPrev.payTypeId ||
+          jobTypeFromMap.payTypeId ||
+          "",
         payTypeName:
-          payTypeNameRaw || detailPrev.payTypeName || jobTypeFromMap.payTypeName || "",
+          payTypeNameRaw ||
+          detailPrev.payTypeName ||
+          jobTypeFromMap.payTypeName ||
+          "",
         payType:
           payTypeNameRaw ||
           payTypeIdRaw ||
@@ -1743,17 +1796,61 @@ function adminListRequests_(payload, logger) {
   const headers = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
 
-  const colRequestId = getRequiredColumn_(headers, ["ID בקשה", "Request ID", "RequestID"], sheetName);
-  const colEmployeeId = getRequiredColumn_(headers, ["מזהה עובד", "ID עובד", "Employee ID", "ת.ז", "תז"], sheetName);
-  const colEmployeeName = getOptionalColumn_(headers, ["שם מלא", "שם עובד", "Employee Name"], sheetName);
-  const colStatus = getRequiredColumn_(headers, ["סטטוס בקשה", "סטטוס", "Status"], sheetName);
-  const colTimestamp = getRequiredColumn_(headers, ["חותמת זמן", "תאריך משמרת", "תיקון תאריך"], sheetName);
-  const colShiftId = getOptionalColumn_(headers, ["ID משמרת", "Shift ID", "מזהה משמרת"], sheetName);
-  const colJobTypeId = getOptionalColumn_(headers, ["ID סוג עבודה", "ID סוגי עבודה", "Job Type ID"], sheetName);
-  const colJobTypeName = getOptionalColumn_(headers, ["סוג עבודה", "סוגי עבודה", "שם סוג עבודה"], sheetName);
-  const colDepartment = getOptionalColumn_(headers, ["מחלקה", "מחלקות", "Department"], sheetName);
-  const colUnits = getOptionalColumn_(headers, ["כמות היחידות", "דיווח יחידות", "Units"], sheetName);
-  const colManagerNotes = getOptionalColumn_(headers, ["הערה למנהל", "הערות", "הערות למשמרת", "Manager Notes"], sheetName);
+  const colRequestId = getRequiredColumn_(
+    headers,
+    ["ID בקשה", "Request ID", "RequestID"],
+    sheetName
+  );
+  const colEmployeeId = getRequiredColumn_(
+    headers,
+    ["מזהה עובד", "ID עובד", "Employee ID", "ת.ז", "תז"],
+    sheetName
+  );
+  const colEmployeeName = getOptionalColumn_(
+    headers,
+    ["שם מלא", "שם עובד", "Employee Name"],
+    sheetName
+  );
+  const colStatus = getRequiredColumn_(
+    headers,
+    ["סטטוס בקשה", "סטטוס", "Status"],
+    sheetName
+  );
+  const colTimestamp = getRequiredColumn_(
+    headers,
+    ["חותמת זמן", "תאריך משמרת", "תיקון תאריך"],
+    sheetName
+  );
+  const colShiftId = getOptionalColumn_(
+    headers,
+    ["ID משמרת", "Shift ID", "מזהה משמרת"],
+    sheetName
+  );
+  const colJobTypeId = getOptionalColumn_(
+    headers,
+    ["ID סוג עבודה", "ID סוגי עבודה", "Job Type ID"],
+    sheetName
+  );
+  const colJobTypeName = getOptionalColumn_(
+    headers,
+    ["סוג עבודה", "סוגי עבודה", "שם סוג עבודה"],
+    sheetName
+  );
+  const colDepartment = getOptionalColumn_(
+    headers,
+    ["מחלקה", "מחלקות", "Department"],
+    sheetName
+  );
+  const colUnits = getOptionalColumn_(
+    headers,
+    ["כמות היחידות", "דיווח יחידות", "Units"],
+    sheetName
+  );
+  const colManagerNotes = getOptionalColumn_(
+    headers,
+    ["הערה למנהל", "הערות", "הערות למשמרת", "Manager Notes"],
+    sheetName
+  );
 
   var headerRow = 1;
   var lastRow = sheet.getLastRow();
@@ -1764,7 +1861,12 @@ function adminListRequests_(payload, logger) {
     return { requests: [] };
   }
 
-  var dataRange = sheet.getRange(headerRow + 1, 1, lastRow - headerRow, lastCol);
+  var dataRange = sheet.getRange(
+    headerRow + 1,
+    1,
+    lastRow - headerRow,
+    lastCol
+  );
   var values = dataRange.getValues();
 
   lg.info("read-sheet", {
@@ -1782,7 +1884,9 @@ function adminListRequests_(payload, logger) {
     if (!id) continue;
 
     var employeeId = stringValue(row[colEmployeeId - 1]);
-    var employeeName = colEmployeeName ? stringValue(row[colEmployeeName - 1]) : "";
+    var employeeName = colEmployeeName
+      ? stringValue(row[colEmployeeName - 1])
+      : "";
     var statusRaw = stringValue(row[colStatus - 1]);
     var status = normalizeRequestStatus_(statusRaw);
     var createdAt = normalizeIsoDateTimeValue_(row[colTimestamp - 1]);
@@ -1798,11 +1902,14 @@ function adminListRequests_(payload, logger) {
 
     if (requestId) request.requestId = requestId;
     if (shiftId) request.shiftId = shiftId;
-    if (colJobTypeId) request.requestTypeId = stringValue(row[colJobTypeId - 1]);
-    if (colJobTypeName) request.requestTypeName = stringValue(row[colJobTypeName - 1]);
+    if (colJobTypeId)
+      request.requestTypeId = stringValue(row[colJobTypeId - 1]);
+    if (colJobTypeName)
+      request.requestTypeName = stringValue(row[colJobTypeName - 1]);
     if (colDepartment) request.department = stringValue(row[colDepartment - 1]);
     if (colUnits) request.units = stringValue(row[colUnits - 1]);
-    if (colManagerNotes) request.managerNotes = stringValue(row[colManagerNotes - 1]);
+    if (colManagerNotes)
+      request.managerNotes = stringValue(row[colManagerNotes - 1]);
 
     allRequests.push(request);
   }
