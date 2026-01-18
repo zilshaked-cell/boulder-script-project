@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "zip:check": "node ../scripts/check-zip-duplicates.mjs"
   },
   "keywords": [],
   "author": "",
