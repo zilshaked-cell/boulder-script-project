@@ -1854,20 +1854,45 @@ function resolveRequestColumns_(options) {
     shiftIdCol: optional(["ID משמרת", "Shift ID", "מזהה משמרת"]),
     createdAtCol: optional(["חותמת זמן", "תאריך משמרת", "תיקון תאריך"]),
     shiftDateCol: optional(["תאריך משמרת", "תיקון תאריך", "חותמת זמן"]),
-    employeeIdCol: required(["מזהה עובד", "ID עובד", "Employee ID", "ת.ז", "תז"]),
+    employeeIdCol: required([
+      "מזהה עובד",
+      "ID עובד",
+      "Employee ID",
+      "ת.ז",
+      "תז",
+    ]),
     employeeNameCol: optional(["שם מלא", "שם עובד", "Employee Name"]),
-    requestTypeIdCol: optional(["ID סוג בקשה", "ID סוג עבודה", "ID סוגי עבודה", "Job Type ID"]),
-    requestTypeLabelCol: optional(["סוג בקשה", "תיאור בקשה", "סוג עבודה", "סוגי עבודה", "שם סוג עבודה"]),
+    requestTypeIdCol: optional([
+      "ID סוג בקשה",
+      "ID סוג עבודה",
+      "ID סוגי עבודה",
+      "Job Type ID",
+    ]),
+    requestTypeLabelCol: optional([
+      "סוג בקשה",
+      "תיאור בקשה",
+      "סוג עבודה",
+      "סוגי עבודה",
+      "שם סוג עבודה",
+    ]),
     departmentCol: optional(["מחלקה", "מחלקות", "Department"]),
     unitsCol: optional(["כמות היחידות", "דיווח יחידות", "Units"]),
     managerCommentCol: optional(["הערת מנהל", "הערות מנהל", "Manager Comment"]),
-    employeeCommentCol: optional(["הערות למשמרת", "הערת עובד", "Employee Comment"]),
+    employeeCommentCol: optional([
+      "הערות למשמרת",
+      "הערת עובד",
+      "Employee Comment",
+    ]),
     sourceCol: optional(["מקור", "Source"]),
     isArchivedCol: optional(["בארכיון", "ארכיון", "Archived", "isArchived"]),
     decisionAtCol: optional(["תאריך החלטה", "decisionAt"]),
     decidedByNameCol: optional(["מקבל החלטה", "הוחלט על ידי", "decidedByName"]),
     decidedByRoleCol: optional(["תפקיד מחליט", "decidedByRole"]),
-    decidedByIdCol: optional(["מזהה מחליט", "decidedById", "decidedByEmployeeId"]),
+    decidedByIdCol: optional([
+      "מזהה מחליט",
+      "decidedById",
+      "decidedByEmployeeId",
+    ]),
     updatedAtCol: optional(["עודכן", "תאריך עדכון", "updatedAt"]),
     dateFromCol: optional(["מתאריך", "dateFrom"]),
     dateToCol: optional(["עד תאריך", "dateTo"]),
@@ -1883,17 +1908,27 @@ function mapRequestRow_(row, cols) {
 
   var statusRaw = stringValue(cell(cols.statusCol));
   var status = normalizeAdminRequestStatus_(statusRaw);
-  var createdAt = cols.createdAtCol ? normalizeIsoDateTimeValue_(cell(cols.createdAtCol)) : "";
-  var shiftDate = cols.shiftDateCol ? normalizeIsoDateTimeValue_(cell(cols.shiftDateCol)) : createdAt;
-  var dateFrom = cols.dateFromCol ? normalizeIsoDateTimeValue_(cell(cols.dateFromCol)) : "";
-  var dateTo = cols.dateToCol ? normalizeIsoDateTimeValue_(cell(cols.dateToCol)) : "";
+  var createdAt = cols.createdAtCol
+    ? normalizeIsoDateTimeValue_(cell(cols.createdAtCol))
+    : "";
+  var shiftDate = cols.shiftDateCol
+    ? normalizeIsoDateTimeValue_(cell(cols.shiftDateCol))
+    : createdAt;
+  var dateFrom = cols.dateFromCol
+    ? normalizeIsoDateTimeValue_(cell(cols.dateFromCol))
+    : "";
+  var dateTo = cols.dateToCol
+    ? normalizeIsoDateTimeValue_(cell(cols.dateToCol))
+    : "";
   var singleDate = cols.singleDateCol
     ? normalizeIsoDateTimeValue_(cell(cols.singleDateCol))
     : shiftDate;
 
   var sourceRaw = stringValue(cell(cols.sourceCol)).toUpperCase();
   var source = sourceRaw ? sourceRaw : null;
-  var isArchived = cols.isArchivedCol ? toBooleanCell_(cell(cols.isArchivedCol)) : false;
+  var isArchived = cols.isArchivedCol
+    ? toBooleanCell_(cell(cols.isArchivedCol))
+    : false;
 
   var idFromRequest = stringValue(cell(cols.requestIdCol));
   var idFromShift = stringValue(cell(cols.shiftIdCol));
@@ -1996,7 +2031,10 @@ function adminListRequests_(payload, logger) {
     var req = mapRequestRow_(row, cols);
     if (!req.id) continue;
 
-    if (filters.employeeId && req.employeeId !== stringValue(filters.employeeId))
+    if (
+      filters.employeeId &&
+      req.employeeId !== stringValue(filters.employeeId)
+    )
       continue;
 
     if (statusFilter === "OPEN_ONLY" && req.status !== "PENDING") continue;
@@ -2119,15 +2157,21 @@ function adminUpdateRequestStatus_(payload, logger) {
 
   sheet.getRange(rowNumber, cols.statusCol).setValue(newStatus);
 
-  if (cols.managerCommentCol && payload && payload.managerComment !== undefined) {
+  if (
+    cols.managerCommentCol &&
+    payload &&
+    payload.managerComment !== undefined
+  ) {
     sheet
       .getRange(rowNumber, cols.managerCommentCol)
       .setValue(stringValue(payload.managerComment));
   }
 
   var nowIso = new Date().toISOString();
-  if (cols.decisionAtCol) sheet.getRange(rowNumber, cols.decisionAtCol).setValue(nowIso);
-  if (cols.updatedAtCol) sheet.getRange(rowNumber, cols.updatedAtCol).setValue(nowIso);
+  if (cols.decisionAtCol)
+    sheet.getRange(rowNumber, cols.decisionAtCol).setValue(nowIso);
+  if (cols.updatedAtCol)
+    sheet.getRange(rowNumber, cols.updatedAtCol).setValue(nowIso);
 
   if (cols.decidedByNameCol && payload && payload.decidedByName) {
     sheet
@@ -2140,7 +2184,9 @@ function adminUpdateRequestStatus_(payload, logger) {
       .setValue(stringValue(payload.decidedByRole));
   }
   if (cols.decidedByIdCol && payload && payload.decidedById) {
-    sheet.getRange(rowNumber, cols.decidedByIdCol).setValue(stringValue(payload.decidedById));
+    sheet
+      .getRange(rowNumber, cols.decidedByIdCol)
+      .setValue(stringValue(payload.decidedById));
   }
 
   if (payload && payload.archiveAfterDecision && cols.isArchivedCol) {
@@ -2173,7 +2219,9 @@ function adminCreateRequest_(payload, logger) {
   var dateTo = stringValue(payload && payload.dateTo);
   var singleDate = stringValue(payload && payload.singleDate);
   var shiftId = stringValue(payload && payload.shiftId);
-  var shiftDate = stringValue(payload && (payload.shiftDate || payload.shiftRefDate));
+  var shiftDate = stringValue(
+    payload && (payload.shiftDate || payload.shiftRefDate)
+  );
 
   if (!employeeId || !requestTypeId) {
     throw requestValidationError_("Missing employeeId or requestTypeId");
@@ -2187,9 +2235,10 @@ function adminCreateRequest_(payload, logger) {
   var lastCol = sheet.getLastColumn();
   var rowNumber = sheet.getLastRow() + 1;
   var nowIso = new Date().toISOString();
-  var generatedId = payload && payload.requestId
-    ? stringValue(payload.requestId)
-    : "REQ-" + Utilities.getUuid().split("-")[0];
+  var generatedId =
+    payload && payload.requestId
+      ? stringValue(payload.requestId)
+      : "REQ-" + Utilities.getUuid().split("-")[0];
 
   var values = new Array(lastCol).fill("");
   function setCell(col, value) {
@@ -2201,7 +2250,10 @@ function adminCreateRequest_(payload, logger) {
   setCell(cols.requestIdCol || cols.shiftIdCol, generatedId);
   setCell(cols.employeeIdCol, employeeId);
   setCell(cols.employeeNameCol, stringValue(payload && payload.employeeName));
-  setCell(cols.createdAtCol, singleDate || dateFrom || dateTo || shiftDate || nowIso);
+  setCell(
+    cols.createdAtCol,
+    singleDate || dateFrom || dateTo || shiftDate || nowIso
+  );
   setCell(cols.shiftDateCol, shiftDate || singleDate || dateFrom || "");
   setCell(cols.shiftIdCol, shiftId || "");
   setCell(cols.dateFromCol, dateFrom || "");
@@ -2209,14 +2261,22 @@ function adminCreateRequest_(payload, logger) {
   setCell(cols.singleDateCol, singleDate || "");
   setCell(cols.requestTypeIdCol, requestTypeId);
   setCell(cols.requestTypeLabelCol, requestTypeLabel || requestTypeId);
-  setCell(cols.employeeCommentCol, stringValue(payload && payload.employeeComment));
-  setCell(cols.sourceCol, stringValue(payload && payload.sourceOverride) || "ADMIN");
+  setCell(
+    cols.employeeCommentCol,
+    stringValue(payload && payload.employeeComment)
+  );
+  setCell(
+    cols.sourceCol,
+    stringValue(payload && payload.sourceOverride) || "ADMIN"
+  );
   setCell(cols.isArchivedCol, false);
   setCell(cols.updatedAtCol, nowIso);
 
   sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
 
-  var newRow = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var newRow = sheet
+    .getRange(rowNumber, 1, 1, sheet.getLastColumn())
+    .getValues()[0];
   var mapped = mapRequestRow_(newRow, cols);
 
   logDuration_(lg, "admin.createRequest.total", startMs, {
@@ -2250,7 +2310,9 @@ function adminArchiveRequest_(payload, logger) {
 
   sheet.getRange(rowNumber, cols.isArchivedCol).setValue(archivedFlag);
   if (cols.updatedAtCol) {
-    sheet.getRange(rowNumber, cols.updatedAtCol).setValue(new Date().toISOString());
+    sheet
+      .getRange(rowNumber, cols.updatedAtCol)
+      .setValue(new Date().toISOString());
   }
 
   var updatedRow = sheet
@@ -4381,6 +4443,15 @@ function buildRowFromHeaders_(headerMap, data) {
   );
   return headers.map((header) => {
     const normalized = HEADER_KEY_MAP[header] || header;
+
+    // Allow callers that only pass submittedAt to still populate timestamp columns.
+    if (normalized === "timestamp") {
+      if (data.hasOwnProperty(header)) return data[header];
+      if (data.hasOwnProperty("timestamp")) return data.timestamp;
+      if (data.hasOwnProperty("submittedAt")) return data.submittedAt;
+      return "";
+    }
+
     return data.hasOwnProperty(header)
       ? data[header]
       : data.hasOwnProperty(normalized)
@@ -5384,7 +5455,9 @@ function SHIFTS_showDuplicateCleanupDialog() {
   try {
     groups = listDuplicateWorkLogGroupsForMenu_(30);
   } catch (err) {
-    ui.alert("שגיאה בסריקת כפילויות: " + (err && err.message ? err.message : err));
+    ui.alert(
+      "שגיאה בסריקת כפילויות: " + (err && err.message ? err.message : err)
+    );
     return;
   }
 
@@ -5639,16 +5712,15 @@ function buildDuplicateCleanupDialogHtml_(groups) {
     function showConfirm(item) {
       statusEl.textContent = '';
       statusEl.style.color = '#1b5e20';
-      confirmBody.innerHTML = `
-        <div style="margin-bottom:8px;">
-          <div class="keep">יישאר:</div>
-          <div class="meta">${fmt(item.keep)}</div>
-        </div>
-        <div>
-          <div class="delete">יימחק:</div>
-          <div class="meta">${fmt(item.del)}</div>
-        </div>
-      `;
+      confirmBody.innerHTML =
+        '<div style="margin-bottom:8px;">' +
+        '<div class="keep">יישאר:</div>' +
+        '<div class="meta">' + fmt(item.keep) + '</div>' +
+        '</div>' +
+        '<div>' +
+        '<div class="delete">יימחק:</div>' +
+        '<div class="meta">' + fmt(item.del) + '</div>' +
+        '</div>';
       confirmEl.style.display = 'flex';
     }
 
