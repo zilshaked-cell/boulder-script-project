@@ -2399,6 +2399,19 @@ function handleShiftReportSubmit_(payload, logger) {
     payType: payType || payTypeName,
   });
 
+  // Hourly/directional reports must include a valid direction; otherwise we
+  // would write an ambiguous log that later surfaces as "כיוון דיווח לא מזוהה".
+  const needsDirection =
+    payType !== "unit" && payType !== "daily" && payType !== "monthly";
+  if (needsDirection) {
+    if (!direction) {
+      throw new Error("Missing direction for directional report");
+    }
+    if (direction !== "כניסה" && direction !== "יציאה") {
+      throw new Error("Invalid direction value: " + direction);
+    }
+  }
+
   if (payType === "monthly") {
     return {
       ok: true,
@@ -4289,6 +4302,68 @@ function listShifts_(payload) {
   );
   const sourceCol = getOptionalColumn_(headerMap, ["מקור דיווחים"]);
 
+  const jobMap = {};
+  try {
+    listJobTypes_().forEach(function (jt) {
+      jobMap[stringValue(jt.id)] = jt;
+    });
+  } catch (_err) {
+    /* ignore – fall back to sheet-only data */
+  }
+
+  let employeeJobPayMap = {};
+  const employeeFilterNorm = stringValue(filters.employeeId);
+  if (employeeFilterNorm) {
+    try {
+      const linked = listEmployeeLinkedJobIds_({
+        employeeId: employeeFilterNorm,
+      });
+      const details = (linked && linked.jobTypesDetailed) || [];
+      details.forEach(function (d) {
+        const id = stringValue(d.jobTypeId || d.id);
+        if (!id) return;
+        employeeJobPayMap[id] = d;
+      });
+    } catch (_err) {
+      /* ignore – not critical for listing */
+    }
+  }
+
+  function normalizePayTypeValue_(raw) {
+    const key = stringValue(raw).toLowerCase();
+    if (!key) return "";
+    if (key.indexOf("חודשי") !== -1 || key.indexOf("month") !== -1)
+      return "monthly";
+    if (key.indexOf("יחיד") !== -1 || key.indexOf("unit") !== -1) return "unit";
+    if (key.indexOf("יומי") !== -1 || key.indexOf("day") !== -1) return "daily";
+    if (key.indexOf("שעת") !== -1 || key.indexOf("hour") !== -1)
+      return "hourly";
+    return "";
+  }
+
+  function resolvePayMeta_(jobTypeId) {
+    const detail = employeeJobPayMap[jobTypeId] || {};
+    const job = jobMap[jobTypeId] || {};
+    const payTypeRaw =
+      detail.payType ||
+      detail.payTypeName ||
+      detail.payTypeId ||
+      job.payType ||
+      job.payTypeName ||
+      job.payTypeId ||
+      "";
+    const payType = normalizePayTypeValue_(payTypeRaw);
+    const payTypeName = stringValue(detail.payTypeName || job.payTypeName);
+    const payTypeId = stringValue(detail.payTypeId || job.payTypeId);
+    const payTypeLabel =
+      payTypeName ||
+      payTypeId ||
+      stringValue(job.payTypeLabel || job.payType) ||
+      payTypeRaw ||
+      "";
+    return { payType, payTypeName, payTypeId, payTypeLabel };
+  }
+
   const dateFrom = toIsoDate_(filters.dateFrom || "");
   const dateTo = toIsoDate_(filters.dateTo || "");
   const employeeFilter = stringValue(filters.employeeId);
@@ -4365,6 +4440,7 @@ function listShifts_(payload) {
       ? parseNumberOrNull_(row[payHoursCol - 1])
       : null;
     const unitsVal = unitsCol ? parseNumberOrNull_(row[unitsCol - 1]) : null;
+    const payMeta = resolvePayMeta_(jobTypeId);
 
     results.push({
       shiftId: stringValue(row[shiftIdCol - 1]),
@@ -4378,6 +4454,10 @@ function listShifts_(payload) {
       jobTypeId: jobTypeId,
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
+      payType: payMeta.payType,
+      payTypeName: payMeta.payTypeName,
+      payTypeId: payMeta.payTypeId,
+      payTypeLabel: payMeta.payTypeLabel,
       hoursDecimal: hoursDecimal,
       payHours: payHoursVal,
       units: unitsVal,

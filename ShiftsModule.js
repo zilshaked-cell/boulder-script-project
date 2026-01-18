@@ -731,6 +731,7 @@ var BONUSES = BONUSES || {};
         payHours: payHours,
         status: status,
         note: note,
+        units: opts.units,
         sourceReportIds: (opts.sourceReportIds || []).join(","),
       });
     }
@@ -751,6 +752,23 @@ var BONUSES = BONUSES || {};
           endDateTime: null,
           status: "CONFLICT",
           note: appendNote_("", "Unknown direction"),
+          sourceReportIds: [ev.reportId],
+        });
+        continue;
+      }
+
+      if (!ev.direction) {
+        pushShift_({
+          shiftId: ev.reportId || "",
+          employeeId: ev.employeeId,
+          employeeName: ev.employeeName,
+          jobTypeId: ev.jobTypeId,
+          jobTypeName: ev.jobTypeName,
+          department: ev.department,
+          startDateTime: ev.workDateTime,
+          endDateTime: ev.workDateTime,
+          status: "OK",
+          units: ev.units,
           sourceReportIds: [ev.reportId],
         });
         continue;
