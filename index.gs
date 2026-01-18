@@ -2827,12 +2827,8 @@ function handleShiftReportSubmit_(payload, logger) {
 
   const timestampDate = timestamp.split("T")[0];
   const reportMode = stringValue(payload.mode || payload.reportMode);
-  const manualDate = stringValue(
-    payload.manualDate || payload.workDate || payload.fixDate || workDate
-  );
-  const manualTime = stringValue(
-    payload.manualTime || payload.fixTime || fixTime
-  );
+  const manualDate = stringValue(payload.manualDate || payload.fixDate);
+  const manualTime = stringValue(payload.manualTime || payload.fixTime);
   const isManualHourly =
     payType === "hourly" &&
     (reportMode.toLowerCase() === "manual" || !!manualDate || !!manualTime);
