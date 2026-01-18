@@ -2839,6 +2839,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
     units: units,
     noteToManager: noteToManager,
     submittedAt: nowIso,
+    timestamp: nowIso,
     decidedAt: "",
     managerDecision: "",
     requestType: "shift_correction",

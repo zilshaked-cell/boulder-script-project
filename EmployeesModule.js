@@ -901,11 +901,6 @@ var EMP = EMP || {};
       });
 
       if (rowActive) emp.anyActive = true;
-      if (rowActive && jobTypeId) {
-        if (emp.jobTypeIds.indexOf(jobTypeId) === -1) {
-          emp.jobTypeIds.push(jobTypeId);
-        }
-      }
     }
 
     var statusFilter = filters.status;
@@ -940,7 +935,12 @@ var EMP = EMP || {};
     return employees;
   }
 
-  function computeBulkJobTypeBulkAction_(employees, bulkType, params) {
+  function computeBulkJobTypeBulkAction_(
+    employees,
+    bulkType,
+    params,
+    jobRecord
+  ) {
     var jobTypeId =
       params && params.jobTypeId ? stringValue_(params.jobTypeId) : "";
 
@@ -992,14 +992,26 @@ var EMP = EMP || {};
           throw new Error("Unknown bulkType: " + bulkType);
         }
 
+        var jobName = jobRecord && jobRecord.name ? String(jobRecord.name) : "";
+        var jobShort =
+          jobRecord && jobRecord.shortCode ? String(jobRecord.shortCode) : "";
+        var jobLabel = jobName
+          ? "'" +
+            jobName +
+            (jobShort ? " (" + jobShort + ")" : "") +
+            "' (" +
+            jobTypeId +
+            ")"
+          : jobTypeId;
+
         applied.push({
           employeeId: emp.id,
           employeeName: emp.name,
           email: emp.email || "",
           changeDescription:
             bulkType === "EMPLOYEE_JOBTYPE_ADD"
-              ? "נוסף סוג עבודה " + jobTypeId
-              : "הוסר סוג עבודה " + jobTypeId,
+              ? "נוסף לעובד סוג העבודה " + jobLabel + "."
+              : "הוסר מהעובד סוג העבודה " + jobLabel + ".",
         });
 
         summary.affectedEmployeesCount++;
@@ -1128,8 +1140,24 @@ var EMP = EMP || {};
     var computation = computeBulkJobTypeBulkAction_(
       employees,
       validated.bulkType,
-      validated.params
+      validated.params,
+      validated.jobRecord
     );
+
+    if (logger && logger.info) {
+      try {
+        logger.info("admin.runBulkAction.summary", {
+          mode: validated.mode,
+          bulkType: validated.bulkType,
+          target: computation.result.summary.targetEmployeesCount,
+          affected: computation.result.summary.affectedEmployeesCount,
+          noChange: computation.result.summary.noChangeCount,
+          errors: computation.result.errors
+            ? computation.result.errors.length
+            : 0,
+        });
+      } catch (_ignored) {}
+    }
 
     if (validated.mode === "EXECUTE") {
       applyBulkJobTypeChanges_(
