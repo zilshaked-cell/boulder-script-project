@@ -5567,7 +5567,7 @@ function SHIFTS_showDuplicateCleanupDialog() {
   }
 
   if (!groups || !groups.length) {
-    ui.alert("לא נמצאו כפילויות משמרות לסריקה.");
+    ui.alert("לא נמצאו כפילויות בין דיווחי העובדים.");
     return;
   }
 
