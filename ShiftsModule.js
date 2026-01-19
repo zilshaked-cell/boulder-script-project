@@ -714,6 +714,15 @@ var BONUSES = BONUSES || {};
       var note = opts.note || "";
       var status = opts.status || "OK";
 
+      var shiftDateIso = "";
+      if (opts.shiftDate) {
+        shiftDateIso = toIsoDate_(opts.shiftDate) || "";
+      } else if (startDt) {
+        shiftDateIso = toIsoDate_(startDt) || "";
+      } else if (endDt) {
+        shiftDateIso = toIsoDate_(endDt) || "";
+      }
+
       // Detect overlap later; keep basic shape here.
       shifts.push({
         shiftId: opts.shiftId || "",
@@ -722,7 +731,7 @@ var BONUSES = BONUSES || {};
         jobTypeId: opts.jobTypeId || "",
         jobTypeName: opts.jobTypeName || "",
         department: opts.department || "",
-        shiftDate: startDt ? toIsoDate_(startDt) : "",
+        shiftDate: shiftDateIso,
         startTime: startDt ? toTimeStr_(startDt) : "",
         endTime: endDt ? toTimeStr_(endDt) : "",
         startDateTime: startDt,
@@ -831,7 +840,7 @@ var BONUSES = BONUSES || {};
             jobTypeId: ev.jobTypeId,
             jobTypeName: ev.jobTypeName,
             department: ev.department,
-            startDateTime: ev.workDateTime,
+            startDateTime: null,
             endDateTime: ev.workDateTime,
             status: "MISSING_ENTRY",
             note: appendNote_(
@@ -853,7 +862,7 @@ var BONUSES = BONUSES || {};
         jobTypeName: openIn.jobTypeName,
         department: openIn.department,
         startDateTime: openIn.workDateTime,
-        endDateTime: openIn.workDateTime,
+        endDateTime: null,
         status: "MISSING_EXIT",
         note: appendNote_(
           "issue: shift still open at end of range (missing exit)",

@@ -1,3 +1,7 @@
+/* global ExportGSS, exportgoogleSS,
+          appendLegacyBoulderMenuItems_, buildShiftsSubMenu_,
+          OPT_onOpen, EMP_onOpen, REQ_onOpen, SCH_onOpen */
+
 function _getLib_() {
   var lib =
     typeof ExportGSS !== "undefined"
@@ -14,6 +18,7 @@ function _getLib_() {
   return lib;
 }
 
+// eslint-disable-next-line no-unused-vars
 function onOpen(e) {
   const ui = SpreadsheetApp.getUi();
 
@@ -102,6 +107,7 @@ function onOpen(e) {
 }
 
 // הפעלה פעם אחת (Run) כדי ליצור טריגר onOpen בר-אישור שמקבל הרשאות UI
+// eslint-disable-next-line no-unused-vars
 function ensureInstallableOnOpenTrigger() {
   var has = ScriptApp.getProjectTriggers().some(function (t) {
     return t.getHandlerFunction && t.getHandlerFunction() === "onOpen";
@@ -115,6 +121,7 @@ function ensureInstallableOnOpenTrigger() {
 }
 
 // הפעלה פעם אחת (Run) כדי ליצור טריגר יומי לבנייה מחדש של אתמול
+// eslint-disable-next-line no-unused-vars
 function ensureShiftsDailyTrigger() {
   var triggers = ScriptApp.getProjectTriggers();
   for (var i = 0; i < triggers.length; i++) {
@@ -134,31 +141,39 @@ function ensureShiftsDailyTrigger() {
 }
 
 /** ידיות תפריט → ספרייה */
+// eslint-disable-next-line no-unused-vars
 function gpt_all() {
   _getLib_().exportAllSheets();
 }
+// eslint-disable-next-line no-unused-vars
 function gpt_selected() {
   _getLib_().openExportSheetDialog();
 }
+// eslint-disable-next-line no-unused-vars
 function gpt_schema() {
   _getLib_().exportSchemaOnlyAll();
 }
+// eslint-disable-next-line no-unused-vars
 function gpt_refresh() {
   _getLib_().refreshSheetList();
 }
+// eslint-disable-next-line no-unused-vars
 function gpt_openFolder() {
   _getLib_().openSpreadsheetFolder();
 }
 
 /** (ה-HTML רץ מהספרייה וקורא לפונקציות בספרייה; העטיפות כאן לא נדרשות אבל לא מזיקות) */
+// eslint-disable-next-line no-unused-vars
 function exportSingleSheet(name) {
   return _getLib_().exportSingleSheet(name);
 }
+// eslint-disable-next-line no-unused-vars
 function getSheetList() {
   return _getLib_().getSheetList();
 }
 
 /** דיאגנוסטיקה (אופציונלי): Run פעם אחת ובדוק הלוג */
+// eslint-disable-next-line no-unused-vars
 function _debugPingLibrary() {
   Logger.log("lib type = " + typeof _getLib_());
 }

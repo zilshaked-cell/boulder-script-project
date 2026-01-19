@@ -657,11 +657,42 @@ function getModuleLogger_(operation) {
   return createScriptLogger_(ctx);
 }
 
+/**
+ * Structured API log helper.
+ *
+ * @param {string} kind "request" | "success" | "error"
+ * @param {string|null} traceId
+ * @param {string|null} operation
+ * @param {string|null} action
+ * @param {Object|null} extra
+ */
+function logApiEvent_(kind, traceId, operation, action, extra) {
+  try {
+    var entry = {
+      ts: new Date().toISOString(),
+      kind: kind || null,
+      traceId: traceId || null,
+      operation: operation || null,
+      action: action || null,
+      extra: extra || null,
+    };
+    Logger.log("[API_TRACE] " + JSON.stringify(entry));
+  } catch (err) {
+    // לא רוצים שהלוג עצמו יפיל את הסקריפט
+    Logger.log(
+      "[API_TRACE_FALLBACK] " +
+        (err && err.message ? String(err.message) : String(err))
+    );
+  }
+}
+
 function doPost(e) {
   var logger = null;
   var action = "";
   var requestStartMs = new Date().getTime();
   var parseStartMs = requestStartMs;
+  var traceId = null;
+  var operation = null;
 
   try {
     const parsed = parseBody(e);
@@ -671,6 +702,13 @@ function doPost(e) {
     const traceContext = createScriptTraceContext_(body.meta, action);
     __activeTraceContext = traceContext;
     logger = createScriptLogger_(traceContext);
+    traceId = traceContext && traceContext.traceId;
+    operation = traceContext && traceContext.operation;
+
+    logApiEvent_("request", traceId, operation, action, {
+      hasPayload: !!(body && body.payload),
+      hasMeta: !!(body && body.meta),
+    });
 
     logger.info("http.action", {
       action: body && body.action,
@@ -722,7 +760,11 @@ function doPost(e) {
 
     if (!action) {
       logger.info("dispatch", { handler: "legacy" });
-      return handleLegacyPost_(e, body, logger);
+      var legacyResponse = handleLegacyPost_(e, body, logger);
+      logApiEvent_("success", traceId, operation, action || "legacy", {
+        resultMeta: { type: "legacy" },
+      });
+      return legacyResponse;
     }
 
     logger.info("dispatch", { action: action });
@@ -746,6 +788,12 @@ function doPost(e) {
     } else {
       console.error("[apps-script] doPost failed", err);
     }
+
+    logApiEvent_("error", traceId, operation, action, {
+      errorMessage: err && err.message ? String(err.message) : String(err),
+      errorName: err && err.name ? String(err.name) : null,
+      stack: err && err.stack ? String(err.stack) : null,
+    });
 
     return jsonResponse(
       {
@@ -779,6 +827,22 @@ function handleNewPost_(action, payload, logger) {
   var handlerStartMs = new Date().getTime();
   var result = handler(payload || {}, logger);
   logDuration_(logger, "handler", handlerStartMs, { action: action });
+  var ctx = __activeTraceContext || {};
+  var traceId = ctx.traceId || null;
+  var operation = ctx.operation || null;
+  var resultMeta;
+  if (Array.isArray(result)) {
+    resultMeta = { type: "array", length: result.length };
+  } else if (result && typeof result === "object") {
+    resultMeta = { type: "object", keys: Object.keys(result) };
+  } else {
+    resultMeta = { type: typeof result };
+  }
+
+  logApiEvent_("success", traceId, operation, action, {
+    resultMeta: resultMeta,
+  });
+
   return jsonResponse(withOk_(result));
 }
 
@@ -5587,12 +5651,12 @@ function buildDuplicateCleanupDialogHtml_(groups) {
 <body>
   <div class="card">
     <h3 style="margin:0 0 6px;">בדיקת כפילויות משמרות</h3>
-    <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו שורה למחיקה בכל זוג כפול. נשמור רק את השורה הראשונה ונמחק אחת נוספת בכל זוג.</p>
+    <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו את כל השורות שאתם רוצים למחוק (ללא הגבלת כמות בקבוצה). אחר כך נבקש אישור פרטני לכל שורה כדי למנוע טעויות.</p>
     <div id="cap" class="cap"></div>
     <div id="list"></div>
     <div class="actions">
       <button class="btn ghost" id="closeBtn">סגירה</button>
-      <button class="btn primary" id="scanBtn">מחק כפילויות</button>
+      <button class="btn primary" id="scanBtn">המשך למחיקה</button>
     </div>
   </div>
 
@@ -5602,15 +5666,16 @@ function buildDuplicateCleanupDialogHtml_(groups) {
       <div id="confirmBody" style="font-size:13px;color:#333;"></div>
       <div id="status"></div>
       <div class="actions" style="margin-top:12px;">
-        <button class="btn ghost" id="cancelConfirm">ביטול</button>
-        <button class="btn danger" id="confirmYes">מחיקה</button>
+        <button class="btn ghost" id="skipBtn">דלג על שורה זו</button>
+        <button class="btn ghost" id="cancelConfirm">בטל תהליך המחיקה</button>
+        <button class="btn danger" id="confirmYes">מחק שורה זו</button>
       </div>
     </div>
   </div>
 
   <script>
     const groups = ${safePayload};
-    const selections = new Map();
+    const selected = new Set();
     const listEl = document.getElementById('list');
     const capEl = document.getElementById('cap');
     const confirmEl = document.getElementById('confirm');
@@ -5620,12 +5685,7 @@ function buildDuplicateCleanupDialogHtml_(groups) {
     const scanBtn = document.getElementById('scanBtn');
     const cancelConfirm = document.getElementById('cancelConfirm');
     const confirmYes = document.getElementById('confirmYes');
-
-    groups.forEach(g => {
-      if (g.candidates && g.candidates.length) {
-        selections.set(g.key, g.candidates[0].shiftId);
-      }
-    });
+    const skipBtn = document.getElementById('skipBtn');
 
     function fmt(rec) {
       return [rec.workDate || 'תאריך חסר', rec.direction || '', rec.jobName || 'ללא שם עבודה', rec.department || '']
@@ -5655,26 +5715,30 @@ function buildDuplicateCleanupDialogHtml_(groups) {
         keepRow.appendChild(keepMeta);
         wrap.appendChild(keepRow);
 
-        (g.candidates || []).forEach((c, i) => {
+        (g.candidates || []).forEach((c) => {
           const row = document.createElement('div');
           row.className = 'row';
-          const radio = document.createElement('input');
-          radio.type = 'radio';
-          radio.name = 'del-' + g.key;
-          radio.value = c.shiftId;
-          radio.checked = selections.get(g.key) === c.shiftId || (!selections.has(g.key) && i === 0);
-          radio.onchange = () => {
-            selections.set(g.key, c.shiftId);
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = 'del-' + g.key + '-' + c.shiftId;
+          checkbox.checked = selected.has(c.shiftId);
+          checkbox.onchange = () => {
+            if (checkbox.checked) {
+              selected.add(c.shiftId);
+            } else {
+              selected.delete(c.shiftId);
+            }
+            updateCap();
           };
 
           const delLabel = document.createElement('div');
           delLabel.className = 'delete';
-          delLabel.textContent = 'יימחק';
+          delLabel.textContent = 'מועמד למחיקה';
           const meta = document.createElement('div');
           meta.className = 'meta';
           meta.textContent = fmt(c);
 
-          row.appendChild(radio);
+          row.appendChild(checkbox);
           row.appendChild(delLabel);
           row.appendChild(meta);
           wrap.appendChild(row);
@@ -5683,24 +5747,28 @@ function buildDuplicateCleanupDialogHtml_(groups) {
         listEl.appendChild(wrap);
       });
 
-      const planned = Array.from(selections.values()).filter(Boolean).length;
+      updateCap();
+    }
+
+    function updateCap() {
+      const planned = selected.size;
       if (planned > 20) {
         capEl.textContent = 'אפשר למחוק עד 20 שורות בכל הרצה. בחרו עד 20.';
       } else if (planned === 0) {
-        capEl.textContent = 'סמנו שורה אחת למחיקה בכל קבוצה עם כפילויות.';
+        capEl.textContent = 'סמנו שורות למחיקה, ואז לחצו המשך.';
       } else {
-        capEl.textContent = '';
+        capEl.textContent = 'מסומנות ' + planned + ' שורות למחיקה.';
       }
     }
 
     function buildQueue() {
       const queue = [];
       groups.forEach(g => {
-        const delId = selections.get(g.key);
-        if (!delId) return;
-        const delRec = (g.candidates || []).find(c => c.shiftId === delId);
-        if (!delRec) return;
-        queue.push({ keep: g.keep, del: delRec });
+        (g.candidates || []).forEach(c => {
+          if (selected.has(c.shiftId)) {
+            queue.push({ group: g, del: c });
+          }
+        });
       });
       return queue;
     }
@@ -5708,21 +5776,26 @@ function buildDuplicateCleanupDialogHtml_(groups) {
     function showConfirm(item) {
       statusEl.textContent = '';
       statusEl.style.color = '#1b5e20';
+      const others = (item.group.candidates || []).filter(c => c.shiftId !== item.del.shiftId);
+      const othersHtml = others.length
+        ? '<div style="margin-top:8px;font-size:12px;color:#555;">חלופות בקבוצה: ' + others.map(fmt).join(' | ') + '</div>'
+        : '';
       confirmBody.innerHTML =
         '<div style="margin-bottom:8px;">' +
         '<div class="keep">יישאר:</div>' +
-        '<div class="meta">' + fmt(item.keep) + '</div>' +
+        '<div class="meta">' + fmt(item.group.keep) + '</div>' +
         '</div>' +
         '<div>' +
         '<div class="delete">יימחק:</div>' +
         '<div class="meta">' + fmt(item.del) + '</div>' +
-        '</div>';
+        '</div>' +
+        othersHtml;
       confirmEl.style.display = 'flex';
     }
 
     function processQueue(queue, idx) {
       if (idx >= queue.length) {
-        statusEl.textContent = 'הכל נמחק בהצלחה.';
+        statusEl.textContent = 'הכל הסתיים. לא נותרו שורות לסריקה.';
         setTimeout(() => google.script.host.close(), 700);
         return;
       }
@@ -5747,7 +5820,20 @@ function buildDuplicateCleanupDialogHtml_(groups) {
           .shiftReport_deleteDuplicatesFromUi([item.del.shiftId]);
       };
 
+      const doSkip = () => {
+        confirmEl.style.display = 'none';
+        processQueue(queue, idx + 1);
+      };
+
+      const doCancelAll = () => {
+        confirmEl.style.display = 'none';
+        statusEl.style.color = '#b00020';
+        statusEl.textContent = 'תהליך המחיקה בוטל. שורות שנותרו לא נמחקו.';
+      };
+
       confirmYes.onclick = doDelete;
+      skipBtn.onclick = doSkip;
+      cancelConfirm.onclick = doCancelAll;
     }
 
     scanBtn.onclick = () => {
@@ -5763,9 +5849,6 @@ function buildDuplicateCleanupDialogHtml_(groups) {
       processQueue(queue, 0);
     };
 
-    cancelConfirm.onclick = () => {
-      confirmEl.style.display = 'none';
-    };
     closeBtn.onclick = () => google.script.host.close();
 
     render();

@@ -55,6 +55,41 @@ var REQ = REQ || {};
     return String(v).replace(/\s+/g, " ").trim();
   }
 
+  function normalizeStatuses_(statuses, knownSet, logger, startMs) {
+    var cleaned = [];
+    var removed = [];
+
+    if (!Array.isArray(statuses)) {
+      return { normalized: cleaned, removed: removed };
+    }
+
+    for (var i = 0; i < statuses.length; i++) {
+      var key = norm_(statuses[i]).toLowerCase();
+      if (!key) continue;
+      if (knownSet && !knownSet[key]) {
+        if (removed.indexOf(key) === -1) removed.push(key);
+        continue;
+      }
+      if (cleaned.indexOf(key) === -1) cleaned.push(key);
+    }
+
+    if (removed.length && typeof logDuration_ === "function") {
+      logDuration_(
+        logger,
+        "requests.list",
+        startMs || new Date().getTime(),
+        {
+          removedUnknownStatuses: removed.slice(0, 10),
+          removedCount: removed.length,
+        },
+        "warn",
+        "REQUEST_STATUS_UNKNOWN"
+      );
+    }
+
+    return { normalized: cleaned, removed: removed };
+  }
+
   function headersMap_(sheet) {
     var sh = sheet || sh_();
     var lastCol = sh.getLastColumn();
@@ -123,7 +158,6 @@ var REQ = REQ || {};
     "ממתין",
     "ממתינה",
     "open",
-    "todo",
   ];
 
   function list_(filters) {
@@ -176,23 +210,30 @@ var REQ = REQ || {};
     }
 
     var search = norm_(filters && filters.search);
-    var statusesFilter = Array.isArray(filters && filters.statuses)
+    var defaultOpenNormalized = normalizeStatuses_(
+      DEFAULT_OPEN_STATUS,
+      null,
+      logger,
+      startMs
+    ).normalized;
+    var defaultOpenSet = {};
+    defaultOpenNormalized.forEach(function (s) {
+      defaultOpenSet[s] = true;
+    });
+
+    var rawStatusesFilter = Array.isArray(filters && filters.statuses)
       ? filters.statuses
           .map(function (s) {
             return norm_(s).toLowerCase();
           })
           .filter(Boolean)
       : [];
-    var statusSet = {};
-    statusesFilter.forEach(function (s) {
-      statusSet[s] = true;
-    });
 
     var includeClosed = !!(filters && filters.includeClosed);
     var dateFrom = toIsoDate_(filters && filters.dateFrom);
     var dateTo = toIsoDate_(filters && filters.dateTo);
 
-    var all = [];
+    var rows = [];
     var statusesFound = {};
     var oldestOpenDate = null;
 
@@ -200,10 +241,11 @@ var REQ = REQ || {};
       var rec = readRow_(data[i], cols);
       if (!rec) continue;
       var statusKey = norm_(rec.status).toLowerCase();
-      if (statusKey) statusesFound[statusKey] = rec.status;
+      if (statusKey && !statusesFound[statusKey]) {
+        statusesFound[statusKey] = rec.status;
+      }
 
-      // track the oldest open/pending request for default filters
-      if (DEFAULT_OPEN_STATUS.indexOf(statusKey) !== -1) {
+      if (defaultOpenSet[statusKey]) {
         var ts =
           rec.timestamp instanceof Date
             ? rec.timestamp
@@ -217,38 +259,62 @@ var REQ = REQ || {};
         }
       }
 
+      rows.push({ rec: rec, statusKey: statusKey });
+    }
+
+    var normalizedStatuses = normalizeStatuses_(
+      rawStatusesFilter,
+      statusesFound,
+      logger,
+      startMs
+    );
+    var statusesFilter = normalizedStatuses.normalized;
+    var statusSet = {};
+    statusesFilter.forEach(function (s) {
+      statusSet[s] = true;
+    });
+
+    var all = [];
+
+    for (var j = 0; j < rows.length; j++) {
+      var row = rows[j];
+      var recRow = row.rec;
+      var statusKeyRow = row.statusKey;
+
       // default filter: only open statuses unless includeClosed or explicit statuses provided
       if (!includeClosed && statusesFilter.length === 0) {
-        if (DEFAULT_OPEN_STATUS.indexOf(statusKey) === -1) continue;
+        if (!defaultOpenSet[statusKeyRow]) continue;
       }
 
-      if (statusesFilter.length && !statusSet[statusKey]) continue;
+      if (statusesFilter.length && !statusSet[statusKeyRow]) continue;
 
       if (search) {
         var blob = (
-          (rec.requestId || "") +
+          (recRow.requestId || "") +
           " " +
-          (rec.employeeName || "") +
+          (recRow.employeeName || "") +
           " " +
-          (rec.employeeId || "") +
+          (recRow.employeeId || "") +
           " " +
-          (rec.shiftId || "") +
+          (recRow.shiftId || "") +
           " " +
-          (rec.jobName || "") +
+          (recRow.jobName || "") +
           " " +
-          (rec.department || "") +
+          (recRow.department || "") +
           " " +
-          (rec.status || "") +
+          (recRow.status || "") +
           " " +
-          (rec.note || "")
+          (recRow.note || "")
         ).toLowerCase();
         if (blob.indexOf(search.toLowerCase()) === -1) continue;
       }
 
-      if (dateFrom && rec.timestampIso && rec.timestampIso < dateFrom) continue;
-      if (dateTo && rec.timestampIso && rec.timestampIso > dateTo) continue;
+      if (dateFrom && recRow.timestampIso && recRow.timestampIso < dateFrom)
+        continue;
+      if (dateTo && recRow.timestampIso && recRow.timestampIso > dateTo)
+        continue;
 
-      all.push(rec);
+      all.push(recRow);
     }
 
     // newest first by timestamp
