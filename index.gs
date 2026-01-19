@@ -237,6 +237,7 @@ function mapActionToOperation_(action) {
     health: "HEALTH",
     "logs.list": "SYSTEM_LOG_LIST",
     "jobTypes.list": "REPORT_LOAD",
+    "options.listPayments": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
     "admin.runBulkAction": "ADMIN_BULK_ACTION_RUN",
     "admin.listEmployees": "ADMIN_EMPLOYEES_LIST",
@@ -269,6 +270,9 @@ function getActionRegistry_() {
     },
     "jobTypes.list": function (_payload, _logger) {
       return { jobTypes: listJobTypes_() };
+    },
+    "options.listPayments": function (_payload, logger) {
+      return { payTypes: listPaymentOptions_(logger) };
     },
     "admin.runBulkAction": function (payload, logger) {
       return adminRunBulkAction_(payload || {}, logger);
@@ -1217,6 +1221,47 @@ function listJobTypes_() {
     });
   }
   return results;
+}
+
+function listPaymentOptions_(logger) {
+  var lg = logger || ensureModuleLoggerDefined_("OPTIONS_PAYMENTS_LIST");
+  var startMs = new Date().getTime();
+
+  try {
+    var payments =
+      typeof OPT !== "undefined" && OPT.getAllPayments
+        ? OPT.getAllPayments(true)
+        : [];
+
+    var mapped = payments
+      .filter(function (pay) {
+        return !!pay;
+      })
+      .map(function (pay) {
+        return {
+          id: String(pay.id || ""),
+          name: String(pay.name || ""),
+          status: String(pay.status || "").trim(),
+        };
+      })
+      .filter(function (pay) {
+        var status = pay.status;
+        return !status || status === "פעיל";
+      });
+
+    logDuration_(lg, "options.listPayments", startMs, {
+      rows: mapped.length,
+    });
+
+    return mapped;
+  } catch (err) {
+    if (lg && typeof lg.error === "function") {
+      lg.error("options.listPayments.error", {
+        message: err && err.message,
+      });
+    }
+    throw err;
+  }
 }
 
 function listEmployeeLinkedJobIds_(payload, logger) {
