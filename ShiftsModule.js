@@ -1435,12 +1435,30 @@ var BONUSES = BONUSES || {};
     }
   }
 
+  var SHIFT_UPDATE_ALLOWED_FIELDS = {
+    status: { headerKey: "סטטוס משמרת", normalize: norm_ },
+    workType: { headerKey: "סוג עבודה", normalize: norm_ },
+    workTypeId: { headerKey: "ID סוג עבודה", normalize: norm_ },
+    department: { headerKey: "מחלקה", normalize: norm_ },
+    date: { headerKey: "תאריך משמרת", normalize: toIsoDate_ },
+    startTime: { headerKey: "שעת התחלה", normalize: toTimeStr_ },
+    endTime: { headerKey: "שעת סיום", normalize: toTimeStr_ },
+    manualNote: { mapKey: "notesPrimary", normalize: norm_ },
+  };
+
   function updateShift_(payload) {
     if (!payload || !payload.shiftId) {
       return { ok: false, error: "shiftId is required" };
     }
 
-    // TODO: verify with shift builder script once finalized to avoid overwriting calculated fields.
+    var logger = getLogger_ ? getLogger_("SHIFTS_UPDATE_SHIFT") : null;
+    var traceId = payload && payload.traceId ? String(payload.traceId) : "";
+    var actorEmail = "";
+    try {
+      actorEmail = Session.getActiveUser().getEmail() || "";
+    } catch (_actorErr) {
+      actorEmail = "";
+    }
 
     var lock = LockService.getDocumentLock();
     if (!lock.tryLock(5000)) {
@@ -1483,42 +1501,61 @@ var BONUSES = BONUSES || {};
           error: "Shift not found for shiftId=" + payload.shiftId,
         };
 
-      function setByHeader_(headerName, value) {
-        var idx = headerMap[headerName];
-        if (idx === undefined || idx === null) return;
-        sheet.getRange(rowIndex, idx + 1).setValue(value);
+      var colCount = headerMap.length || sheet.getLastColumn();
+      var currentRow = sheet.getRange(rowIndex, 1, 1, colCount).getValues()[0];
+
+      function getIndex_(cfg) {
+        if (!cfg) return null;
+        if (cfg.mapKey && headerMap[cfg.mapKey] !== undefined) {
+          return headerMap[cfg.mapKey];
+        }
+        return headerMap[cfg.headerKey];
       }
 
-      if (payload.status !== undefined) {
-        setByHeader_("סטטוס משמרת", payload.status);
+      function normalizeForField_(fieldKey, raw) {
+        if (raw === undefined || raw === null) return "";
+        var cfg = SHIFT_UPDATE_ALLOWED_FIELDS[fieldKey];
+        if (!cfg || !cfg.normalize) return raw;
+        var val = cfg.normalize(raw);
+        if (val === undefined || val === null) return "";
+        return val;
       }
-      if (payload.workType !== undefined) {
-        setByHeader_("סוג עבודה", payload.workType);
-      }
-      if (payload.workTypeId !== undefined) {
-        setByHeader_("ID סוג עבודה", payload.workTypeId);
-      }
-      if (payload.department !== undefined) {
-        setByHeader_("מחלקה", payload.department);
-      }
-      if (payload.date !== undefined) {
-        setByHeader_("תאריך משמרת", toIsoDate_(payload.date));
-      }
-      if (payload.startTime !== undefined) {
-        setByHeader_("שעת התחלה", toTimeStr_(payload.startTime));
-      }
-      if (payload.endTime !== undefined) {
-        setByHeader_("שעת סיום", toTimeStr_(payload.endTime));
-      }
-      if (payload.manualNote !== undefined) {
-        if (
-          headerMap.notesPrimary !== undefined &&
-          headerMap.notesPrimary !== null
-        ) {
-          sheet
-            .getRange(rowIndex, headerMap.notesPrimary + 1)
-            .setValue(payload.manualNote);
-        }
+
+      var changes = [];
+      var beforeSnapshot = {};
+      var afterSnapshot = {};
+
+      Object.keys(SHIFT_UPDATE_ALLOWED_FIELDS).forEach(function (key) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) return;
+        var cfg = SHIFT_UPDATE_ALLOWED_FIELDS[key];
+        var idx = getIndex_(cfg);
+        if (idx === undefined || idx === null) return;
+
+        var currentRaw = currentRow[idx];
+        var currentVal = normalizeForField_(key, currentRaw);
+        var nextVal = normalizeForField_(key, payload[key]);
+
+        if (currentVal === nextVal) return;
+
+        sheet.getRange(rowIndex, idx + 1).setValue(nextVal);
+        changes.push(key);
+        beforeSnapshot[key] = currentVal;
+        afterSnapshot[key] = nextVal;
+      });
+
+      if (logger && logger.info && changes.length) {
+        logger.info(
+          "SHIFT_UPDATE_APPLIED",
+          {
+            shiftId: payload.shiftId,
+            traceId: traceId,
+            actorEmail: actorEmail,
+            updatedFields: changes,
+            before: beforeSnapshot,
+            after: afterSnapshot,
+          },
+          "SHIFT_UPDATE_APPLIED"
+        );
       }
 
       var updated = get_(payload.shiftId);

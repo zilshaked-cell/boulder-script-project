@@ -2208,6 +2208,12 @@
         openNotesModal(prefix + text);
       }
 
+      function buildTraceId(prefix) {
+        var now = new Date();
+        var rand = Math.random().toString(36).slice(2, 8);
+        return (prefix || "trace") + "-" + now.getTime() + "-" + rand;
+      }
+
       function setLoadingOverlay(visible) {
         var overlay = $("loader-overlay");
         if (!overlay) return;
@@ -5463,6 +5469,20 @@
           return;
         }
 
+        var traceId = buildTraceId("shift-edit");
+        payload.traceId = traceId;
+        var changedFields = keys.filter(function (k) {
+          return k !== "shiftId";
+        });
+
+        try {
+          console.log("SHIFT_EDIT_SUBMIT", {
+            traceId: traceId,
+            shiftId: payload.shiftId,
+            fields: changedFields,
+          });
+        } catch (_logErr) {}
+
         var saveBtn = $("shift-save-btn");
         if (saveBtn) saveBtn.disabled = true;
         setShiftsMessage("שומר שינויים במשמרת...", false);
@@ -5476,6 +5496,13 @@
                 (res && res.error) || "שגיאה בשמירת משמרת",
                 true
               );
+              try {
+                console.log("SHIFT_EDIT_FAILED", {
+                  traceId: traceId,
+                  shiftId: payload.shiftId,
+                  error: (res && res.error) || "unknown",
+                });
+              } catch (_e) {}
               return;
             }
 
@@ -5505,10 +5532,25 @@
             renderShiftDetails(selectedShift);
             renderShiftsResults();
             setShiftsMessage("השינויים נשמרו", false);
+
+            try {
+              console.log("SHIFT_EDIT_APPLIED", {
+                traceId: traceId,
+                shiftId: payload.shiftId,
+                updated: changedFields,
+              });
+            } catch (_logOk) {}
           })
           .withFailureHandler(function (err) {
             if (saveBtn) saveBtn.disabled = false;
             setShiftsMessage("שגיאה בשמירת משמרת: " + err, true);
+            try {
+              console.log("SHIFT_EDIT_FAILED", {
+                traceId: traceId,
+                shiftId: payload.shiftId,
+                error: String(err || ""),
+              });
+            } catch (_logFail) {}
           })
           .SHIFTS_updateShift(payload);
       }

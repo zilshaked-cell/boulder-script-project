@@ -930,31 +930,63 @@ function rebuildShiftsForRange_(opts, loggerOpt) {
 
 function explainShiftById_(shiftId, loggerOpt) {
   var logger = aggLogger_("SHIFTS_EXPLAIN", loggerOpt);
-  var ss = ss_();
-  void ss; // keep reference explicit for clarity
+  var traceId =
+    loggerOpt && typeof loggerOpt === "object" && loggerOpt.traceId
+      ? String(loggerOpt.traceId)
+      : "";
+  var failureReason =
+    loggerOpt && typeof loggerOpt === "object" && loggerOpt.reason
+      ? String(loggerOpt.reason)
+      : "";
 
   var ctx = getShiftsSheetAndHeaderMap_();
   var sheet = ctx && ctx.sheet ? ctx.sheet : null;
   var headerMap = ctx && ctx.headerMap ? ctx.headerMap : {};
   var sheetName = sheet ? sheet.getName() : "";
 
-  if (!sheet) {
-    if (logger) {
-      logger.info("shifts.explain.not-found", {
-        shiftId: shiftId,
-        reason: "no-sheet",
-      });
+  function logInfo_(event, payload) {
+    if (!logger || !logger.info) return;
+    var base = payload || {};
+    if (traceId) base.traceId = traceId;
+    if (failureReason && !base.failureReason) {
+      base.failureReason = failureReason;
     }
+    logger.info(event, base);
+  }
+
+  function formatTime_(raw) {
+    var parts = parseTimeParts_(raw);
+    if (parts) return parts.hh + ":" + parts.mm;
+    return stringValue(raw);
+  }
+
+  if (!sheet) {
+    logInfo_("shifts.explain.not-found", {
+      shiftId: shiftId,
+      reason: "no-sheet",
+    });
     return;
   }
 
   var shiftIdCol = getRequiredColumn_(headerMap, ["ID משמרת"], sheetName);
+  var employeeIdCol = getOptionalColumn_(headerMap, ["ID עובד", "מזהה עובד"]);
+  var workDateCol = getOptionalColumn_(headerMap, ["תאריך משמרת"]);
+  var jobTypeIdCol = getOptionalColumn_(headerMap, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
+  var startTimeCol = getOptionalColumn_(headerMap, ["שעת התחלה"]);
+  var endTimeCol = getOptionalColumn_(headerMap, ["שעת סיום"]);
+  var statusCol = getOptionalColumn_(headerMap, ["סטטוס משמרת"]);
+  var noteCol = getOptionalColumn_(headerMap, [
+    "הערות",
+    "ManualNote",
+    "הערת מנהל",
+  ]);
 
   var lastRow = sheet.getLastRow();
   if (lastRow <= 1) {
-    if (logger) {
-      logger.info("shifts.explain.no-rows", { shiftId: shiftId });
-    }
+    logInfo_("shifts.explain.no-rows", { shiftId: shiftId });
     return;
   }
 
@@ -962,33 +994,52 @@ function explainShiftById_(shiftId, loggerOpt) {
   var values = range.getValues();
 
   var foundRowIndex = null;
-  var foundEmployeeId = null;
-  var foundWorkDate = null;
-  var foundJobTypeId = null;
+  var rawRow = null;
 
   for (var i = 0; i < values.length; i++) {
     var row = values[i];
     if (String(row[shiftIdCol - 1]) === String(shiftId)) {
       foundRowIndex = i + 2;
-      // TODO: השלם חילוץ employeeId, workDate, jobTypeId לפי העמודות הידועות
+      rawRow = row;
       break;
     }
   }
 
-  if (!foundRowIndex) {
-    if (logger) {
-      logger.info("shifts.explain.not-found", { shiftId: shiftId });
-    }
+  if (!foundRowIndex || !rawRow) {
+    logInfo_("shifts.explain.not-found", { shiftId: shiftId });
     return;
   }
 
-  if (logger) {
-    logger.info("shifts.explain.found-shift", {
-      shiftId: shiftId,
-      rowIndex: foundRowIndex,
-      // employeeId: foundEmployeeId,
-      // workDate: foundWorkDate,
-      // jobTypeId: foundJobTypeId,
-    });
-  }
+  var summary = {
+    shiftId: shiftId,
+    rowIndex: foundRowIndex,
+    employeeId:
+      employeeIdCol && rawRow[employeeIdCol - 1]
+        ? stringValue(rawRow[employeeIdCol - 1])
+        : "",
+    workDate:
+      workDateCol && rawRow[workDateCol - 1]
+        ? toIsoDate_(rawRow[workDateCol - 1])
+        : "",
+    jobTypeId:
+      jobTypeIdCol && rawRow[jobTypeIdCol - 1]
+        ? stringValue(rawRow[jobTypeIdCol - 1])
+        : "",
+    startTime:
+      startTimeCol && rawRow[startTimeCol - 1]
+        ? formatTime_(rawRow[startTimeCol - 1])
+        : "",
+    endTime:
+      endTimeCol && rawRow[endTimeCol - 1]
+        ? formatTime_(rawRow[endTimeCol - 1])
+        : "",
+    status:
+      statusCol && rawRow[statusCol - 1]
+        ? stringValue(rawRow[statusCol - 1])
+        : "",
+    note:
+      noteCol && rawRow[noteCol - 1] ? stringValue(rawRow[noteCol - 1]) : "",
+  };
+
+  logInfo_("shifts.explain.found-shift", summary);
 }

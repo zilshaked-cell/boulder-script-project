@@ -228,6 +228,67 @@
         };
       }
 
+      function loadJobTypes() {
+        setStatus("טוען סוגי עבודה…");
+        google.script.run
+          .withSuccessHandler(onJobTypesLoaded)
+          .withFailureHandler(onJobTypesError)
+          .UI_getShiftsDialogData({ limit: 0 });
+      }
+
+      function onJobTypesLoaded(result) {
+        var list = [];
+        if (result && result.ok === false) {
+          onJobTypesError(result.message || result.error || "job types failed");
+          return;
+        }
+        if (
+          result &&
+          result.data &&
+          Array.isArray(result.data.jobTypesLookup)
+        ) {
+          list = result.data.jobTypesLookup;
+        } else if (result && Array.isArray(result.jobTypes)) {
+          list = result.jobTypes;
+        }
+
+        var select = document.getElementById("jobTypeId");
+        if (!select) return;
+
+        var existing = select.value;
+        select.innerHTML = '<option value="">כל סוגי העבודה</option>';
+
+        list.forEach(function (job) {
+          var id = job.id || job.jobId || "";
+          var name = job.name || job.jobType || job.id || "";
+          var dept = job.department || job.jobDepartment || "";
+          var label = name;
+          if (dept) label += " – " + dept;
+          if (!id && !name) return;
+
+          var opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = label;
+          select.appendChild(opt);
+        });
+
+        if (existing) select.value = existing;
+
+        try {
+          console.log("OVERLAPS_JOBTYPES_LOADED", { count: list.length });
+        } catch (_logErr) {}
+      }
+
+      function onJobTypesError(err) {
+        setStatus("שגיאה בטעינת סוגי עבודה", "err");
+        try {
+          console.log("OVERLAPS_JOBTYPES_LOADED", {
+            count: 0,
+            error: String(err || ""),
+          });
+        } catch (_e) {}
+      }
+
       function loadOverlaps() {
         setStatus("טוען חפיפות…");
         clearTables();
@@ -389,8 +450,7 @@
         // Default range: last 7 days (today-6 .. today)
         setLastWeekRange();
 
-        // TODO: populate jobType dropdown from options/job types
-
+        loadJobTypes();
         loadOverlaps();
       }
 
