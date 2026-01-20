@@ -4122,6 +4122,9 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   function buildCanonical_(row) {
     const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
     const workDateIso = toIsoDate_(workDateRaw) || "";
+    const timestampRaw = tsCol ? row[tsCol - 1] : "";
+    const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
+    const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
     return {
       shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: stringValue(row[empCol - 1]),
@@ -4130,8 +4133,8 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
       workDate: workDateIso,
-      fixDate: fixDateCol ? toIsoDate_(row[fixDateCol - 1]) : "",
-      fixTime: fixTimeCol ? stringValue(row[fixTimeCol - 1]) : "",
+      fixDate: fixDateCol ? toIsoDate_(fixDateRaw) : "",
+      fixTime: fixTimeCol ? stringValue(fixTimeRaw) : "",
       units:
         unitsCol &&
         row[unitsCol - 1] !== undefined &&
@@ -4139,7 +4142,8 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
           ? stringValue(row[unitsCol - 1])
           : "",
       note: noteCol ? stringValue(row[noteCol - 1]) : "",
-      timestamp: tsCol ? toIsoDate_(row[tsCol - 1]) : "",
+      timestamp: tsCol ? stringValue(timestampRaw) : "",
+      eventMs: extractEventMs_(workDateRaw, timestampRaw, fixDateRaw, fixTimeRaw),
     };
   }
 
@@ -4161,25 +4165,33 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   }
 
   const values = sheet.getDataRange().getValues();
-  const targetKey = buildDuplicateKey_(
-    criteria.employeeId,
-    criteria.jobTypeId,
-    criteria.workDate,
-    criteria.direction
+  const targetEmployee = stringValue(criteria.employeeId);
+  const targetJobType = stringValue(criteria.jobTypeId);
+  const targetDirection = stringValue(criteria.direction);
+  const targetWorkDate = toIsoDate_(criteria.workDate) || "";
+  const hasTimeInCriteria = Boolean(
+    stringValue(criteria.fixTime) ||
+      (criteria.timestamp && String(criteria.timestamp).match(/\d{1,2}:\d{2}/)) ||
+      (criteria.workDate && String(criteria.workDate).match(/\d{1,2}:\d{2}/))
   );
+  const targetEventMs = hasTimeInCriteria
+    ? extractEventMs_(
+        criteria.workDate,
+        criteria.timestamp,
+        criteria.fixDate,
+        criteria.fixTime
+      )
+    : null;
 
   const results = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const rec = buildCanonical_(row);
-    const key = buildDuplicateKey_(
-      rec.employeeId,
-      rec.jobTypeId,
-      rec.workDate,
-      rec.direction
-    );
-
-    if (key !== targetKey) continue;
+    if (rec.employeeId !== targetEmployee) continue;
+    if (rec.jobTypeId !== targetJobType) continue;
+    if (rec.direction !== targetDirection) continue;
+    if (rec.workDate !== targetWorkDate) continue;
+    if (!isWithinDuplicateWindow_(rec.eventMs, targetEventMs)) continue;
 
     // includeShiftId is used to ensure the just-created row is not skipped
     if (includeShiftId && rec.shiftId === includeShiftId) {
@@ -4197,6 +4209,7 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
       timestamp: rec.timestamp,
       rowIndex: i + 1,
       canonicalKey: canonicalKey_(rec),
+      eventMs: rec.eventMs,
     });
   }
 
@@ -4252,10 +4265,120 @@ function cleanupExactDuplicateWorkLogs_(duplicates) {
   };
 }
 
-function buildDuplicateKey_(employeeId, jobTypeId, workDate, direction) {
+const DUPLICATE_TIME_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+function normalizeTimeString_(val) {
+  const s = stringValue(val);
+  if (!s) return "";
+  const m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return "";
+  const hh = ("0" + m[1]).slice(-2);
+  const mm = ("0" + m[2]).slice(-2);
+  const ss = ("0" + (m[3] || "00")).slice(-2);
+  return hh + ":" + mm + ":" + ss;
+}
+
+function parseDateTimeFlexible_(datePart, timePart) {
+  if (!datePart && !timePart) return null;
+
+  if (datePart instanceof Date && !isNaN(datePart.getTime())) {
+    if (timePart) {
+      const timeNorm = normalizeTimeString_(timePart);
+      if (timeNorm) {
+        const isoDate = toIsoDate_(datePart);
+        const composed = isoDate ? isoDate + "T" + timeNorm : null;
+        const composedDate = composed ? new Date(composed) : null;
+        if (composedDate && !isNaN(composedDate.getTime())) return composedDate;
+      }
+    }
+    return datePart;
+  }
+
+  const dateStr = stringValue(datePart);
+  const timeStr = normalizeTimeString_(timePart);
+
+  if (dateStr && timeStr) {
+    const isoDate = toIsoDate_(dateStr);
+    const composed = isoDate ? isoDate + "T" + timeStr : "";
+    if (composed) {
+      const dt = new Date(composed);
+      if (!isNaN(dt.getTime())) return dt;
+    }
+  }
+
+  if (dateStr) {
+    const mDmyTime = dateStr.match(
+      /^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
+    );
+    if (mDmyTime) {
+      const iso =
+        mDmyTime[3] +
+        "-" +
+        mDmyTime[2] +
+        "-" +
+        mDmyTime[1] +
+        "T" +
+        (mDmyTime[4] || "00") +
+        ":" +
+        (mDmyTime[5] || "00") +
+        ":" +
+        (mDmyTime[6] || "00");
+      const parsed = new Date(iso);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  return null;
+}
+
+function extractEventMs_(workDateRaw, timestampRaw, fixDate, fixTime) {
+  const fixDateTime = parseDateTimeFlexible_(
+    fixDate || workDateRaw,
+    fixTime || null
+  );
+  if (fixDateTime && !isNaN(fixDateTime.getTime())) return fixDateTime.getTime();
+
+  const tsParsed = parseDateTimeFlexible_(timestampRaw, null);
+  if (tsParsed && !isNaN(tsParsed.getTime())) return tsParsed.getTime();
+
+  const workParsed = parseDateTimeFlexible_(workDateRaw, null);
+  if (workParsed && !isNaN(workParsed.getTime())) return workParsed.getTime();
+
+  const isoDate = toIsoDate_(workDateRaw);
+  if (isoDate) {
+    const midnight = new Date(isoDate + "T00:00:00");
+    if (!isNaN(midnight.getTime())) return midnight.getTime();
+  }
+
+  return null;
+}
+
+function isWithinDuplicateWindow_(msA, msB) {
+  if (msA === null || msA === undefined) return true;
+  if (msB === null || msB === undefined) return true;
+  if (isNaN(msA) || isNaN(msB)) return true;
+  return Math.abs(msA - msB) <= DUPLICATE_TIME_WINDOW_MS;
+}
+
+function buildDuplicateKey_(
+  employeeId,
+  jobTypeId,
+  workDate,
+  direction,
+  eventMs
+) {
   const w = toIsoDate_(workDate) || "";
   const dir = stringValue(direction || "").trim();
-  return [stringValue(employeeId), stringValue(jobTypeId), w, dir].join("__");
+  const bucket =
+    typeof eventMs === "number" && !isNaN(eventMs)
+      ? Math.floor(eventMs / DUPLICATE_TIME_WINDOW_MS)
+      : "na";
+  return [stringValue(employeeId), stringValue(jobTypeId), w, dir, bucket].join(
+    "__"
+  );
 }
 
 function handleShiftReportDeleteByIds_(payload, logger) {
@@ -5360,6 +5483,8 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
     "תיקון תאריך",
     "חותמת זמן",
   ]);
+  const fixDateCol = getOptionalColumn_(headerMap, ["תיקון תאריך"]);
+  const fixTimeCol = getOptionalColumn_(headerMap, ["תיקון שעה"]);
   const tsCol = getOptionalColumn_(headerMap, ["חותמת זמן"]);
 
   const values = sheet
@@ -5376,16 +5501,29 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
     const direction = directionCol ? stringValue(row[directionCol - 1]) : "";
     const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
     const workDate = toIsoDate_(workDateRaw) || "";
+    const timestampRaw = tsCol ? row[tsCol - 1] : "";
+    const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
+    const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
+    const eventMs = extractEventMs_(workDateRaw, timestampRaw, fixDateRaw, fixTimeRaw);
     if (!workDate) continue;
 
     const shiftId = stringValue(row[shiftIdCol - 1]);
-    const key = buildDuplicateKey_(employeeId, jobTypeId, workDate, direction);
+    const key = buildDuplicateKey_(
+      employeeId,
+      jobTypeId,
+      workDate,
+      direction,
+      eventMs
+    );
     const dupList = findDuplicateWorkLogs_(
       {
         employeeId: employeeId,
         jobTypeId: jobTypeId,
         workDate: workDate,
         direction: direction,
+        timestamp: timestampRaw,
+        fixDate: fixDateRaw ? toIsoDate_(fixDateRaw) : "",
+        fixTime: stringValue(fixTimeRaw),
       },
       shiftId
     );
@@ -5609,6 +5747,8 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
     "תיקון תאריך",
     "חותמת זמן",
   ]);
+  const fixDateCol = getOptionalColumn_(headers, ["תיקון תאריך"]);
+  const fixTimeCol = getOptionalColumn_(headers, ["תיקון שעה"]);
   const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
 
   const values = sheet.getDataRange().getValues();
@@ -5616,6 +5756,9 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
 
   function toRec(row, rowIndex) {
     const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const timestampRaw = tsCol ? row[tsCol - 1] : "";
+    const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
+    const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
     return {
       shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: stringValue(row[empCol - 1]),
@@ -5624,7 +5767,10 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
       workDate: toIsoDate_(workDateRaw) || "",
-      timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
+      fixDate: fixDateCol ? toIsoDate_(fixDateRaw) : "",
+      fixTime: fixTimeCol ? stringValue(fixTimeRaw) : "",
+      timestamp: tsCol ? stringValue(timestampRaw) : "",
+      eventMs: extractEventMs_(workDateRaw, timestampRaw, fixDateRaw, fixTimeRaw),
       rowIndex: rowIndex,
     };
   }
@@ -5633,15 +5779,17 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
   for (let i = 1; i < values.length; i++) {
     const rec = toRec(values[i], i + 1);
     if (!rec.employeeId || !rec.workDate) continue;
-    const key = buildDuplicateKey_(
-      rec.employeeId,
-      rec.jobTypeId,
-      rec.workDate,
-      rec.direction
-    );
-    if (!key) continue;
-    if (!byKey[key]) byKey[key] = [];
-    byKey[key].push(rec);
+    const baseKey =
+      stringValue(rec.employeeId) +
+      "__" +
+      stringValue(rec.jobTypeId) +
+      "__" +
+      stringValue(rec.direction) +
+      "__" +
+      rec.workDate;
+    if (!baseKey) continue;
+    if (!byKey[baseKey]) byKey[baseKey] = [];
+    byKey[baseKey].push(rec);
   }
 
   const groups = [];
@@ -5651,12 +5799,36 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
     });
     if (list.length < 2) return;
     list.sort(function (a, b) {
+      if (a.eventMs !== b.eventMs) {
+        return (a.eventMs || 0) - (b.eventMs || 0);
+      }
       return (a.rowIndex || 0) - (b.rowIndex || 0);
     });
-    const keep = list[0];
-    const candidates = list.slice(1);
-    if (candidates.length) {
-      groups.push({ key: k, keep: keep, candidates: candidates });
+
+    let cluster = [list[0]];
+    for (let i = 1; i < list.length; i++) {
+      const current = list[i];
+      const prev = cluster[cluster.length - 1];
+      if (isWithinDuplicateWindow_(current.eventMs, prev.eventMs)) {
+        cluster.push(current);
+      } else {
+        if (cluster.length > 1) {
+          groups.push({
+            key: k + "::" + (groups.length + 1),
+            keep: cluster[0],
+            candidates: cluster.slice(1),
+          });
+        }
+        cluster = [current];
+      }
+    }
+
+    if (cluster.length > 1) {
+      groups.push({
+        key: k + "::" + (groups.length + 1),
+        keep: cluster[0],
+        candidates: cluster.slice(1),
+      });
     }
   });
 
@@ -5732,8 +5904,23 @@ function buildDuplicateCleanupDialogHtml_(groups) {
     const confirmYes = document.getElementById('confirmYes');
     const skipBtn = document.getElementById('skipBtn');
 
+    function timeText(rec) {
+      if (rec.fixTime) return rec.fixTime;
+      if (rec.timestamp) {
+        const t = String(rec.timestamp);
+        const isoMatch = t.match(/T(\d{2}:\d{2})/);
+        if (isoMatch && isoMatch[1]) return isoMatch[1];
+        const parts = t.split(' ');
+        if (parts.length > 1 && parts[1].match(/\d{1,2}:\d{2}/)) {
+          return parts[1].slice(0,5);
+        }
+      }
+      return '';
+    }
+
     function fmt(rec) {
-      return [rec.workDate || 'תאריך חסר', rec.direction || '', rec.jobName || 'ללא שם עבודה', rec.department || '']
+      const time = timeText(rec);
+      return [rec.workDate || 'תאריך חסר', time, rec.direction || '', rec.jobName || 'ללא שם עבודה', rec.department || '']
         .filter(Boolean)
         .join(' · ');
     }
