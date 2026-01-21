@@ -4102,6 +4102,11 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     "כניסה / יציאה",
     "דיווח שעות",
   ]);
+  const unitsCol = getOptionalColumn_(headers, [
+    "כמות היחידות",
+    "כמות יחידות",
+    "דיווח יחידות",
+  ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
     "תיקון תאריך",
@@ -5784,6 +5789,11 @@ function shiftReport_handleFaultAction(fault, action) {
     "כניסה / יציאה",
     "דיווח שעות",
   ]);
+  const unitsCol = getOptionalColumn_(headers, [
+    "כמות היחידות",
+    "כמות יחידות",
+    "דיווח יחידות",
+  ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
     "תיקון תאריך",
@@ -5849,6 +5859,7 @@ function shiftReport_handleFaultAction(fault, action) {
     setIf(directionCol, "direction", stringValue);
     setIf(workDateCol, "workDate", toIsoDate_);
     setIf(tsCol, "timestamp", stringValue);
+    setIf(unitsCol, "units", stringValue);
 
     // Optional payType, note columns if exist
     const payTypeCol = getOptionalColumn_(headers, [
@@ -6067,6 +6078,15 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
 function listFaultyWorkLogsForMenu_(maxRows) {
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
   const headers = getHeaderMap_(sheet);
+  let employeesSheet = null;
+  let empHeaders = null;
+  try {
+    employeesSheet = getEmployeesSheet_();
+    empHeaders = getHeaderMap_(employeesSheet);
+  } catch (e) {
+    employeesSheet = null;
+    empHeaders = null;
+  }
 
   const shiftIdCol = getRequiredColumn_(
     headers,
@@ -6115,7 +6135,21 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
       workDate: toIsoDate_(workDateRaw) || "",
       timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
+      units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
+      payType: "",
     };
+
+    if (employeesSheet && rec.employeeId && rec.jobTypeId) {
+      const payMeta = resolveEmployeeJobPayType_(
+        employeesSheet,
+        empHeaders,
+        rec.employeeId,
+        rec.jobTypeId,
+      );
+      if (payMeta) {
+        rec.payType = payMeta.payTypeName || payMeta.payTypeId || "";
+      }
+    }
 
     const hash = buildFaultHash_(rec);
     if (ack[hash]) continue;
@@ -6142,6 +6176,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         direction: rec.direction,
         workDate: rec.workDate,
         timestamp: rec.timestamp,
+        units: rec.units,
         payType: rec.payType,
         note: rec.note,
       });
@@ -6206,6 +6241,16 @@ function buildFaultsDialogHtml_(faults) {
       missing_workDate: 'חסר תאריך דיווח',
     };
 
+    function normalizePayKind(raw) {
+      const s = String(raw || '').toLowerCase();
+      if (!s) return '';
+      if (s.includes('unit') || s.includes('יחיד')) return 'unit';
+      if (s.includes('שעת')) return 'hourly';
+      if (s.includes('יומ')) return 'daily';
+      if (s.includes('חוד')) return 'monthly';
+      return '';
+    }
+
     function extractDate(val) {
       if (!val) return '';
       const match = String(val).match(/(\d{4}-\d{2}-\d{2})/);
@@ -6245,7 +6290,13 @@ function buildFaultsDialogHtml_(faults) {
     }
 
     function buildMeta(fault) {
+      const payKind = normalizePayKind(fault.payType);
       const time = extractTime(fault.timestamp);
+      if (payKind === 'unit') {
+        return [fault.department || '', fault.units ? `${fault.units} יחידות` : '', fault.payType || '']
+          .filter(Boolean)
+          .join(separator);
+      }
       return [fault.department || '', fault.direction || '', time || '', fault.payType || '']
         .filter(Boolean)
         .join(separator);
@@ -6286,6 +6337,8 @@ function buildFaultsDialogHtml_(faults) {
           form.appendChild(control);
         };
 
+        const payKind = normalizePayKind(f.payType);
+
         const jobInput = document.createElement('input');
         jobInput.value = f.jobName || '';
         jobInput.placeholder = 'שם תפקיד';
@@ -6301,47 +6354,64 @@ function buildFaultsDialogHtml_(faults) {
         payInput.placeholder = 'לא לשינוי ממסך זה';
         addRow('אופן תשלום', payInput);
 
-        const timeInput = document.createElement('input');
-        timeInput.type = 'time';
-        timeInput.value = f.fixTime || '';
-        timeInput.oninput = () => {
-          f.fixTime = timeInput.value;
-          updateTimestampFromParts(f, f.workDate, timeInput.value);
-        };
-
         const dateInput = document.createElement('input');
         dateInput.type = 'date';
         dateInput.value = f.workDate || '';
         dateInput.oninput = () => {
           f.workDate = dateInput.value;
-          updateTimestampFromParts(f, dateInput.value, timeInput.value);
+          updateTimestampFromParts(f, dateInput.value, timeInput ? timeInput.value : '');
           title.textContent = formatTitle(f);
         };
 
         addRow('תאריך', dateInput);
-        addRow('שעה', timeInput);
 
-        const directionSelect = document.createElement('select');
-        const directions = [
-          { value: '', label: 'בחר כיוון' },
-          { value: 'כניסה', label: 'כניסה' },
-          { value: 'יציאה', label: 'יציאה' },
-        ];
-        if (f.direction && !directions.find((d) => d.value === f.direction)) {
-          directions.splice(1, 0, { value: f.direction, label: f.direction });
+        let timeInput = null;
+        if (payKind !== 'unit') {
+          timeInput = document.createElement('input');
+          timeInput.type = 'time';
+          timeInput.value = f.fixTime || '';
+          timeInput.oninput = () => {
+            f.fixTime = timeInput.value;
+            updateTimestampFromParts(f, f.workDate, timeInput.value);
+          };
+          addRow('שעה', timeInput);
         }
-        directions.forEach((opt) => {
-          const option = document.createElement('option');
-          option.value = opt.value;
-          option.textContent = opt.label;
-          directionSelect.appendChild(option);
-        });
-        directionSelect.value = f.direction || '';
-        directionSelect.onchange = () => {
-          f.direction = directionSelect.value;
-          meta.textContent = buildMeta(f);
-        };
-        addRow('כיוון', directionSelect);
+
+        if (payKind === 'unit') {
+          const unitsInput = document.createElement('input');
+          unitsInput.type = 'number';
+          unitsInput.min = '0';
+          unitsInput.step = 'any';
+          unitsInput.value = f.units || '';
+          unitsInput.placeholder = 'כמות יחידות';
+          unitsInput.oninput = () => {
+            f.units = unitsInput.value;
+            meta.textContent = buildMeta(f);
+          };
+          addRow('כמות יחידות', unitsInput);
+        } else {
+          const directionSelect = document.createElement('select');
+          const directions = [
+            { value: '', label: 'בחר כיוון' },
+            { value: 'כניסה', label: 'כניסה' },
+            { value: 'יציאה', label: 'יציאה' },
+          ];
+          if (f.direction && !directions.find((d) => d.value === f.direction)) {
+            directions.splice(1, 0, { value: f.direction, label: f.direction });
+          }
+          directions.forEach((opt) => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            directionSelect.appendChild(option);
+          });
+          directionSelect.value = f.direction || '';
+          directionSelect.onchange = () => {
+            f.direction = directionSelect.value;
+            meta.textContent = buildMeta(f);
+          };
+          addRow('כיוון', directionSelect);
+        }
 
         const noteInput = document.createElement('input');
         noteInput.value = f.note || '';
