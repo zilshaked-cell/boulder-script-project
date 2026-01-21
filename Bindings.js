@@ -7,12 +7,12 @@ function _getLib_() {
     typeof ExportGSS !== "undefined"
       ? ExportGSS
       : typeof exportgoogleSS !== "undefined"
-      ? exportgoogleSS
-      : null;
+        ? exportgoogleSS
+        : null;
   if (!lib) {
     throw new Error(
       'Library not found. פתח "Libraries": הוסף את ה-Script ID של הספרייה,' +
-        " בחר Version/Development, וודא שה-Identifier הוא ExportGSS או exportgoogleSS."
+        " בחר Version/Development, וודא שה-Identifier הוא ExportGSS או exportgoogleSS.",
     );
   }
   return lib;
@@ -30,7 +30,7 @@ function onOpen(e) {
           .createMenu("Export")
           .addItem("All Sheets (Auto)", "gpt_all")
           .addItem("Selected Sheet…", "gpt_selected")
-          .addItem("SCHEMA only (All)", "gpt_schema")
+          .addItem("SCHEMA only (All)", "gpt_schema"),
       )
       .addSeparator()
       .addItem("Refresh Sheet List", "gpt_refresh")
@@ -56,8 +56,13 @@ function onOpen(e) {
     if (typeof SHIFTS_showDuplicateCleanupDialog === "function") {
       root.addItem(
         "בדיקת כפילות דיווחי עובדים",
-        "SHIFTS_showDuplicateCleanupDialog"
+        "SHIFTS_showDuplicateCleanupDialog",
       );
+    }
+
+    // פריט חדש: תיקון תקלות דיווחים
+    if (typeof shiftReport_showFaultsDialog === "function") {
+      root.addItem("תיקון תקלות משמרות", "shiftReport_showFaultsDialog");
     }
 
     root.addToUi();

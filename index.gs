@@ -386,14 +386,14 @@ function doGet(e) {
               error: "Unauthorized health check",
               errorCode: "HEALTH_TOKEN_MISMATCH",
             },
-            401
+            401,
           );
         }
         return jsonResponse(healthCheck_());
       }
       case "ping":
         return jsonResponse(
-          withOk_({ pong: true, timestamp: new Date().toISOString() })
+          withOk_({ pong: true, timestamp: new Date().toISOString() }),
         );
       default:
         return jsonResponse(
@@ -402,7 +402,7 @@ function doGet(e) {
             error: "GET not allowed for this action",
             errorCode: "METHOD_NOT_ALLOWED",
           },
-          405
+          405,
         );
     }
   } catch (err) {
@@ -412,7 +412,7 @@ function doGet(e) {
         error: err && err.message ? err.message : "Unexpected error",
         stack: err && err.stack ? String(err.stack).slice(0, 500) : undefined,
       },
-      500
+      500,
     );
   }
 }
@@ -631,7 +631,7 @@ function logDuration_(
   details,
   severity,
   errorCode,
-  err
+  err,
 ) {
   if (!logger || typeof logger.info !== "function") return;
   var payload =
@@ -685,7 +685,7 @@ function logApiEvent_(kind, traceId, operation, action, extra) {
     // לא רוצים שהלוג עצמו יפיל את הסקריפט
     Logger.log(
       "[API_TRACE_FALLBACK] " +
-        (err && err.message ? String(err.message) : String(err))
+        (err && err.message ? String(err.message) : String(err)),
     );
   }
 }
@@ -730,14 +730,14 @@ function doPost(e) {
       parseStartMs,
       parseDetails,
       parsed.error ? "warn" : "debug",
-      parsed.error ? "VALIDATION_FAILED" : null
+      parsed.error ? "VALIDATION_FAILED" : null,
     );
 
     if (!body.meta || !body.meta.traceId) {
       logger.warn(
         "start",
         { reason: "Missing traceId from client" },
-        "MISSING_TRACE_ID"
+        "MISSING_TRACE_ID",
       );
     }
 
@@ -745,7 +745,7 @@ function doPost(e) {
       logger.warn(
         "validate-input",
         { reason: "Invalid JSON body", error: String(parsed.error) },
-        "VALIDATION_FAILED"
+        "VALIDATION_FAILED",
       );
       return jsonResponse(
         withOk_({
@@ -753,7 +753,7 @@ function doPost(e) {
           error: "Invalid JSON body: " + String(parsed.error),
           errorCode: "VALIDATION_FAILED",
         }),
-        400
+        400,
       );
     }
 
@@ -807,7 +807,7 @@ function doPost(e) {
         meta: err && err.meta ? err.meta : undefined,
         errorCode: errorCode,
       },
-      500
+      500,
     );
   } finally {
     if (logger) {
@@ -907,7 +907,7 @@ function healthCheck_() {
       errorCode: "SPREADSHEET_OPEN_FAILED",
       errorMessage: String(err && err.message ? err.message : err).slice(
         0,
-        300
+        300,
       ),
       schemaVersion: CONTRACT_SCHEMA_VERSION,
       supportedActions: getSupportedActions_(),
@@ -934,12 +934,12 @@ function healthCheck_() {
       const missingCritical = collectMissing_(
         headerMap,
         spec.requiredColumnsCritical,
-        sheet.getName()
+        sheet.getName(),
       );
       const missingOptional = collectMissing_(
         headerMap,
         spec.requiredColumnsOptional,
-        sheet.getName()
+        sheet.getName(),
       );
 
       entry.missingCriticalColumns = missingCritical;
@@ -948,10 +948,10 @@ function healthCheck_() {
     } catch (err) {
       entry.error = String(err && err.message ? err.message : err);
       entry.missingCriticalColumns = flattenColumnLabels_(
-        spec.requiredColumnsCritical
+        spec.requiredColumnsCritical,
       );
       entry.missingOptionalColumns = flattenColumnLabels_(
-        spec.requiredColumnsOptional
+        spec.requiredColumnsOptional,
       );
     }
 
@@ -1041,7 +1041,7 @@ function listSystemLogs_(payload) {
 
 function handleLegacyPost_(e, body, _logger) {
   const paramAction = stringValue(
-    e && e.parameter && e.parameter.action ? e.parameter.action : ""
+    e && e.parameter && e.parameter.action ? e.parameter.action : "",
   );
 
   if (paramAction === "request" || paramAction === "requests") {
@@ -1051,7 +1051,7 @@ function handleLegacyPost_(e, body, _logger) {
 
   const legacyPayload = normalizeLegacyShiftPayload_(body);
   return jsonResponse(
-    withOk_(handleShiftReportSubmit_(legacyPayload, _logger))
+    withOk_(handleShiftReportSubmit_(legacyPayload, _logger)),
   );
 }
 
@@ -1079,7 +1079,7 @@ function normalizeLegacyShiftPayload_(body) {
     employeeName: stringValue(src.employeeName || src.name),
     jobId: stringValue(src.jobId || src.jobTypeId),
     jobName: stringValue(
-      src.jobName || (src.job && src.job.name ? src.job.name : "")
+      src.jobName || (src.job && src.job.name ? src.job.name : ""),
     ),
     direction: stringValue(src.direction || src.dir),
     fixDate: stringValue(src.fixDate || src.date || src.workDate),
@@ -1139,17 +1139,17 @@ function listJobTypes_() {
   const statusCol = getRequiredColumn_(
     headerMap,
     ["סטטוס סוגי עבודה"],
-    sheetName
+    sheetName,
   );
   const idCol = getRequiredColumn_(
     headerMap,
     ["ID סוגי עבודה", "ID סוג עבודה"],
-    sheetName
+    sheetName,
   );
   const nameCol = getRequiredColumn_(
     headerMap,
     ["סוגי עבודה", "סוג עבודה"],
-    sheetName
+    sheetName,
   );
   const deptCol = getRequiredColumn_(headerMap, ["מחלקות", "מחלקה"], sheetName);
   const payStatusCol = getOptionalColumn_(headerMap, ["סטטוס אופן תשלום"]);
@@ -1273,7 +1273,7 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     lg.warn(
       "validation",
       { reason: "Missing employeeId" },
-      ERROR_CODES.VALIDATION_FAILED
+      ERROR_CODES.VALIDATION_FAILED,
     );
     throw new Error("Missing employeeId");
   }
@@ -1283,33 +1283,33 @@ function listEmployeeLinkedJobIds_(payload, logger) {
   const idCol = getRequiredColumn_(
     headerMap,
     ["מזהה עובד", "ID עובד"],
-    sheetName
+    sheetName,
   );
   const jobTypeCol = getRequiredColumn_(
     headerMap,
     ["ID סוג עבודה", "ID סוגי עבודה"],
-    sheetName
+    sheetName,
   );
   const statusCol = getRequiredColumn_(headerMap, ["סטטוס"], sheetName);
   const jobTypeNameCol = getOptionalColumn_(
     headerMap,
     ["סוג העבודה", "סוג עבודה"],
-    sheetName
+    sheetName,
   );
   const jobPayTypeIdCol = getOptionalColumn_(
     headerMap,
     ["ID אופן תשלום", "ID אופני תשלום"],
-    sheetName
+    sheetName,
   );
   const jobPayTypeNameCol = getOptionalColumn_(
     headerMap,
     ["אופן תשלום"],
-    sheetName
+    sheetName,
   );
   const jobDepartmentCol = getOptionalColumn_(
     headerMap,
     ["מחלקה", "מחלקות"],
-    sheetName
+    sheetName,
   );
   const values = sheet.getDataRange().getValues();
   lg.info("read-sheet", { sheetName: sheetName, rows: values.length - 1 });
@@ -1371,7 +1371,7 @@ function adminListEmployees_(payload, logger) {
   const idCol = getRequiredColumn_(
     headers,
     ["מזהה עובד", "ID עובד", "Employee ID"],
-    sheetName
+    sheetName,
   );
   const nameCol = getOptionalColumn_(headers, ["שם מלא", "name", "Full Name"]);
   const emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
@@ -1470,7 +1470,7 @@ function adminListEmployees_(payload, logger) {
     EMPLOYEE_HEADER_ROW + 1,
     1,
     lastRow - EMPLOYEE_HEADER_ROW,
-    lastCol
+    lastCol,
   );
   var values = dataRange.getValues();
 
@@ -1499,7 +1499,7 @@ function adminListEmployees_(payload, logger) {
   const search = stringValue(payload.search).toLowerCase();
   const employmentFilter = stringValue(payload.employmentStatus).toLowerCase();
   const branchFilter = stringValue(
-    payload.branch || payload.branchId
+    payload.branch || payload.branchId,
   ).toLowerCase();
 
   function normalizeSystemRole_(raw) {
@@ -1614,7 +1614,7 @@ function adminListEmployees_(payload, logger) {
 
     const normalizedEmployment = normalizeEmploymentStatus_(
       employmentVal,
-      rowInactive
+      rowInactive,
     );
     if (!record.employmentStatus)
       record.employmentStatus = normalizedEmployment;
@@ -1664,8 +1664,8 @@ function adminListEmployees_(payload, logger) {
         amountRaw !== null && amountRaw !== undefined && amountRaw !== ""
           ? amountRaw
           : detailPrev.amount !== undefined
-          ? detailPrev.amount
-          : jobTypeFromMap.amount || "";
+            ? detailPrev.amount
+            : jobTypeFromMap.amount || "";
 
       record._jobTypeDetailMap[jobTypeId] = {
         jobTypeId: jobTypeId,
@@ -1719,11 +1719,11 @@ function adminListEmployees_(payload, logger) {
     const isActive = rec._hasActiveRow
       ? true
       : rec._hasInactiveRow
-      ? false
-      : true;
+        ? false
+        : true;
     const employmentStatus = normalizeEmploymentStatus_(
       rec.employmentStatus,
-      !isActive
+      !isActive,
     );
     const jobTypesDetailed = rec.jobTypeIds.map(function (jobTypeId) {
       const jt = jobMap[jobTypeId] || {};
@@ -1858,7 +1858,7 @@ function adminRunBulkAction_(payload, logger) {
         "admin.runBulkAction.error",
         { message: err && err.message ? err.message : err },
         ERROR_CODES.INTERNAL_ERROR,
-        err
+        err,
       );
     }
 
@@ -2329,7 +2329,7 @@ function adminCreateRequest_(payload, logger) {
   var singleDate = stringValue(payload && payload.singleDate);
   var shiftId = stringValue(payload && payload.shiftId);
   var shiftDate = stringValue(
-    payload && (payload.shiftDate || payload.shiftRefDate)
+    payload && (payload.shiftDate || payload.shiftRefDate),
   );
 
   if (!employeeId || !requestTypeId) {
@@ -2361,7 +2361,7 @@ function adminCreateRequest_(payload, logger) {
   setCell(cols.employeeNameCol, stringValue(payload && payload.employeeName));
   setCell(
     cols.createdAtCol,
-    singleDate || dateFrom || dateTo || shiftDate || nowIso
+    singleDate || dateFrom || dateTo || shiftDate || nowIso,
   );
   setCell(cols.shiftDateCol, shiftDate || singleDate || dateFrom || "");
   setCell(cols.shiftIdCol, shiftId || "");
@@ -2372,11 +2372,11 @@ function adminCreateRequest_(payload, logger) {
   setCell(cols.requestTypeLabelCol, requestTypeLabel || requestTypeId);
   setCell(
     cols.employeeCommentCol,
-    stringValue(payload && payload.employeeComment)
+    stringValue(payload && payload.employeeComment),
   );
   setCell(
     cols.sourceCol,
-    stringValue(payload && payload.sourceOverride) || "ADMIN"
+    stringValue(payload && payload.sourceOverride) || "ADMIN",
   );
   setCell(cols.isArchivedCol, false);
   setCell(cols.updatedAtCol, nowIso);
@@ -2450,37 +2450,37 @@ function listWorkLogsByEmployee_(payload, logger) {
   const idCol = getRequiredColumn_(
     headerMap,
     ["ID משמרת", "ID דיווח"],
-    sheetName
+    sheetName,
   );
   const tsCol = getRequiredColumn_(headerMap, ["חותמת זמן"], sheetName);
   const empIdCol = getRequiredColumn_(
     headerMap,
     ["ID עובד", "מזהה עובד"],
-    sheetName
+    sheetName,
   );
   const empNameCol = getRequiredColumn_(headerMap, ["שם מלא"], sheetName);
   const dirCol = getRequiredColumn_(
     headerMap,
     ["כניסה / יציאה", "דיווח שעות"],
-    sheetName
+    sheetName,
   );
   const fixDateCol = getRequiredColumn_(headerMap, ["תיקון תאריך"], sheetName);
   const fixTimeCol = getRequiredColumn_(headerMap, ["תיקון שעה"], sheetName);
   const jobTypeIdCol = getRequiredColumn_(
     headerMap,
     ["ID סוג עבודה", "ID סוגי עבודה"],
-    sheetName
+    sheetName,
   );
   const jobNameCol = getRequiredColumn_(
     headerMap,
     ["סוג עבודה", "סוגי עבודה"],
-    sheetName
+    sheetName,
   );
   const deptCol = getRequiredColumn_(headerMap, ["מחלקה", "מחלקות"], sheetName);
   const unitsCol = getRequiredColumn_(
     headerMap,
     ["כמות היחידות", "דיווח יחידות"],
-    sheetName
+    sheetName,
   );
   const notesCol = getRequiredColumn_(headerMap, ["הערות", "הערה"], sheetName);
   const values = sheet.getDataRange().getValues();
@@ -2524,7 +2524,7 @@ function listRequestsByEmployee_(payload, logger) {
   const empIdCol = getRequiredColumn_(
     empHeaders,
     ["מזהה עובד", "ID עובד"],
-    empSheetName
+    empSheetName,
   );
   const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
   const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
@@ -2549,12 +2549,12 @@ function listRequestsByEmployee_(payload, logger) {
   const reqEmpCol = getRequiredColumn_(
     reqHeaders,
     ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-    reqSheetName
+    reqSheetName,
   );
   const statusCol = getRequiredColumn_(
     reqHeaders,
     ["סטטוס", "סטטוס בקשה"],
-    reqSheetName
+    reqSheetName,
   );
   const requestIdCol = getOptionalColumn_(reqHeaders, [
     "ID בקשה",
@@ -2564,7 +2564,7 @@ function listRequestsByEmployee_(payload, logger) {
   const jobNameCol = getRequiredColumn_(
     reqHeaders,
     ["סוג עבודה", "סוגי עבודה"],
-    reqSheetName
+    reqSheetName,
   );
   const workDateCol = getOptionalColumn_(reqHeaders, [
     "תאריך משמרת",
@@ -2594,7 +2594,7 @@ function listRequestsByEmployee_(payload, logger) {
   const jobTypeIdCol = getRequiredColumn_(
     reqHeaders,
     ["ID סוג עבודה", "ID סוגי עבודה"],
-    reqSheetName
+    reqSheetName,
   );
   const fixDateCol = getOptionalColumn_(reqHeaders, ["תיקון תאריך"]);
   const fixTimeCol = getOptionalColumn_(reqHeaders, ["תיקון שעה"]);
@@ -2664,7 +2664,7 @@ function listRequestsByEmployee_(payload, logger) {
     const submittedAt = normalizeIsoDateTime_(
       submittedCol ? row[submittedCol - 1] : "",
       workDateRaw,
-      fixTimeCol ? row[fixTimeCol - 1] : ""
+      fixTimeCol ? row[fixTimeCol - 1] : "",
     );
     const requestedSummary =
       stringValue(row[directionCol - 1]) ||
@@ -2700,7 +2700,7 @@ function listRequestsByEmployee_(payload, logger) {
       decidedAt: normalizeIsoDateTime_(
         decidedCol ? row[decidedCol - 1] : "",
         workDateRaw,
-        fixTimeCol ? row[fixTimeCol - 1] : ""
+        fixTimeCol ? row[fixTimeCol - 1] : "",
       ),
       type: requestType,
       employeeId: employeeId,
@@ -2735,7 +2735,7 @@ function findRequestById_(requestId) {
   const statusCol = getRequiredColumn_(
     headers,
     ["סטטוס", "סטטוס בקשה"],
-    reqSheetName
+    reqSheetName,
   );
   const typeCol = getOptionalColumn_(headers, ["סוג בקשה"]);
   const empIdCol = getOptionalColumn_(headers, [
@@ -2833,7 +2833,7 @@ function handleShiftReportSubmit_(payload, logger) {
   const empIdCol = getRequiredColumn_(
     empHeaders,
     ["מזהה עובד", "ID עובד"],
-    empSheetName
+    empSheetName,
   );
   const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
   const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
@@ -2873,8 +2873,8 @@ function handleShiftReportSubmit_(payload, logger) {
   const jobName = isOther
     ? jobNameInput
     : job
-    ? stringValue(job.name)
-    : jobNameInput;
+      ? stringValue(job.name)
+      : jobNameInput;
   if (!jobName) throw new Error("Missing jobName");
   const department = isOther ? "" : job ? stringValue(job.department) : "";
   const isLinked = jobTypeId ? linked.indexOf(jobTypeId) >= 0 : false;
@@ -2891,19 +2891,19 @@ function handleShiftReportSubmit_(payload, logger) {
         employeesSheet,
         empHeaders,
         employeeId,
-        jobTypeId
+        jobTypeId,
       )
     : null;
   const payTypeName = employeePay
     ? employeePay.payTypeName
     : job
-    ? stringValue(job.payTypeName)
-    : "";
+      ? stringValue(job.payTypeName)
+      : "";
   const payTypeId = employeePay
     ? employeePay.payTypeId
     : job
-    ? stringValue(job.payTypeId)
-    : "";
+      ? stringValue(job.payTypeId)
+      : "";
   const payType = normalizePayType_(payTypeName);
   const payTypeForRequestRow = payType || payTypeName;
   logDuration_(logger, "shift.submit.resolve-job", linkedStartMs, {
@@ -2992,8 +2992,8 @@ function handleShiftReportSubmit_(payload, logger) {
       explicitRequestType === "job_not_linked")
       ? explicitRequestType
       : isOther
-      ? "new_job_type"
-      : "job_not_linked";
+        ? "new_job_type"
+        : "job_not_linked";
 
   const needsApproval =
     payload.requiresApproval === true || isOther || !isLinked;
@@ -3007,21 +3007,21 @@ function handleShiftReportSubmit_(payload, logger) {
     getRequiredColumn_(
       headers,
       ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-      reqSheetName
+      reqSheetName,
     );
     getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
     getRequiredColumn_(headers, ["סטטוס", "סטטוס בקשה"], reqSheetName);
     getRequiredColumn_(
       headers,
       ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-      reqSheetName
+      reqSheetName,
     );
     getRequiredColumn_(headers, ["שם מלא"], reqSheetName);
     getRequiredColumn_(headers, ["סוג עבודה", "סוגי עבודה"], reqSheetName);
     getRequiredColumn_(
       headers,
       ["ID סוג עבודה", "ID סוגי עבודה"],
-      reqSheetName
+      reqSheetName,
     );
     getOptionalColumn_(headers, ["תאריך משמרת", "תיקון תאריך", "חותמת זמן"]);
     getOptionalColumn_(headers, ["דיווח שעות", "כניסה / יציאה"]);
@@ -3048,7 +3048,7 @@ function handleShiftReportSubmit_(payload, logger) {
       fixTime: normalized.fixTime,
       units: normalized.units,
       noteToManager: stringValue(
-        payload.noteToManager || payload.note || payload.shiftNote
+        payload.noteToManager || payload.note || payload.shiftNote,
       ),
       submittedAt: nowIso,
       timestamp: nowIso,
@@ -3092,7 +3092,7 @@ function handleShiftReportSubmit_(payload, logger) {
       employeeName: employeeName,
       note: payload.note,
     },
-    logger
+    logger,
   );
   logDuration_(logger, "shift.submit.write-worklog", writeStartMs, {
     jobTypeId: jobTypeId,
@@ -3111,7 +3111,7 @@ function handleShiftReportSubmit_(payload, logger) {
       direction: normalized.direction,
       workDate: normalized.workDate,
     },
-    shiftId
+    shiftId,
   );
   logDuration_(logger, "shift.submit.duplicates-scan", duplicateScanStartMs, {
     count: duplicates.length,
@@ -3168,7 +3168,7 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
     payload.phone ||
       payload.employeePhone ||
       payload.mobile ||
-      payload.employeeMobile
+      payload.employeeMobile,
   );
   const jobTypeId = stringValue(payload.jobTypeId);
   const jobName = stringValue(payload.jobName);
@@ -3187,7 +3187,7 @@ function handleShiftReportMonthlyErrorNotify_(payload) {
     const empIdCol = getRequiredColumn_(
       headers,
       ["מזהה עובד", "ID עובד"],
-      sheetName
+      sheetName,
     );
     const nameCol = getOptionalColumn_(headers, ["שם מלא"]);
     const emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
@@ -3237,7 +3237,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   const empIdCol = getRequiredColumn_(
     empHeaders,
     ["מזהה עובד", "ID עובד"],
-    empSheetName
+    empSheetName,
   );
   const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
   const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
@@ -3261,7 +3261,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
     {
       sheet: empSheetName,
       found: !!employeeName,
-    }
+    },
   );
 
   const original = {
@@ -3312,7 +3312,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   getRequiredColumn_(
     headers,
     ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-    reqSheetName
+    reqSheetName,
   );
   getRequiredColumn_(headers, ["שם מלא"], reqSheetName);
   getRequiredColumn_(headers, ["סוג עבודה", "סוגי עבודה"], reqSheetName);
@@ -3322,7 +3322,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   const newShiftId = original.shiftId || Utilities.getUuid();
   const jobTypeId = updated.jobTypeId || original.jobTypeId;
   const jobName = stringValue(
-    payload.jobName || payload.newJobName || payload.originalJobName
+    payload.jobName || payload.newJobName || payload.originalJobName,
   );
   const workDate = updated.workDate || original.workDate;
   const direction =
@@ -3372,7 +3372,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
     requestAppendStartMs,
     {
       sheet: reqSheetName,
-    }
+    },
   );
   logDuration_(logger, "shift.correction.total", fnStartMs, {
     requestType: "shift_correction",
@@ -3391,7 +3391,7 @@ function handleRequestApprove_(payload, logger) {
   var lg = logger || ensureModuleLoggerDefined_("REQUEST_DECIDE");
   var startMs = new Date().getTime();
   const requestId = stringValue(
-    payload.requestId || payload.shiftId || payload.id
+    payload.requestId || payload.shiftId || payload.id,
   );
   if (!requestId) throw new Error("Missing requestId");
 
@@ -3427,7 +3427,7 @@ function handleRequestApprove_(payload, logger) {
     jobName,
     department,
     payTypeId,
-    payTypeName
+    payTypeName,
   );
 
   const normalized = normalizeShiftForWrite_({
@@ -3456,7 +3456,7 @@ function handleRequestApprove_(payload, logger) {
       employeeName: rec.employeeName,
       note: updated.note,
     },
-    lg
+    lg,
   );
 
   if (rec.statusCol) {
@@ -3492,7 +3492,7 @@ function handleEmployeeSave_(payload) {
   const empIdCol = getRequiredColumn_(
     headers,
     ["מזהה עובד", "ID עובד"],
-    sheetName
+    sheetName,
   );
   const phoneCol = getOptionalColumn_(headers, ["טלפון"]);
   const birthCol = getOptionalColumn_(headers, ["ת. לידה", "תאריך לידה"]);
@@ -3548,7 +3548,7 @@ function handleEmployeeSave_(payload) {
 // Returns employee match by email with normalized systemRole for auth.
 function employeeExistsByEmail_(payload) {
   const email = stringValue(
-    payload && (payload.email || payload.mail)
+    payload && (payload.email || payload.mail),
   ).toLowerCase();
 
   if (!email) {
@@ -3562,7 +3562,7 @@ function employeeExistsByEmail_(payload) {
   const colEmail = getRequiredColumn_(
     headerMap,
     EMAIL_HEADER_CANDIDATES,
-    sheetName
+    sheetName,
   );
   const colStatus = getOptionalColumn_(headerMap, [
     "סטטוס",
@@ -3847,12 +3847,12 @@ function resolveEmployeeJobPayType_(sheet, headers, employeeId, jobTypeId) {
   const empIdCol = getRequiredColumn_(
     headers,
     ["מזהה עובד", "ID עובד"],
-    sheet.getName()
+    sheet.getName(),
   );
   const jobTypeCol = getRequiredColumn_(
     headers,
     ["ID סוג עבודה", "ID סוגי עבודה"],
-    sheet.getName()
+    sheet.getName(),
   );
   const payIdCol = getOptionalColumn_(headers, [
     "ID אופן תשלום",
@@ -4039,7 +4039,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
       SHIFTS_upsertAroundWorkLog_(
         String(meta.employeeId || normalized.employeeId || ""),
         String(normalized.jobTypeId || ""),
-        workDateForUpsert
+        workDateForUpsert,
       );
     }
 
@@ -4059,7 +4059,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
           errorMessage: String((e && e.message) || e),
         },
         "SHIFTS_UPSERT_FAILED",
-        e
+        e,
       );
     } else {
       Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + e);
@@ -4083,12 +4083,12 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   const shiftIdCol = getRequiredColumn_(
     headers,
     ["ID משמרת", "ID דיווח"],
-    sheet.getName()
+    sheet.getName(),
   );
   const empCol = getRequiredColumn_(
     headers,
     ["ID עובד", "מזהה עובד"],
-    sheet.getName()
+    sheet.getName(),
   );
   const jobTypeIdCol = getOptionalColumn_(headers, [
     "ID סוג עבודה",
@@ -4143,7 +4143,12 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
           : "",
       note: noteCol ? stringValue(row[noteCol - 1]) : "",
       timestamp: tsCol ? stringValue(timestampRaw) : "",
-      eventMs: extractEventMs_(workDateRaw, timestampRaw, fixDateRaw, fixTimeRaw),
+      eventMs: extractEventMs_(
+        workDateRaw,
+        timestampRaw,
+        fixDateRaw,
+        fixTimeRaw,
+      ),
     };
   }
 
@@ -4171,15 +4176,15 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   const targetWorkDate = toIsoDate_(criteria.workDate) || "";
   const hasTimeInCriteria = Boolean(
     stringValue(criteria.fixTime) ||
-      (criteria.timestamp && String(criteria.timestamp).match(/\d{1,2}:\d{2}/)) ||
-      (criteria.workDate && String(criteria.workDate).match(/\d{1,2}:\d{2}/))
+    (criteria.timestamp && String(criteria.timestamp).match(/\d{1,2}:\d{2}/)) ||
+    (criteria.workDate && String(criteria.workDate).match(/\d{1,2}:\d{2}/)),
   );
   const targetEventMs = hasTimeInCriteria
     ? extractEventMs_(
         criteria.workDate,
         criteria.timestamp,
         criteria.fixDate,
-        criteria.fixTime
+        criteria.fixTime,
       )
     : null;
 
@@ -4266,6 +4271,7 @@ function cleanupExactDuplicateWorkLogs_(duplicates) {
 }
 
 const DUPLICATE_TIME_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+const FAULT_ACK_PROPERTY = "FAULT_ACK_MAP";
 
 function normalizeTimeString_(val) {
   const s = stringValue(val);
@@ -4308,7 +4314,7 @@ function parseDateTimeFlexible_(datePart, timePart) {
 
   if (dateStr) {
     const mDmyTime = dateStr.match(
-      /^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?/
+      /^(\d{2})[\/.\-](\d{2})[\/.\-](\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?/,
     );
     if (mDmyTime) {
       const iso =
@@ -4337,9 +4343,10 @@ function parseDateTimeFlexible_(datePart, timePart) {
 function extractEventMs_(workDateRaw, timestampRaw, fixDate, fixTime) {
   const fixDateTime = parseDateTimeFlexible_(
     fixDate || workDateRaw,
-    fixTime || null
+    fixTime || null,
   );
-  if (fixDateTime && !isNaN(fixDateTime.getTime())) return fixDateTime.getTime();
+  if (fixDateTime && !isNaN(fixDateTime.getTime()))
+    return fixDateTime.getTime();
 
   const tsParsed = parseDateTimeFlexible_(timestampRaw, null);
   if (tsParsed && !isNaN(tsParsed.getTime())) return tsParsed.getTime();
@@ -4368,7 +4375,7 @@ function buildDuplicateKey_(
   jobTypeId,
   workDate,
   direction,
-  eventMs
+  eventMs,
 ) {
   const w = toIsoDate_(workDate) || "";
   const dir = stringValue(direction || "").trim();
@@ -4377,8 +4384,39 @@ function buildDuplicateKey_(
       ? Math.floor(eventMs / DUPLICATE_TIME_WINDOW_MS)
       : "na";
   return [stringValue(employeeId), stringValue(jobTypeId), w, dir, bucket].join(
-    "__"
+    "__",
   );
+}
+
+function buildFaultHash_(rec) {
+  return [
+    stringValue(rec.shiftId),
+    stringValue(rec.employeeId),
+    stringValue(rec.jobTypeId),
+    stringValue(rec.workDate),
+    stringValue(rec.direction),
+    stringValue(rec.timestamp || rec.fixDate || ""),
+  ].join("__");
+}
+
+function getFaultAckMap_() {
+  try {
+    const raw =
+      PropertiesService.getDocumentProperties().getProperty(FAULT_ACK_PROPERTY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function setFaultAck_(hash) {
+  if (!hash) return;
+  const props = PropertiesService.getDocumentProperties();
+  const map = getFaultAckMap_();
+  map[hash] = true;
+  props.setProperty(FAULT_ACK_PROPERTY, JSON.stringify(map));
 }
 
 function handleShiftReportDeleteByIds_(payload, logger) {
@@ -4397,7 +4435,7 @@ function handleShiftReportDeleteByIds_(payload, logger) {
   const shiftIdCol = getRequiredColumn_(
     headers,
     ["ID משמרת", "ID דיווח"],
-    sheet.getName()
+    sheet.getName(),
   );
   const values = sheet.getDataRange().getValues();
 
@@ -4449,7 +4487,7 @@ function refreshShiftsForWorkLog_(normalized, meta) {
   const workDateIso = toIsoDate_(
     (normalized && normalized.workDate) ||
       (normalized && normalized.fixDate) ||
-      (normalized && normalized.timestamp)
+      (normalized && normalized.timestamp),
   );
   if (!employeeId || !workDateIso) return { ok: false, skipped: true };
 
@@ -4559,7 +4597,7 @@ function getSpreadsheetForHealth_() {
   } catch (err) {
     var e = new Error(
       "SPREADSHEET_OPEN_FAILED: " +
-        (err && err.message ? String(err.message) : String(err))
+        (err && err.message ? String(err.message) : String(err)),
     );
     e.code = "SPREADSHEET_OPEN_FAILED";
     throw e;
@@ -4637,7 +4675,7 @@ function getRequiredColumn_(headerMap, possibleHeaders, sheetName) {
       candidates[0] +
       "' in sheet '" +
       sheetName +
-      "'"
+      "'",
   );
   missingHeaderErr.errorCode = ERROR_CODES.VALIDATION_FAILED;
   missingHeaderErr.meta = {
@@ -4667,7 +4705,7 @@ function getOptionalColumn_(headerMap, possibleHeaders) {
 
 function buildRowFromHeaders_(headerMap, data) {
   const headers = Object.keys(headerMap).sort(
-    (a, b) => headerMap[a] - headerMap[b]
+    (a, b) => headerMap[a] - headerMap[b],
   );
   return headers.map((header) => {
     const normalized = HEADER_KEY_MAP[header] || header;
@@ -4683,8 +4721,8 @@ function buildRowFromHeaders_(headerMap, data) {
     return data.hasOwnProperty(header)
       ? data[header]
       : data.hasOwnProperty(normalized)
-      ? data[normalized]
-      : "";
+        ? data[normalized]
+        : "";
   });
 }
 
@@ -4726,7 +4764,7 @@ function linkJobTypeToEmployee_(
   jobName,
   department,
   payTypeId,
-  payTypeName
+  payTypeName,
 ) {
   const sheet = getEmployeesSheet_();
   const headers = getHeaderMap_(sheet);
@@ -4734,18 +4772,18 @@ function linkJobTypeToEmployee_(
   const empIdCol = getRequiredColumn_(
     headers,
     ["מזהה עובד", "ID עובד"],
-    sheetName
+    sheetName,
   );
   const empNameCol = getRequiredColumn_(headers, ["שם מלא"], sheetName);
   const jobTypeIdCol = getRequiredColumn_(
     headers,
     ["ID סוג עבודה", "ID סוגי עבודה"],
-    sheetName
+    sheetName,
   );
   const jobNameCol = getRequiredColumn_(
     headers,
     ["סוג עבודה", "סוגי עבודה"],
-    sheetName
+    sheetName,
   );
   const deptCol = getOptionalColumn_(headers, ["מחלקה", "מחלקות"]);
   const payIdCol = getOptionalColumn_(headers, [
@@ -4820,7 +4858,7 @@ function validateShiftsHeaders_(headers) {
         actual.length +
         ") than expected (" +
         expected.length +
-        ")"
+        ")",
     );
   }
 
@@ -4835,7 +4873,7 @@ function validateShiftsHeaders_(headers) {
           exp +
           "' got '" +
           act +
-          "'"
+          "'",
       );
     }
   }
@@ -4921,13 +4959,13 @@ function listShifts_(payload) {
   const employeeCol = getRequiredColumn_(
     headerMap,
     ["ID עובד", "מזהה עובד"],
-    "משמרות"
+    "משמרות",
   );
   const employeeNameCol = getOptionalColumn_(headerMap, ["שם מלא"]);
   const workDateCol = getRequiredColumn_(
     headerMap,
     ["תאריך", "תאריך משמרת"],
-    "משמרות"
+    "משמרות",
   );
   const startCol = getOptionalColumn_(headerMap, ["כניסה", "שעת התחלה"]);
   const endCol = getOptionalColumn_(headerMap, ["יציאה", "שעת סיום"]);
@@ -4941,7 +4979,7 @@ function listShifts_(payload) {
   const statusCol = getRequiredColumn_(
     headerMap,
     ["סטטוס משמרת", "סטטוס"],
-    "משמרות"
+    "משמרות",
   );
   const sourceCol = getOptionalColumn_(headerMap, ["מקור דיווחים"]);
 
@@ -5179,7 +5217,7 @@ function SHIFTS_getHourlyOverlaps(filter) {
       return Utilities.formatDate(
         dt,
         Session.getScriptTimeZone(),
-        "yyyy-MM-dd'T'HH:mm:ss"
+        "yyyy-MM-dd'T'HH:mm:ss",
       );
     } catch (_err) {
       return String(dt);
@@ -5390,7 +5428,7 @@ function onEdit(e) {
   const empCol = getRequiredColumn_(
     headerMap,
     ["ID עובד", "מזהה עובד"],
-    sheet.getName()
+    sheet.getName(),
   );
   const tsCol = getRequiredColumn_(headerMap, ["חותמת זמן"], sheet.getName());
   const fixDateCol = getOptionalColumn_(headerMap, ["תיקון תאריך"]);
@@ -5463,12 +5501,12 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
   const shiftIdCol = getRequiredColumn_(
     headerMap,
     ["ID משמרת", "ID דיווח"],
-    sheet.getName()
+    sheet.getName(),
   );
   const empCol = getRequiredColumn_(
     headerMap,
     ["ID עובד", "מזהה עובד"],
-    sheet.getName()
+    sheet.getName(),
   );
   const jobTypeIdCol = getOptionalColumn_(headerMap, [
     "ID סוג עבודה",
@@ -5504,7 +5542,12 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
     const timestampRaw = tsCol ? row[tsCol - 1] : "";
     const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
     const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
-    const eventMs = extractEventMs_(workDateRaw, timestampRaw, fixDateRaw, fixTimeRaw);
+    const eventMs = extractEventMs_(
+      workDateRaw,
+      timestampRaw,
+      fixDateRaw,
+      fixTimeRaw,
+    );
     if (!workDate) continue;
 
     const shiftId = stringValue(row[shiftIdCol - 1]);
@@ -5513,7 +5556,7 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
       jobTypeId,
       workDate,
       direction,
-      eventMs
+      eventMs,
     );
     const dupList = findDuplicateWorkLogs_(
       {
@@ -5525,7 +5568,7 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
         fixDate: fixDateRaw ? toIsoDate_(fixDateRaw) : "",
         fixTime: stringValue(fixTimeRaw),
       },
-      shiftId
+      shiftId,
     );
     if (dupList && dupList.length >= 2) {
       duplicatesByKey[key] = dupList;
@@ -5550,7 +5593,7 @@ function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
 function showDuplicateDialog_(duplicates) {
   try {
     const html = HtmlService.createHtmlOutput(
-      buildDuplicateDialogHtml_(duplicates)
+      buildDuplicateDialogHtml_(duplicates),
     )
       .setWidth(520)
       .setHeight(520);
@@ -5689,6 +5732,124 @@ function shiftReport_deleteDuplicatesFromUi(shiftIds) {
   return handleShiftReportDeleteByIds_({ shiftIds: shiftIds });
 }
 
+function shiftReport_showFaultsDialog() {
+  const ui = SpreadsheetApp.getUi();
+
+  let faults = [];
+  try {
+    faults = listFaultyWorkLogsForMenu_(30);
+  } catch (err) {
+    ui.alert("שגיאה בסריקת תקלות: " + (err && err.message ? err.message : err));
+    return;
+  }
+
+  if (!faults || !faults.length) {
+    ui.alert("אין תקלות להצגה.");
+    return;
+  }
+
+  const html = HtmlService.createHtmlOutput(buildFaultsDialogHtml_(faults))
+    .setWidth(720)
+    .setHeight(760);
+
+  ui.showModalDialog(html, "תיקון תקלות משמרות");
+}
+
+function shiftReport_handleFaultAction(fault, action) {
+  if (!fault || !fault.hash || !action) {
+    return { ok: false, error: "missing_fault_or_action" };
+  }
+
+  const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const headers = getHeaderMap_(sheet);
+  const shiftIdCol = getRequiredColumn_(
+    headers,
+    ["ID משמרת", "ID דיווח"],
+    sheet.getName(),
+  );
+  const empCol = getRequiredColumn_(
+    headers,
+    ["ID עובד", "מזהה עובד"],
+    sheet.getName(),
+  );
+  const jobTypeIdCol = getOptionalColumn_(headers, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
+  const directionCol = getOptionalColumn_(headers, [
+    "כניסה / יציאה",
+    "דיווח שעות",
+  ]);
+  const workDateCol = getOptionalColumn_(headers, [
+    "תאריך משמרת",
+    "תיקון תאריך",
+    "חותמת זמן",
+  ]);
+  const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
+
+  const values = sheet.getDataRange().getValues();
+  let targetRowIndex = null;
+
+  function rowMatchesHash(row, idx) {
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const rec = {
+      rowIndex: idx + 1,
+      shiftId: stringValue(row[shiftIdCol - 1]),
+      employeeId: stringValue(row[empCol - 1]),
+      jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
+      direction: directionCol ? stringValue(row[directionCol - 1]) : "",
+      workDate: toIsoDate_(workDateRaw) || "",
+      timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
+    };
+    const hash = buildFaultHash_(rec);
+    return hash === fault.hash;
+  }
+
+  for (let i = 1; i < values.length; i++) {
+    if (rowMatchesHash(values[i], i)) {
+      targetRowIndex = i + 1;
+      break;
+    }
+  }
+
+  if (!targetRowIndex) {
+    return { ok: false, error: "row_not_found" };
+  }
+
+  if (action === "assignShiftId") {
+    const newId = Utilities.getUuid();
+    sheet.getRange(targetRowIndex, shiftIdCol).setValue(newId);
+    setFaultAck_(fault.hash);
+    appendSystemLog_({
+      operation: "WORK_LOG_FAULT",
+      step: "assign-shiftId",
+      severity: "info",
+      errorCode: null,
+      details: { rowIndex: targetRowIndex, newId: newId },
+    });
+    return { ok: true, message: "נוצר ID חדש" };
+  }
+
+  if (action === "ack") {
+    setFaultAck_(fault.hash);
+    return { ok: true, message: "סומן כתקין" };
+  }
+
+  if (action === "deleteRow") {
+    sheet.deleteRow(targetRowIndex);
+    appendSystemLog_({
+      operation: "WORK_LOG_FAULT",
+      step: "delete-row",
+      severity: "warning",
+      errorCode: null,
+      details: { rowIndex: targetRowIndex },
+    });
+    return { ok: true, message: "השורה נמחקה" };
+  }
+
+  return { ok: false, error: "unknown_action" };
+}
+
 // --- Duplicate scan from menu ---
 
 function SHIFTS_showDuplicateCleanupDialog() {
@@ -5699,7 +5860,7 @@ function SHIFTS_showDuplicateCleanupDialog() {
     groups = listDuplicateWorkLogGroupsForMenu_(30);
   } catch (err) {
     ui.alert(
-      "שגיאה בסריקת כפילויות: " + (err && err.message ? err.message : err)
+      "שגיאה בסריקת כפילויות: " + (err && err.message ? err.message : err),
     );
     return;
   }
@@ -5710,7 +5871,7 @@ function SHIFTS_showDuplicateCleanupDialog() {
   }
 
   const html = HtmlService.createHtmlOutput(
-    buildDuplicateCleanupDialogHtml_(groups)
+    buildDuplicateCleanupDialogHtml_(groups),
   )
     .setWidth(680)
     .setHeight(760);
@@ -5725,12 +5886,12 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
   const shiftIdCol = getRequiredColumn_(
     headers,
     ["ID משמרת", "ID דיווח"],
-    sheet.getName()
+    sheet.getName(),
   );
   const empCol = getRequiredColumn_(
     headers,
     ["ID עובד", "מזהה עובד"],
-    sheet.getName()
+    sheet.getName(),
   );
   const jobTypeIdCol = getOptionalColumn_(headers, [
     "ID סוג עבודה",
@@ -5770,7 +5931,12 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
       fixDate: fixDateCol ? toIsoDate_(fixDateRaw) : "",
       fixTime: fixTimeCol ? stringValue(fixTimeRaw) : "",
       timestamp: tsCol ? stringValue(timestampRaw) : "",
-      eventMs: extractEventMs_(workDateRaw, timestampRaw, fixDateRaw, fixTimeRaw),
+      eventMs: extractEventMs_(
+        workDateRaw,
+        timestampRaw,
+        fixDateRaw,
+        fixTimeRaw,
+      ),
       rowIndex: rowIndex,
     };
   }
@@ -5836,6 +6002,234 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
     return groups.slice(0, maxGroups);
   }
   return groups;
+}
+
+// --- Fault scan from menu ---
+
+function listFaultyWorkLogsForMenu_(maxRows) {
+  const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const headers = getHeaderMap_(sheet);
+
+  const shiftIdCol = getRequiredColumn_(
+    headers,
+    ["ID משמרת", "ID דיווח"],
+    sheet.getName(),
+  );
+  const empCol = getRequiredColumn_(
+    headers,
+    ["ID עובד", "מזהה עובד"],
+    sheet.getName(),
+  );
+  const jobTypeIdCol = getOptionalColumn_(headers, [
+    "ID סוג עבודה",
+    "ID סוגי עבודה",
+  ]);
+  const jobNameCol = getOptionalColumn_(headers, ["סוג עבודה", "סוגי עבודה"]);
+  const deptCol = getOptionalColumn_(headers, ["מחלקה", "מחלקות"]);
+  const directionCol = getOptionalColumn_(headers, [
+    "כניסה / יציאה",
+    "דיווח שעות",
+  ]);
+  const workDateCol = getOptionalColumn_(headers, [
+    "תאריך משמרת",
+    "תיקון תאריך",
+    "חותמת זמן",
+  ]);
+  const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
+
+  const values = sheet.getDataRange().getValues();
+  if (values.length <= 1) return [];
+
+  const ack = getFaultAckMap_();
+  const faults = [];
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i];
+    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const rec = {
+      rowIndex: i + 1,
+      shiftId: stringValue(row[shiftIdCol - 1]),
+      employeeId: stringValue(row[empCol - 1]),
+      jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
+      jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
+      department: deptCol ? stringValue(row[deptCol - 1]) : "",
+      direction: directionCol ? stringValue(row[directionCol - 1]) : "",
+      workDate: toIsoDate_(workDateRaw) || "",
+      timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
+    };
+
+    const hash = buildFaultHash_(rec);
+    if (ack[hash]) continue;
+
+    const issues = [];
+    if (!rec.shiftId) issues.push("missing_shiftId");
+    if (!rec.employeeId) issues.push("missing_employeeId");
+    if (jobTypeIdCol && !rec.jobTypeId) issues.push("missing_jobTypeId");
+    if (!rec.workDate) issues.push("missing_workDate");
+
+    if (!issues.length) continue;
+
+    issues.forEach(function (issue) {
+      faults.push({
+        hash: hash,
+        issue: issue,
+        rowIndex: rec.rowIndex,
+        shiftId: rec.shiftId,
+        employeeId: rec.employeeId,
+        jobTypeId: rec.jobTypeId,
+        jobName: rec.jobName,
+        department: rec.department,
+        direction: rec.direction,
+        workDate: rec.workDate,
+        timestamp: rec.timestamp,
+      });
+    });
+
+    if (maxRows && faults.length >= maxRows) break;
+  }
+
+  return faults;
+}
+
+function buildFaultsDialogHtml_(faults) {
+  const safe = JSON.stringify(faults || []).replace(/</g, "\\u003c");
+  return `
+<html dir="rtl">
+<head>
+  <style>
+    body{font-family:Arial,sans-serif;background:#f5f6fa;margin:0;padding:16px;}
+    .card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:16px;}
+    .item{border:1px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:10px;}
+    .title{font-weight:700;margin:0 0 6px;font-size:15px;}
+    .meta{font-size:12px;color:#555;line-height:1.4;}
+    .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+    .chip{padding:4px 8px;border-radius:6px;font-size:12px;background:#eef2ff;color:#1a237e;}
+    .chip.danger{background:#ffebee;color:#b00020;}
+    .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+    .btn{border:none;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:12px;}
+    .ghost{border:1px solid #ccc;background:#fff;color:#333;}
+    .primary{background:#3949ab;color:#fff;}
+    .danger{background:#d32f2f;color:#fff;}
+    #status{margin-top:10px;font-weight:700;color:#1b5e20;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h3 style="margin:0 0 6px;">תקלות בדיווחי משמרות</h3>
+    <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו פעולה לכל תקלה: תיקון אוטומטי כשאפשר, סימון כתקין (לא נציג שוב), או מחיקה.</p>
+    <div id="list"></div>
+    <div id="status"></div>
+    <div style="display:flex;gap:10px;margin-top:12px;">
+      <button class="btn ghost" id="closeBtn">סגירה</button>
+      <button class="btn primary" id="refreshBtn">רענון</button>
+    </div>
+  </div>
+
+  <script>
+    const faults = ${safe};
+    const listEl = document.getElementById('list');
+    const statusEl = document.getElementById('status');
+    document.getElementById('closeBtn').onclick = () => google.script.host.close();
+    document.getElementById('refreshBtn').onclick = () => google.script.host.close();
+
+    const issueText = {
+      missing_shiftId: 'חסר ID משמרת',
+      missing_employeeId: 'חסר מזהה עובד',
+      missing_jobTypeId: 'חסר מזהה סוג עבודה',
+      missing_workDate: 'חסר תאריך משמרת',
+    };
+
+    function render() {
+      listEl.innerHTML = '';
+      faults.forEach((f, idx) => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = 'תקלה #' + (idx + 1) + ' · ' + (issueText[f.issue] || f.issue);
+        div.appendChild(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = [f.workDate || 'תאריך חסר', f.direction || '', f.jobName || 'ללא שם עבודה', f.department || ''].filter(Boolean).join(' · ');
+        div.appendChild(meta);
+
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        const mk = (txt, danger) => { const c = document.createElement('div'); c.className = 'chip' + (danger ? ' danger' : ''); c.textContent = txt; return c; };
+        chips.appendChild(mk('Row ' + f.rowIndex));
+        if (f.shiftId) chips.appendChild(mk('shiftId: ' + f.shiftId)); else chips.appendChild(mk('shiftId חסר', true));
+        if (f.employeeId) chips.appendChild(mk('עובד: ' + f.employeeId)); else chips.appendChild(mk('מזהה עובד חסר', true));
+        if (f.jobTypeId) chips.appendChild(mk('סוג עבודה: ' + f.jobTypeId)); else chips.appendChild(mk('סוג עבודה חסר', true));
+        div.appendChild(chips);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        if (f.issue === 'missing_shiftId') {
+          const fix = document.createElement('button');
+          fix.className = 'btn primary';
+          fix.textContent = 'צור ID משמרת';
+          fix.onclick = () => act(f, 'assignShiftId');
+          actions.appendChild(fix);
+        }
+
+        const ack = document.createElement('button');
+        ack.className = 'btn ghost';
+        ack.textContent = 'סמן כתקין';
+        ack.onclick = () => act(f, 'ack');
+        actions.appendChild(ack);
+
+        const del = document.createElement('button');
+        del.className = 'btn danger';
+        del.textContent = 'מחק שורה';
+        del.onclick = () => act(f, 'deleteRow');
+        actions.appendChild(del);
+
+        const skip = document.createElement('button');
+        skip.className = 'btn ghost';
+        skip.textContent = 'דלג';
+        skip.onclick = () => removeFault(f.hash, f.issue);
+        actions.appendChild(skip);
+
+        div.appendChild(actions);
+        listEl.appendChild(div);
+      });
+      if (!faults.length) {
+        listEl.innerHTML = '<div class="meta">אין תקלות להצגה.</div>';
+      }
+    }
+
+    function removeFault(hash, issue) {
+      const idx = faults.findIndex((f) => f.hash === hash && f.issue === issue);
+      if (idx >= 0) faults.splice(idx, 1);
+      render();
+    }
+
+    function act(fault, action) {
+      statusEl.style.color = '#1b5e20';
+      statusEl.textContent = 'מבצע פעולה...';
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (res && res.ok) {
+            statusEl.style.color = '#1b5e20';
+            statusEl.textContent = res.message || 'בוצע';
+            removeFault(fault.hash, fault.issue);
+          } else {
+            statusEl.style.color = '#b00020';
+            statusEl.textContent = (res && res.error) || 'שגיאה בפעולה';
+          }
+        })
+        .withFailureHandler((err) => {
+          statusEl.style.color = '#b00020';
+          statusEl.textContent = err && err.message ? err.message : 'שגיאה בפעולה';
+        })
+        .shiftReport_handleFaultAction({ hash: fault.hash, issue: fault.issue, rowIndex: fault.rowIndex }, action);
+    }
+
+    render();
+  </script>
+</body>
+</html>`;
 }
 
 function buildDuplicateCleanupDialogHtml_(groups) {
@@ -6134,12 +6528,12 @@ function appendLegacyBoulderMenuItems_(menu) {
   maybeAddMenuItem_(
     menu,
     "בדיקת באקפיל IDs (DRY_RUN)",
-    "EMP_menuBackfillIdsDryRun"
+    "EMP_menuBackfillIdsDryRun",
   );
   maybeAddMenuItem_(
     menu,
     "באקפיל IDs לכל העובדים (EXECUTE)",
-    "EMP_menuBackfillIdsExecute"
+    "EMP_menuBackfillIdsExecute",
   );
 }
 
@@ -6236,12 +6630,12 @@ function writeLeaderboardRows_(sheet, headers, rows) {
 function listGameLeaderboard_(payload) {
   Logger.log(
     "LEADERBOARD_LIST called with payload: %s",
-    JSON.stringify(payload)
+    JSON.stringify(payload),
   );
   const logger = ensureModuleLoggerDefined_("LEADERBOARD_LIST");
   const meta = ensureLeaderboardSheet_();
   const rows = sortLeaderboardRows_(
-    readLeaderboardRows_(meta.sheet, meta.headers)
+    readLeaderboardRows_(meta.sheet, meta.headers),
   );
   const top5 = rows.slice(0, 5).map(function (row, idx) {
     return {
@@ -6262,7 +6656,7 @@ function listGameLeaderboard_(payload) {
 function submitGameLeaderboard_(payload) {
   Logger.log(
     "LEADERBOARD_SAVE called with payload: %s",
-    JSON.stringify(payload)
+    JSON.stringify(payload),
   );
   const logger = ensureModuleLoggerDefined_("LEADERBOARD_SAVE");
   const employeeId = stringValue(payload.employeeId);
@@ -6288,7 +6682,7 @@ function submitGameLeaderboard_(payload) {
 
   const meta = ensureLeaderboardSheet_();
   const existing = sortLeaderboardRows_(
-    readLeaderboardRows_(meta.sheet, meta.headers)
+    readLeaderboardRows_(meta.sheet, meta.headers),
   );
 
   let changed = false;
