@@ -60,8 +60,8 @@ const EMAIL_HEADER_CANDIDATES = [
 
 const HEADER_KEY_MAP = {
   "ID משמרת": "shiftId",
-  "ID דיווח": "shiftId",
-  "Shift ID": "shiftId",
+  "ID דיווח": "reportId",
+  "Shift ID": "reportId",
   "Request ID": "id",
   requestId: "id",
   "ID בקשה": "id",
@@ -202,7 +202,7 @@ const SHEET_CONTRACT_SPEC = [
     key: "WorkLogs",
     possibleNames: [WORK_LOGS_SHEET_NAME],
     requiredColumnsCritical: [
-      ["ID משמרת", "ID דיווח", "Shift ID"],
+      ["ID דיווח", "Shift ID"],
       ["חותמת זמן", "timestamp"],
       ["ID עובד", "מזהה עובד", "Employee ID"],
       ["שם מלא", "name"],
@@ -2447,9 +2447,9 @@ function listWorkLogsByEmployee_(payload, logger) {
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
-  const idCol = getRequiredColumn_(
+  const reportIdCol = getRequiredColumn_(
     headerMap,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheetName,
   );
   const tsCol = getRequiredColumn_(headerMap, ["חותמת זמן"], sheetName);
@@ -2489,7 +2489,7 @@ function listWorkLogsByEmployee_(payload, logger) {
     const row = values[i];
     if (stringValue(row[empIdCol - 1]) !== employeeId) continue;
     logs.push({
-      shiftId: stringValue(row[idCol - 1]),
+      shiftId: stringValue(row[reportIdCol - 1]),
       timestamp: stringValue(row[tsCol - 1]),
       employeeId: stringValue(row[empIdCol - 1]),
       employeeName: stringValue(row[empNameCol - 1]),
@@ -3965,7 +3965,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
   var headerStartMs = new Date().getTime();
   const headers = getHeaderMap_(logsSheet);
   const logsSheetName = logsSheet.getName();
-  getRequiredColumn_(headers, ["ID משמרת", "ID דיווח"], logsSheetName);
+  getRequiredColumn_(headers, ["ID דיווח", "Shift ID"], logsSheetName);
   getRequiredColumn_(headers, ["חותמת זמן"], logsSheetName);
   getRequiredColumn_(headers, ["ID עובד", "מזהה עובד"], logsSheetName);
   getRequiredColumn_(headers, ["שם מלא"], logsSheetName);
@@ -3989,6 +3989,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
 
   const row = buildRowFromHeaders_(headers, {
     note: stringValue(meta.note),
+    reportId: normalized.shiftId,
     shiftId: normalized.shiftId,
     timestamp: normalized.timestamp,
     employeeId: meta.employeeId,
@@ -4080,9 +4081,9 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
 function findDuplicateWorkLogs_(criteria, includeShiftId) {
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
   const headers = getHeaderMap_(sheet);
-  const shiftIdCol = getRequiredColumn_(
+  const reportIdCol = getRequiredColumn_(
     headers,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheet.getName(),
   );
   const empCol = getRequiredColumn_(
@@ -4433,9 +4434,9 @@ function handleShiftReportDeleteByIds_(payload, logger) {
 
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
   const headers = getHeaderMap_(sheet);
-  const shiftIdCol = getRequiredColumn_(
+  const reportIdCol = getRequiredColumn_(
     headers,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheet.getName(),
   );
   const values = sheet.getDataRange().getValues();
@@ -4447,7 +4448,7 @@ function handleShiftReportDeleteByIds_(payload, logger) {
 
   const rowsToDelete = [];
   for (let i = 1; i < values.length; i++) {
-    const rowShiftId = stringValue(values[i][shiftIdCol - 1]);
+    const rowShiftId = stringValue(values[i][reportIdCol - 1]);
     if (target[rowShiftId]) {
       rowsToDelete.push(i + 1); // 1-based row index
     }
@@ -5501,7 +5502,7 @@ function onEdit(e) {
 function checkAndPromptDuplicateOnEdit_(sheet, headerMap, startRow, numRows) {
   const shiftIdCol = getRequiredColumn_(
     headerMap,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheet.getName(),
   );
   const empCol = getRequiredColumn_(
@@ -5765,7 +5766,7 @@ function shiftReport_handleFaultAction(fault, action) {
   const headers = getHeaderMap_(sheet);
   const shiftIdCol = getRequiredColumn_(
     headers,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheet.getName(),
   );
   const empCol = getRequiredColumn_(
@@ -5773,10 +5774,12 @@ function shiftReport_handleFaultAction(fault, action) {
     ["ID עובד", "מזהה עובד"],
     sheet.getName(),
   );
+  const empNameCol = getOptionalColumn_(headers, ["שם מלא", "שם", "עובד"]);
   const jobTypeIdCol = getOptionalColumn_(headers, [
     "ID סוג עבודה",
     "ID סוגי עבודה",
   ]);
+  const jobNameCol = getOptionalColumn_(headers, ["סוג עבודה", "סוגי עבודה"]);
   const directionCol = getOptionalColumn_(headers, [
     "כניסה / יציאה",
     "דיווח שעות",
@@ -5842,6 +5845,7 @@ function shiftReport_handleFaultAction(fault, action) {
 
     setIf(empCol, "employeeId", stringValue);
     setIf(jobTypeIdCol, "jobTypeId", stringValue);
+    setIf(jobNameCol, "jobName", stringValue);
     setIf(directionCol, "direction", stringValue);
     setIf(workDateCol, "workDate", toIsoDate_);
     setIf(tsCol, "timestamp", stringValue);
@@ -5936,7 +5940,7 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
 
   const shiftIdCol = getRequiredColumn_(
     headers,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheet.getName(),
   );
   const empCol = getRequiredColumn_(
@@ -5944,6 +5948,7 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
     ["ID עובד", "מזהה עובד"],
     sheet.getName(),
   );
+  const empNameCol = getOptionalColumn_(headers, ["שם מלא", "שם", "עובד"]);
   const jobTypeIdCol = getOptionalColumn_(headers, [
     "ID סוג עבודה",
     "ID סוגי עבודה",
@@ -6065,7 +6070,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
 
   const shiftIdCol = getRequiredColumn_(
     headers,
-    ["ID משמרת", "ID דיווח"],
+    ["ID דיווח", "Shift ID"],
     sheet.getName(),
   );
   const empCol = getRequiredColumn_(
@@ -6073,6 +6078,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
     ["ID עובד", "מזהה עובד"],
     sheet.getName(),
   );
+  const empNameCol = getOptionalColumn_(headers, ["שם מלא", "שם", "עובד"]);
   const jobTypeIdCol = getOptionalColumn_(headers, [
     "ID סוג עבודה",
     "ID סוגי עבודה",
@@ -6102,6 +6108,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       rowIndex: i + 1,
       shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: stringValue(row[empCol - 1]),
+      employeeName: empNameCol ? stringValue(row[empNameCol - 1]) : "",
       jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
@@ -6128,6 +6135,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         rowIndex: rec.rowIndex,
         shiftId: "",
         employeeId: "",
+        employeeName: rec.employeeName,
         jobTypeId: rec.jobTypeId,
         jobName: rec.jobName,
         department: rec.department,
@@ -6154,12 +6162,15 @@ function buildFaultsDialogHtml_(faults) {
     body{font-family:Arial,sans-serif;background:#f5f6fa;margin:0;padding:16px;}
     .card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:16px;}
     .item{border:1px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:10px;}
-    .title{font-weight:700;margin:0 0 4px;font-size:15px;}
+    .title{font-weight:700;margin:0 0 4px;font-size:15px;color:#111;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+    .title .dot{color:#9aa0b5;font-weight:400;}
     .meta{font-size:12px;color:#555;line-height:1.6;}
-    .field{display:grid;grid-template-columns:110px 1fr;gap:6px 8px;font-size:12px;color:#333;align-items:center;margin-top:8px;}
+    .field{display:grid;grid-template-columns:120px 1fr;gap:8px 10px;font-size:12px;color:#333;align-items:center;margin-top:8px;}
     .field label{color:#444;font-weight:700;}
-    .field input, .field select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:12px;}
+    .field input,.field select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:12px;}
+    .field input[disabled]{background:#f3f4f6;color:#666;cursor:not-allowed;}
     .pill{padding:4px 8px;border-radius:6px;font-size:12px;background:#ffebee;color:#b00020;display:inline-block;}
+    .reason{margin-top:10px;font-size:12px;color:#c62828;font-weight:700;}
     .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
     .btn{border:none;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:12px;}
     .ghost{border:1px solid #ccc;background:#fff;color:#333;}
@@ -6170,7 +6181,7 @@ function buildFaultsDialogHtml_(faults) {
 </head>
 <body>
   <div class="card">
-    <h3 style="margin:0 0 6px;">תקלות בדיווחי שעות</h3>
+    <h3 style="margin:0 0 6px;">תקלות דיווחי עובדים</h3>
     <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו פעולה לכל תקלה: תיקון אוטומטי כשאפשר, סימון כתקין (לא נציג שוב), או מחיקה. ניתן לערוך שדות ולתקן לפני סימון.</p>
     <div id="list"></div>
     <div id="status"></div>
@@ -6187,6 +6198,7 @@ function buildFaultsDialogHtml_(faults) {
     document.getElementById('closeBtn').onclick = () => google.script.host.close();
     document.getElementById('refreshBtn').onclick = () => google.script.host.close();
 
+    const separator = ' \u00b7 ';
     const issueText = {
       missing_shiftId: 'חסר מזהה דיווח',
       missing_employeeId: 'חסר עובד',
@@ -6194,19 +6206,69 @@ function buildFaultsDialogHtml_(faults) {
       missing_workDate: 'חסר תאריך דיווח',
     };
 
+    function extractDate(val) {
+      if (!val) return '';
+      const match = String(val).match(/(\d{4}-\d{2}-\d{2})/);
+      return match && match[1] ? match[1] : '';
+    }
+
+    function extractTime(val) {
+      if (!val) return '';
+      const raw = String(val);
+      const iso = raw.match(/T(\d{2}:\d{2})/);
+      if (iso && iso[1]) return iso[1];
+      const hhmm = raw.match(/\b(\d{1,2}:\d{2})\b/);
+      if (hhmm && hhmm[1]) {
+        const parts = hhmm[1].split(':');
+        return parts[0].padStart(2, '0') + ':' + parts[1];
+      }
+      return '';
+    }
+
+    function updateTimestampFromParts(fault, dateVal, timeVal) {
+      const datePart = dateVal || extractDate(fault.timestamp);
+      const timePart = timeVal || extractTime(fault.timestamp);
+      if (datePart && timePart) {
+        fault.timestamp = datePart + 'T' + timePart;
+      } else if (datePart) {
+        fault.timestamp = datePart;
+      } else if (timePart) {
+        fault.timestamp = timePart;
+      }
+    }
+
+    function formatTitle(fault) {
+      const employee = fault.employeeName || fault.employeeId || 'עובד לא מזוהה';
+      const role = fault.jobName || 'תפקיד חסר';
+      const date = fault.workDate || extractDate(fault.timestamp) || 'תאריך חסר';
+      return [employee, role, date].filter(Boolean).join(separator);
+    }
+
+    function buildMeta(fault) {
+      const time = extractTime(fault.timestamp);
+      return [fault.department || '', fault.direction || '', time || '', fault.payType || '']
+        .filter(Boolean)
+        .join(separator);
+    }
+
     function render() {
       listEl.innerHTML = '';
       faults.forEach((f, idx) => {
+        const currentDate = extractDate(f.workDate || f.timestamp);
+        const currentTime = extractTime(f.timestamp);
+        if (currentDate && !f.workDate) f.workDate = currentDate;
+        if (currentTime && !f.fixTime) f.fixTime = currentTime;
+
         const div = document.createElement('div');
         div.className = 'item';
         const title = document.createElement('div');
         title.className = 'title';
-        title.textContent = 'תקלה #' + (idx + 1) + ' · ' + (issueText[f.issue] || f.issue);
+        title.textContent = formatTitle(f);
         div.appendChild(title);
 
         const meta = document.createElement('div');
         meta.className = 'meta';
-        meta.textContent = [f.workDate || 'תאריך חסר', f.direction || '', f.jobName || 'ללא שם עבודה', f.department || ''].filter(Boolean).join(' · ');
+        meta.textContent = buildMeta(f);
         div.appendChild(meta);
 
         const pill = document.createElement('div');
@@ -6217,23 +6279,84 @@ function buildFaultsDialogHtml_(faults) {
         const form = document.createElement('div');
         form.className = 'field';
 
-        const addField = (label, val, key, placeholder='') => {
-          const lab = document.createElement('label'); lab.textContent = label;
-          const input = document.createElement('input');
-          input.value = val || '';
-          input.placeholder = placeholder;
-          input.oninput = () => { f[key] = input.value; };
-          form.appendChild(lab); form.appendChild(input);
+        const addRow = (label, control) => {
+          const lab = document.createElement('label');
+          lab.textContent = label;
+          form.appendChild(lab);
+          form.appendChild(control);
         };
 
-        addField('עובד', '', 'employeeId', 'מזהה עובד');
-        addField('סוג עבודה', f.jobName || '', 'jobName', 'שם סוג עבודה');
-        addField('תאריך', f.workDate || '', 'workDate', 'YYYY-MM-DD');
-        addField('אופן תשלום', f.payType || '', 'payType', 'לדוגמה: שעתי/יומי/יחידה');
-        addField('כיוון', f.direction || '', 'direction', 'כניסה/יציאה');
-        addField('הערה', f.note || '', 'note', 'הערות');
+        const jobInput = document.createElement('input');
+        jobInput.value = f.jobName || '';
+        jobInput.placeholder = 'שם תפקיד';
+        jobInput.oninput = () => {
+          f.jobName = jobInput.value;
+          title.textContent = formatTitle(f);
+        };
+        addRow('תפקיד', jobInput);
+
+        const payInput = document.createElement('input');
+        payInput.value = f.payType || '';
+        payInput.disabled = true;
+        payInput.placeholder = 'לא לשינוי ממסך זה';
+        addRow('אופן תשלום', payInput);
+
+        const timeInput = document.createElement('input');
+        timeInput.type = 'time';
+        timeInput.value = f.fixTime || '';
+        timeInput.oninput = () => {
+          f.fixTime = timeInput.value;
+          updateTimestampFromParts(f, f.workDate, timeInput.value);
+        };
+
+        const dateInput = document.createElement('input');
+        dateInput.type = 'date';
+        dateInput.value = f.workDate || '';
+        dateInput.oninput = () => {
+          f.workDate = dateInput.value;
+          updateTimestampFromParts(f, dateInput.value, timeInput.value);
+          title.textContent = formatTitle(f);
+        };
+
+        addRow('תאריך', dateInput);
+        addRow('שעה', timeInput);
+
+        const directionSelect = document.createElement('select');
+        const directions = [
+          { value: '', label: 'בחר כיוון' },
+          { value: 'כניסה', label: 'כניסה' },
+          { value: 'יציאה', label: 'יציאה' },
+        ];
+        if (f.direction && !directions.find((d) => d.value === f.direction)) {
+          directions.splice(1, 0, { value: f.direction, label: f.direction });
+        }
+        directions.forEach((opt) => {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.label;
+          directionSelect.appendChild(option);
+        });
+        directionSelect.value = f.direction || '';
+        directionSelect.onchange = () => {
+          f.direction = directionSelect.value;
+          meta.textContent = buildMeta(f);
+        };
+        addRow('כיוון', directionSelect);
+
+        const noteInput = document.createElement('input');
+        noteInput.value = f.note || '';
+        noteInput.placeholder = 'הוספת הערה';
+        noteInput.oninput = () => {
+          f.note = noteInput.value;
+        };
+        addRow('הערה', noteInput);
 
         div.appendChild(form);
+
+        const reason = document.createElement('div');
+        reason.className = 'reason';
+        reason.textContent = 'סיבת התקלה: ' + (issueText[f.issue] || f.issue);
+        div.appendChild(reason);
 
         const actions = document.createElement('div');
         actions.className = 'actions';

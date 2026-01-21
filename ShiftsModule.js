@@ -34,7 +34,7 @@ var BONUSES = BONUSES || {};
     var sh = ss_().getSheetByName(RAW_WORK_LOG_SHEET_NAME);
     if (!sh)
       throw new Error(
-        'לא נמצאה כרטיסייה בשם "' + RAW_WORK_LOG_SHEET_NAME + '"'
+        'לא נמצאה כרטיסייה בשם "' + RAW_WORK_LOG_SHEET_NAME + '"',
       );
     return sh;
   }
@@ -112,7 +112,7 @@ var BONUSES = BONUSES || {};
       map: map,
       cols: {
         notes: map[norm_("notes")] || map[norm_("הערות")],
-        shiftId: map[norm_("ID דיווח")] || map[norm_("ID משמרת")],
+        reportId: map[norm_("ID דיווח")] || map[norm_("Shift ID")],
         timestamp: map[norm_("חותמת זמן")],
         employeeId: map[norm_("ID עובד")] || map[norm_("מזהה עובד")],
         employeeName: map[norm_("שם מלא")],
@@ -156,7 +156,7 @@ var BONUSES = BONUSES || {};
     employeeId,
     jobTypeId,
     fromIso,
-    toIso
+    toIso,
   ) {
     var layout = buildWorkLogLayout_();
     var sheet = layout.sheet;
@@ -168,7 +168,7 @@ var BONUSES = BONUSES || {};
         CONFIG.HEADER_ROW + 1,
         1,
         lastRow - CONFIG.HEADER_ROW,
-        sheet.getLastColumn()
+        sheet.getLastColumn(),
       )
       .getValues();
     var out = [];
@@ -184,7 +184,7 @@ var BONUSES = BONUSES || {};
       var workDateTime = toWorkDateTime_(
         cols.timestamp ? row[cols.timestamp - 1] : "",
         cols.fixDate ? row[cols.fixDate - 1] : "",
-        cols.fixTime ? row[cols.fixTime - 1] : ""
+        cols.fixTime ? row[cols.fixTime - 1] : "",
       );
       if (!workDateTime) continue;
 
@@ -193,8 +193,8 @@ var BONUSES = BONUSES || {};
       if (toIso && isoDate && isoDate > toIso) continue;
 
       out.push({
-        reportId: cols.shiftId
-          ? String(row[cols.shiftId - 1] || "").trim()
+        reportId: cols.reportId
+          ? String(row[cols.reportId - 1] || "").trim()
           : "",
         employeeId: empIdVal,
         employeeName: cols.employeeName
@@ -208,7 +208,7 @@ var BONUSES = BONUSES || {};
           ? String(row[cols.department - 1] || "").trim()
           : "",
         direction: normalizeDirection_(
-          cols.direction ? row[cols.direction - 1] : ""
+          cols.direction ? row[cols.direction - 1] : "",
         ),
         workDateTime: workDateTime,
         workDateIso: isoDate,
@@ -656,8 +656,8 @@ var BONUSES = BONUSES || {};
         layout.notesPrimary !== undefined && layout.notesPrimary !== null
           ? row[layout.notesPrimary]
           : layout.notesLegacy !== undefined && layout.notesLegacy !== null
-          ? row[layout.notesLegacy]
-          : ""
+            ? row[layout.notesLegacy]
+            : "",
       ),
       isManualEdited:
         layout.manualEdited !== undefined && layout.manualEdited !== null
@@ -692,7 +692,7 @@ var BONUSES = BONUSES || {};
     employeeId,
     jobTypeId,
     fromDate,
-    toDate
+    toDate,
   ) {
     var fromIso = toIsoDate_(fromDate || "");
     var toIso = toIsoDate_(toDate || "");
@@ -700,7 +700,7 @@ var BONUSES = BONUSES || {};
       employeeId,
       jobTypeId,
       fromIso,
-      toIso
+      toIso,
     );
 
     var shifts = [];
@@ -800,7 +800,7 @@ var BONUSES = BONUSES || {};
             status: "MISSING_EXIT",
             note: appendNote_(
               "issue: second IN without matching OUT (missing exit)",
-              ""
+              "",
             ),
             sourceReportIds: [openIn.reportId, ev.reportId],
           });
@@ -845,7 +845,7 @@ var BONUSES = BONUSES || {};
             status: "MISSING_ENTRY",
             note: appendNote_(
               "issue: OUT without matching IN (missing entry)",
-              ""
+              "",
             ),
             sourceReportIds: [ev.reportId],
           });
@@ -866,7 +866,7 @@ var BONUSES = BONUSES || {};
         status: "MISSING_EXIT",
         note: appendNote_(
           "issue: shift still open at end of range (missing exit)",
-          ""
+          "",
         ),
         sourceReportIds: [openIn.reportId],
       });
@@ -899,11 +899,11 @@ var BONUSES = BONUSES || {};
           sB.status = sB.status === "OK" ? "CONFLICT" : sB.status;
           sA.note = appendNote_(
             sA.note,
-            "issue: overlap with another shift for this employee/job"
+            "issue: overlap with another shift for this employee/job",
           );
           sB.note = appendNote_(
             sB.note,
-            "issue: overlap with another shift for this employee/job"
+            "issue: overlap with another shift for this employee/job",
           );
         }
       }
@@ -928,7 +928,7 @@ var BONUSES = BONUSES || {};
     employeeId,
     jobTypeId,
     fromDate,
-    toDate
+    toDate,
   ) {
     var logger = getLogger_("SHIFTS_UPSERT_RANGE");
     var startMs = new Date().getTime();
@@ -991,7 +991,7 @@ var BONUSES = BONUSES || {};
       employeeId,
       jobTypeId,
       fromDate,
-      toDate
+      toDate,
     );
     if (!shifts || !shifts.length) return;
 
@@ -1108,7 +1108,7 @@ var BONUSES = BONUSES || {};
       var workDt = toWorkDateTime_(
         cols.timestamp ? row[cols.timestamp - 1] : "",
         cols.fixDate ? row[cols.fixDate - 1] : "",
-        cols.fixTime ? row[cols.fixTime - 1] : ""
+        cols.fixTime ? row[cols.fixTime - 1] : "",
       );
       var rowDate = toDateOnly_(workDt);
       if (!rowDate) continue;
@@ -1134,7 +1134,7 @@ var BONUSES = BONUSES || {};
           totalPairs +
           " limit=" +
           MAX_YESTERDAY_REBUILD_PAIRS +
-          " — skipping upsert"
+          " — skipping upsert",
       );
       return;
     }
@@ -1147,7 +1147,7 @@ var BONUSES = BONUSES || {};
           p.employeeId,
           p.jobTypeId,
           fromDate,
-          toDate
+          toDate,
         );
       } catch (e) {
         Logger.log(
@@ -1156,7 +1156,7 @@ var BONUSES = BONUSES || {};
             " job=" +
             p.jobTypeId +
             ": " +
-            e
+            e,
         );
         errorCount += 1;
       }
@@ -1168,7 +1168,7 @@ var BONUSES = BONUSES || {};
         " pairs=" +
         totalPairs +
         " errors=" +
-        errorCount
+        errorCount,
     );
   }
 
@@ -1247,7 +1247,7 @@ var BONUSES = BONUSES || {};
         CONFIG.HEADER_ROW + 1,
         1,
         lastRow - CONFIG.HEADER_ROW,
-        layoutInfo.lastCol
+        layoutInfo.lastCol,
       )
       .getValues();
 
@@ -1303,7 +1303,7 @@ var BONUSES = BONUSES || {};
       CONFIG.HEADER_ROW + 1,
       targetCol,
       lastRow - CONFIG.HEADER_ROW,
-      1
+      1,
     );
     var finder = range.createTextFinder(String(shiftId)).matchEntireCell(true);
     var found = finder ? finder.findNext() : null;
@@ -1395,7 +1395,7 @@ var BONUSES = BONUSES || {};
         sheet,
         layoutInfo.map,
         ["bonusIds", "manualEdited", "lastUpdatedBySidebar", "lastUpdatedAt"],
-        WRITE_ALLOWED_COLS
+        WRITE_ALLOWED_COLS,
       );
       layoutInfo = getLayout_(sheet);
       var layout = layoutInfo.layout;
@@ -1484,7 +1484,7 @@ var BONUSES = BONUSES || {};
         headerRow + 1,
         shiftIdCol + 1,
         lastRow - headerRow,
-        1
+        1,
       );
       var colValues = colRange.getValues();
       var rowIndex = null;
@@ -1554,7 +1554,7 @@ var BONUSES = BONUSES || {};
             before: beforeSnapshot,
             after: afterSnapshot,
           },
-          "SHIFT_UPDATE_APPLIED"
+          "SHIFT_UPDATE_APPLIED",
         );
       }
 
@@ -1591,7 +1591,7 @@ var BONUSES = BONUSES || {};
           { error: String(err) },
           "warn",
           "SHIFTS_LIST_FAIL",
-          err
+          err,
         );
       }
       Logger.log("SHIFTS.list error: " + err);
@@ -1620,7 +1620,7 @@ var BONUSES = BONUSES || {};
           { shiftId: shiftId || "", error: String(err) },
           "warn",
           "SHIFTS_GET_FAIL",
-          err
+          err,
         );
       }
       Logger.log("SHIFTS.get error: " + err);
@@ -1649,7 +1649,7 @@ var BONUSES = BONUSES || {};
           { error: String(err) },
           "warn",
           "SHIFTS_GET_SELECTED_FAIL",
-          err
+          err,
         );
       }
       Logger.log("SHIFTS.getSelectedRef error: " + err);
@@ -1679,7 +1679,7 @@ var BONUSES = BONUSES || {};
           { shiftId: shiftId || "", error: String(err) },
           "warn",
           "SHIFTS_UPDATE_BONUSES_FAIL",
-          err
+          err,
         );
       }
       Logger.log("SHIFTS.updateBonuses error: " + err);
@@ -1708,7 +1708,7 @@ var BONUSES = BONUSES || {};
           { shiftId: payload && payload.shiftId, error: String(err) },
           "warn",
           "SHIFTS_UPDATE_FAIL",
-          err
+          err,
         );
       }
       Logger.log("SHIFTS.updateShift error: " + err);
@@ -1726,7 +1726,7 @@ var BONUSES = BONUSES || {};
     var sh = ss_().getSheetByName(BONUS_CONFIG.SHEET_NAME_OPTIONS);
     if (!sh)
       throw new Error(
-        'לא נמצאה כרטיסייה בשם "' + BONUS_CONFIG.SHEET_NAME_OPTIONS + '"'
+        'לא נמצאה כרטיסייה בשם "' + BONUS_CONFIG.SHEET_NAME_OPTIONS + '"',
       );
     return sh;
   }
@@ -1773,7 +1773,7 @@ var BONUSES = BONUSES || {};
         BONUS_CONFIG.HEADER_ROW + 1,
         1,
         lastRow - BONUS_CONFIG.HEADER_ROW,
-        lastCol
+        lastCol,
       )
       .getValues();
     var res = [];
@@ -1821,7 +1821,7 @@ var BONUSES = BONUSES || {};
           { error: String(err) },
           "warn",
           "BONUSES_LIST_FAIL",
-          err
+          err,
         );
       }
       Logger.log("BONUSES.listAll error: " + err);
