@@ -4090,6 +4090,7 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     ["ID עובד", "מזהה עובד"],
     sheet.getName(),
   );
+  const empNameCol = getOptionalColumn_(headers, ["שם מלא", "שם", "עובד"]);
   const jobTypeIdCol = getOptionalColumn_(headers, [
     "ID סוג עבודה",
     "ID סוגי עבודה",
@@ -4126,8 +4127,8 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
     const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
     return {
-      shiftId: stringValue(row[shiftIdCol - 1]),
-      employeeId: stringValue(row[empCol - 1]),
+      shiftId: "", // אל תציג מזהים למשתמש
+      employeeId: "",
       jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
@@ -5830,6 +5831,56 @@ function shiftReport_handleFaultAction(fault, action) {
     return { ok: true, message: "נוצר ID חדש" };
   }
 
+  if (action === "saveEdits") {
+    const edits = (fault && fault.edits) || {};
+    const mutations = [];
+    function setIf(col, key, normalizer) {
+      if (!col || !edits.hasOwnProperty(key)) return;
+      const val = normalizer ? normalizer(edits[key]) : edits[key];
+      mutations.push({ col: col, val: val });
+    }
+
+    setIf(empCol, "employeeId", stringValue);
+    setIf(jobTypeIdCol, "jobTypeId", stringValue);
+    setIf(directionCol, "direction", stringValue);
+    setIf(workDateCol, "workDate", toIsoDate_);
+    setIf(tsCol, "timestamp", stringValue);
+
+    // Optional payType, note columns if exist
+    const payTypeCol = getOptionalColumn_(headers, [
+      "אופן תשלום",
+      "payType",
+      "סוג שכר",
+    ]);
+    const noteCol = getOptionalColumn_(headers, [
+      "הערות",
+      "הערה",
+      "הערה למנהל",
+      "הערות למשמרת",
+    ]);
+    setIf(payTypeCol, "payType", stringValue);
+    setIf(noteCol, "note", stringValue);
+
+    mutations.forEach(function (m) {
+      if (m.col) {
+        sheet.getRange(targetRowIndex, m.col).setValue(m.val || "");
+      }
+    });
+
+    setFaultAck_(fault.hash);
+    appendSystemLog_({
+      operation: "WORK_LOG_FAULT",
+      step: "save-edits",
+      severity: "info",
+      errorCode: null,
+      details: {
+        rowIndex: targetRowIndex,
+        editedKeys: Object.keys(edits || {}),
+      },
+    });
+    return { ok: true, message: "השינויים נשמרו" };
+  }
+
   if (action === "ack") {
     setFaultAck_(fault.hash);
     return { ok: true, message: "סומן כתקין" };
@@ -5923,6 +5974,7 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
     return {
       shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: stringValue(row[empCol - 1]),
+      employeeName: empNameCol ? stringValue(row[empNameCol - 1]) : "",
       jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
@@ -5944,9 +5996,10 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
   const byKey = {};
   for (let i = 1; i < values.length; i++) {
     const rec = toRec(values[i], i + 1);
-    if (!rec.employeeId || !rec.workDate) continue;
+    const employeeKey = rec.employeeId || rec.employeeName;
+    if (!employeeKey || !rec.workDate) continue;
     const baseKey =
-      stringValue(rec.employeeId) +
+      stringValue(employeeKey) +
       "__" +
       stringValue(rec.jobTypeId) +
       "__" +
@@ -6073,14 +6126,16 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         hash: hash,
         issue: issue,
         rowIndex: rec.rowIndex,
-        shiftId: rec.shiftId,
-        employeeId: rec.employeeId,
+        shiftId: "",
+        employeeId: "",
         jobTypeId: rec.jobTypeId,
         jobName: rec.jobName,
         department: rec.department,
         direction: rec.direction,
         workDate: rec.workDate,
         timestamp: rec.timestamp,
+        payType: rec.payType,
+        note: rec.note,
       });
     });
 
@@ -6099,11 +6154,12 @@ function buildFaultsDialogHtml_(faults) {
     body{font-family:Arial,sans-serif;background:#f5f6fa;margin:0;padding:16px;}
     .card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:16px;}
     .item{border:1px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:10px;}
-    .title{font-weight:700;margin:0 0 6px;font-size:15px;}
-    .meta{font-size:12px;color:#555;line-height:1.4;}
-    .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
-    .chip{padding:4px 8px;border-radius:6px;font-size:12px;background:#eef2ff;color:#1a237e;}
-    .chip.danger{background:#ffebee;color:#b00020;}
+    .title{font-weight:700;margin:0 0 4px;font-size:15px;}
+    .meta{font-size:12px;color:#555;line-height:1.6;}
+    .field{display:grid;grid-template-columns:110px 1fr;gap:6px 8px;font-size:12px;color:#333;align-items:center;margin-top:8px;}
+    .field label{color:#444;font-weight:700;}
+    .field input, .field select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:12px;}
+    .pill{padding:4px 8px;border-radius:6px;font-size:12px;background:#ffebee;color:#b00020;display:inline-block;}
     .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
     .btn{border:none;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:12px;}
     .ghost{border:1px solid #ccc;background:#fff;color:#333;}
@@ -6114,8 +6170,8 @@ function buildFaultsDialogHtml_(faults) {
 </head>
 <body>
   <div class="card">
-    <h3 style="margin:0 0 6px;">תקלות בדיווחי משמרות</h3>
-    <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו פעולה לכל תקלה: תיקון אוטומטי כשאפשר, סימון כתקין (לא נציג שוב), או מחיקה.</p>
+    <h3 style="margin:0 0 6px;">תקלות בדיווחי שעות</h3>
+    <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו פעולה לכל תקלה: תיקון אוטומטי כשאפשר, סימון כתקין (לא נציג שוב), או מחיקה. ניתן לערוך שדות ולתקן לפני סימון.</p>
     <div id="list"></div>
     <div id="status"></div>
     <div style="display:flex;gap:10px;margin-top:12px;">
@@ -6132,10 +6188,10 @@ function buildFaultsDialogHtml_(faults) {
     document.getElementById('refreshBtn').onclick = () => google.script.host.close();
 
     const issueText = {
-      missing_shiftId: 'חסר ID משמרת',
-      missing_employeeId: 'חסר מזהה עובד',
-      missing_jobTypeId: 'חסר מזהה סוג עבודה',
-      missing_workDate: 'חסר תאריך משמרת',
+      missing_shiftId: 'חסר מזהה דיווח',
+      missing_employeeId: 'חסר עובד',
+      missing_jobTypeId: 'חסר סוג עבודה',
+      missing_workDate: 'חסר תאריך דיווח',
     };
 
     function render() {
@@ -6153,14 +6209,31 @@ function buildFaultsDialogHtml_(faults) {
         meta.textContent = [f.workDate || 'תאריך חסר', f.direction || '', f.jobName || 'ללא שם עבודה', f.department || ''].filter(Boolean).join(' · ');
         div.appendChild(meta);
 
-        const chips = document.createElement('div');
-        chips.className = 'chips';
-        const mk = (txt, danger) => { const c = document.createElement('div'); c.className = 'chip' + (danger ? ' danger' : ''); c.textContent = txt; return c; };
-        chips.appendChild(mk('Row ' + f.rowIndex));
-        if (f.shiftId) chips.appendChild(mk('shiftId: ' + f.shiftId)); else chips.appendChild(mk('shiftId חסר', true));
-        if (f.employeeId) chips.appendChild(mk('עובד: ' + f.employeeId)); else chips.appendChild(mk('מזהה עובד חסר', true));
-        if (f.jobTypeId) chips.appendChild(mk('סוג עבודה: ' + f.jobTypeId)); else chips.appendChild(mk('סוג עבודה חסר', true));
-        div.appendChild(chips);
+        const pill = document.createElement('div');
+        pill.className = 'pill';
+        pill.textContent = 'שורה ' + f.rowIndex;
+        div.appendChild(pill);
+
+        const form = document.createElement('div');
+        form.className = 'field';
+
+        const addField = (label, val, key, placeholder='') => {
+          const lab = document.createElement('label'); lab.textContent = label;
+          const input = document.createElement('input');
+          input.value = val || '';
+          input.placeholder = placeholder;
+          input.oninput = () => { f[key] = input.value; };
+          form.appendChild(lab); form.appendChild(input);
+        };
+
+        addField('עובד', '', 'employeeId', 'מזהה עובד');
+        addField('סוג עבודה', f.jobName || '', 'jobName', 'שם סוג עבודה');
+        addField('תאריך', f.workDate || '', 'workDate', 'YYYY-MM-DD');
+        addField('אופן תשלום', f.payType || '', 'payType', 'לדוגמה: שעתי/יומי/יחידה');
+        addField('כיוון', f.direction || '', 'direction', 'כניסה/יציאה');
+        addField('הערה', f.note || '', 'note', 'הערות');
+
+        div.appendChild(form);
 
         const actions = document.createElement('div');
         actions.className = 'actions';
@@ -6168,10 +6241,16 @@ function buildFaultsDialogHtml_(faults) {
         if (f.issue === 'missing_shiftId') {
           const fix = document.createElement('button');
           fix.className = 'btn primary';
-          fix.textContent = 'צור ID משמרת';
+          fix.textContent = 'צור מזהה דיווח';
           fix.onclick = () => act(f, 'assignShiftId');
           actions.appendChild(fix);
         }
+
+        const save = document.createElement('button');
+        save.className = 'btn primary';
+        save.textContent = 'שמור שינויים';
+        save.onclick = () => act(f, 'saveEdits');
+        actions.appendChild(save);
 
         const ack = document.createElement('button');
         ack.className = 'btn ghost';
@@ -6223,7 +6302,7 @@ function buildFaultsDialogHtml_(faults) {
           statusEl.style.color = '#b00020';
           statusEl.textContent = err && err.message ? err.message : 'שגיאה בפעולה';
         })
-        .shiftReport_handleFaultAction({ hash: fault.hash, issue: fault.issue, rowIndex: fault.rowIndex }, action);
+        .shiftReport_handleFaultAction({ hash: fault.hash, issue: fault.issue, rowIndex: fault.rowIndex, edits: fault }, action);
     }
 
     render();
