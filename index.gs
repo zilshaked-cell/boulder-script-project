@@ -6490,8 +6490,7 @@ function buildShiftsSubMenu_(ui) {
     .addItem("ריענון היום", "rebuildShiftsTodayMenuAction")
     .addItem("ריענון 7 ימים", "rebuildShiftsLast7MenuAction")
     .addItem("ריענון 14 ימים", "rebuildShiftsLast14MenuAction")
-    .addItem("ריענון 30 ימים", "rebuildShiftsLast30MenuAction")
-    .addItem("בדיקת כפילויות משמרות", "SHIFTS_showDuplicateCleanupDialog");
+    .addItem("ריענון 30 ימים", "rebuildShiftsLast30MenuAction");
 }
 
 // Helper: add a menu item only when its handler exists to avoid breaking onOpen.
