@@ -187,8 +187,14 @@ function ensureModuleLoggerDefined_(operation) {
 // In-memory smoke check for allowed/blocked fault edits.
 // Not executed automatically; use manually for quick validation.
 function __test_validateFaultEdits() {
-  const okPayload = { direction: 'כניסה', fixDate: '2025-12-01', fixTime: '08:30', units: '2', note: 'בדיקה' };
-  const badPayload = { direction: 'יציאה', employeeId: 'E1' };
+  const okPayload = {
+    direction: "כניסה",
+    fixDate: "2025-12-01",
+    fixTime: "08:30",
+    units: "2",
+    note: "בדיקה",
+  };
+  const badPayload = { direction: "יציאה", employeeId: "E1" };
   function validate(edits) {
     const ALLOWED_FIELDS = ["direction", "fixDate", "fixTime", "units", "note"];
     const bad = Object.keys(edits || {}).filter(function (k) {
@@ -5868,8 +5874,8 @@ function shiftReport_showFaultsDialog() {
   }
 
   const html = HtmlService.createHtmlOutput(buildFaultsDialogHtml_(faults))
-    .setWidth(1100)
-    .setHeight(900);
+    .setWidth(1400)
+    .setHeight(1050);
 
   ui.showModalDialog(html, "תיקון תקלות בדיווחי עובדים");
 }
@@ -6351,7 +6357,9 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       paymentModeSource: "",
     };
 
-    const paymentModeIdRaw = payModeIdCol ? stringValue(row[payModeIdCol - 1]) : "";
+    const paymentModeIdRaw = payModeIdCol
+      ? stringValue(row[payModeIdCol - 1])
+      : "";
     const paymentModeNameRaw = payModeNameCol
       ? stringValue(row[payModeNameCol - 1])
       : "";
@@ -6369,7 +6377,13 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       paymentModeSource = "מסוג עבודה";
     }
 
-    if (!paymentModeId && !paymentModeName && employeesSheet && rec.employeeId && rec.jobTypeId) {
+    if (
+      !paymentModeId &&
+      !paymentModeName &&
+      employeesSheet &&
+      rec.employeeId &&
+      rec.jobTypeId
+    ) {
       const payMeta = resolveEmployeeJobPayType_(
         employeesSheet,
         empHeaders,
@@ -6400,7 +6414,8 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         rec.jobTypeId,
       );
       if (payMeta) {
-        rec.payType = rec.payType || payMeta.payTypeName || payMeta.payTypeId || "";
+        rec.payType =
+          rec.payType || payMeta.payTypeName || payMeta.payTypeId || "";
       }
     }
 
@@ -6454,33 +6469,44 @@ function buildFaultsDialogHtml_(faults) {
     .card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:16px;}
     .item{border:1px solid #e0e7ff;border-radius:12px;padding:12px;margin-bottom:12px;background:#fafbff;}
     .header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
-    .title{font-weight:700;margin:0;font-size:15px;color:#0f172a;flex:1;}
+    .title{font-weight:800;margin:0;font-size:15px;color:#b91c1c;flex:1;}
+    .subtitle{margin:2px 0 0;font-size:12px;color:#334155;}
     .pill{padding:4px 8px;border-radius:10px;font-size:12px;background:#eef2ff;color:#1a237e;display:inline-block;}
-    .reason{margin-top:10px;padding:10px;border:1px solid #fecdd3;background:#fff1f2;border-radius:10px;}
-    .reason-title{font-weight:700;font-size:13px;color:#b91c1c;margin:0 0 6px;display:flex;gap:6px;align-items:center;}
+    .reason{margin-top:10px;padding:12px;border:1px solid #fecdd3;background:#fff1f2;border-radius:10px;}
+    .reason-title{font-weight:800;font-size:14px;color:#b91c1c;margin:0 0 8px;display:flex;gap:6px;align-items:center;}
     .reason-text{font-size:12px;color:#7f1d1d;font-weight:600;}
-    .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
-    .chip{padding:4px 8px;border-radius:14px;font-size:11px;background:#fef2f2;color:#b91c1c;border:1px solid #fecdd3;}
-    .chip.source{background:#eef2ff;color:#1e3a8a;border:1px solid #e0e7ff;}
+    .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+    .chip{padding:4px 10px;border-radius:14px;font-size:11px;background:#fef2f2;color:#b91c1c;border:1px solid #fecdd3;cursor:pointer;}
+    .chip.source{background:#eef2ff;color:#1e3a8a;border:1px solid #e0e7ff;cursor:default;}
     .section{border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-top:10px;background:#fff;}
     .section.readonly{background:#f8fafc;}
     .section-title{font-weight:700;font-size:13px;color:#0f172a;margin:0 0 8px;}
-    .readonly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;}
+    .readonly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
     .ro-field{display:flex;flex-direction:column;font-size:12px;gap:2px;padding:8px;border:1px solid transparent;border-radius:8px;background:#fff;}
     .ro-label{color:#475569;font-weight:700;}
     .ro-value{color:#0f172a;font-weight:600;}
-    .edit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+    .edit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;}
     .edit-field{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#f9fafb;display:flex;flex-direction:column;gap:6px;}
     .label-row{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;color:#0f172a;}
     .dot{width:8px;height:8px;background:#ef4444;border-radius:999px;display:inline-block;}
     .current{font-size:11px;color:#6b7280;}
     .edit-field input,.edit-field select{width:100%;padding:7px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;background:#fff;}
     .needs-fix{border-color:#ef4444;background:#fff7f7;}
+    .error-text{color:#b91c1c;font-size:11px;margin-top:-2px;}
     .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
     .btn{border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;font-size:12px;}
     .ghost{border:1px solid #cbd5e1;background:#fff;color:#0f172a;}
     .primary{background:#3949ab;color:#fff;}
     .danger{background:#d32f2f;color:#fff;}
+    .primary:disabled{background:#c7d2fe;color:#f8fafc;cursor:not-allowed;}
+    .hint{font-size:11px;color:#475569;margin-top:6px;}
+    details{margin-top:10px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;}
+    summary{padding:8px 10px;font-weight:700;cursor:pointer;}
+    .tech-body{padding:0 10px 10px;font-size:12px;color:#334155;display:grid;gap:6px;}
+    .tech-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+    .tech-key{font-weight:700;color:#0f172a;}
+    .copy-btn{border:1px solid #cbd5e1;background:#fff;color:#0f172a;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer;}
+    .error-text{color:#b91c1c;font-size:11px;}
     #status{margin-top:10px;font-weight:700;color:#1b5e20;}
   </style>
 </head>
@@ -6555,6 +6581,27 @@ function buildFaultsDialogHtml_(faults) {
       return '';
     }
 
+    function formatDisplayDate(iso) {
+      if (!iso) return '';
+      const parts = String(iso).split('-');
+      if (parts.length === 3) return parts[2] + '/' + parts[1] + '/' + parts[0];
+      return iso;
+    }
+
+    function formatDisplayTime(val) {
+      const t = extractTime(val);
+      if (!t) return '';
+      const parts = t.split(':');
+      return parts[0].padStart(2, '0') + ':' + parts[1];
+    }
+
+    function formatDisplayDateTime(val) {
+      if (!val) return '';
+      const date = formatDisplayDate(extractDate(val));
+      const time = formatDisplayTime(val);
+      return [date, time].filter(Boolean).join(' ');
+    }
+
     function updateTimestampFromParts(fault, dateVal, timeVal) {
       const datePart = dateVal || extractDate(fault.timestamp);
       const timePart = timeVal || extractTime(fault.timestamp);
@@ -6567,11 +6614,40 @@ function buildFaultsDialogHtml_(faults) {
       }
     }
 
-    function formatTitle(fault) {
+    function isUnitBased(fault) {
+      const text = (fault.payType || fault.paymentModeName || '').toLowerCase();
+      return /unit|piece|יח/.test(text);
+    }
+
+    function visibleEditableKeys(fault) {
+      const visible = new Set(['direction', 'workDate', 'fixTime', 'note']);
+      if (isUnitBased(fault)) visible.add('units');
+      if (fault.issue === 'missing_workDate') {
+        visible.add('workDate');
+        visible.add('fixTime');
+      }
+      if (fault.issue === 'missing_shiftId') {
+        visible.delete('units');
+      }
+      return visible;
+    }
+
+    function requiredKeys(fault) {
+      const req = new Set();
+      if (fault.issue === 'missing_workDate') {
+        req.add('workDate');
+        req.add('fixTime');
+      }
+      if (isUnitBased(fault)) req.add('units');
+      return req;
+    }
+
+    function formatSubtitle(fault) {
       const employee = fault.employeeName || fault.employeeId || 'עובד לא מזוהה';
       const role = fault.jobName || 'תפקיד חסר';
-      const date = fault.workDate || extractDate(fault.timestamp) || 'תאריך חסר';
-      return [employee, role, date].filter(Boolean).join(separator);
+      const date = formatDisplayDate(fault.workDate || extractDate(fault.timestamp)) || 'תאריך חסר';
+      const time = formatDisplayTime(fault.fixTime || fault.timestamp);
+      return [employee, role, [date, time].filter(Boolean).join(' ')].filter(Boolean).join(separator);
     }
 
     function render() {
@@ -6587,16 +6663,26 @@ function buildFaultsDialogHtml_(faults) {
             ? issueMetaMap[f.issue].fields.map((field) => field.key)
             : []),
         );
+        const visibleKeys = visibleEditableKeys(f);
+        const required = requiredKeys(f);
 
         const div = document.createElement('div');
         div.className = 'item';
 
         const header = document.createElement('div');
         header.className = 'header';
+        const titleWrap = document.createElement('div');
+        titleWrap.style.flex = '1';
         const title = document.createElement('div');
         title.className = 'title';
-        title.textContent = formatTitle(f);
-        header.appendChild(title);
+        const meta = issueMetaMap[f.issue] || { code: f.issue || 'fault', description: 'תקלת דיווח' };
+        title.textContent = meta.description || 'סיבת תקלה';
+        const subtitle = document.createElement('div');
+        subtitle.className = 'subtitle';
+        subtitle.textContent = formatSubtitle(f);
+        titleWrap.appendChild(title);
+        titleWrap.appendChild(subtitle);
+        header.appendChild(titleWrap);
 
         const pill = document.createElement('div');
         pill.className = 'pill';
@@ -6612,7 +6698,6 @@ function buildFaultsDialogHtml_(faults) {
         dot.className = 'dot';
         reasonTitle.appendChild(dot);
         const reasonLabel = document.createElement('span');
-        const meta = issueMetaMap[f.issue] || { code: f.issue || 'fault', description: 'תקלת דיווח' };
         reasonLabel.textContent = 'סיבת התקלה';
         reasonTitle.appendChild(reasonLabel);
         reason.appendChild(reasonTitle);
@@ -6622,12 +6707,27 @@ function buildFaultsDialogHtml_(faults) {
         reasonText.textContent = (meta.code ? meta.code + ' – ' : '') + (meta.description || '');
         reason.appendChild(reasonText);
 
+        const focusMap = {};
+        const fieldWraps = {};
+        const errorRefs = {};
+
         const chips = document.createElement('div');
         chips.className = 'chips';
         (meta.fields || []).forEach((field) => {
           const chip = document.createElement('span');
           chip.className = 'chip';
           chip.textContent = field.label || field.key;
+          chip.onclick = () => {
+            const target = focusMap[field.key];
+            if (target && target.focus) {
+              target.focus();
+              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              fieldWraps[field.key] && fieldWraps[field.key].classList.add('needs-fix');
+              setTimeout(() => {
+                fieldWraps[field.key] && fieldWraps[field.key].classList.remove('needs-fix');
+              }, 800);
+            }
+          };
           chips.appendChild(chip);
         });
         if (chips.children.length) {
@@ -6665,12 +6765,10 @@ function buildFaultsDialogHtml_(faults) {
           roGrid.appendChild(field);
         };
 
-        addReadonly('ID דיווח', f.shiftId || '', 'shiftId');
         addReadonly('שם עובד', f.employeeName || '', 'employeeId');
-        addReadonly('ID עובד', f.employeeId || '', 'employeeId');
         addReadonly('סוג עבודה', f.jobName || '', 'jobTypeId');
-        addReadonly('ID סוג עבודה', f.jobTypeId || '', 'jobTypeId');
         addReadonly('מחלקה', f.department || '', 'department');
+        addReadonly('כיוון נוכחי', f.direction || '', 'direction');
         const payDisplay = [f.paymentModeName || f.payType || '', f.paymentModeId || '']
           .filter(Boolean)
           .join(' (ID: ');
@@ -6678,8 +6776,10 @@ function buildFaultsDialogHtml_(faults) {
           ? payDisplay + ')'
           : payDisplay;
         addReadonly('אופן תשלום', payText || '', 'payType', f.paymentModeSource);
-        addReadonly('חותמת זמן', f.timestamp || '', 'timestamp');
-        addReadonly('מספר שורה', String(f.rowIndex || ''), 'rowIndex');
+        addReadonly('תאריך דיווח', formatDisplayDate(f.workDate || extractDate(f.timestamp)) || '', 'workDate');
+        addReadonly('שעת דיווח', formatDisplayTime(f.fixTime || f.timestamp) || '', 'fixTime');
+        const tsDisplay = formatDisplayDateTime(f.timestamp) || f.timestamp || '';
+        addReadonly('חותמת זמן מקורית', tsDisplay, 'timestamp');
 
         readonlySection.appendChild(roGrid);
         div.appendChild(readonlySection);
@@ -6697,17 +6797,19 @@ function buildFaultsDialogHtml_(faults) {
         const displayCurrent = (val) => (val ? val : 'חסר');
 
         const addEditableField = (opts) => {
+          if (!visibleKeys.has(opts.key)) return;
           const wrap = document.createElement('div');
           wrap.className = 'edit-field' + (needsFixSet.has(opts.key) ? ' needs-fix' : '');
+          fieldWraps[opts.key] = wrap;
           const labelRow = document.createElement('div');
           labelRow.className = 'label-row';
-          if (needsFixSet.has(opts.key)) {
+          if (needsFixSet.has(opts.key) || required.has(opts.key)) {
             const dotEl = document.createElement('span');
             dotEl.className = 'dot';
             labelRow.appendChild(dotEl);
           }
           const label = document.createElement('span');
-          label.textContent = opts.label;
+          label.textContent = opts.label + (required.has(opts.key) ? ' *' : '');
           labelRow.appendChild(label);
           wrap.appendChild(labelRow);
 
@@ -6718,7 +6820,15 @@ function buildFaultsDialogHtml_(faults) {
 
           const control = opts.buildControl(current);
           control.classList.add('input');
+          focusMap[opts.key] = control;
           wrap.appendChild(control);
+
+          const error = document.createElement('div');
+          error.className = 'error-text';
+          error.style.display = 'none';
+          wrap.appendChild(error);
+          errorRefs[opts.key] = error;
+
           editGrid.appendChild(wrap);
         };
 
@@ -6746,6 +6856,7 @@ function buildFaultsDialogHtml_(faults) {
             select.onchange = () => {
               f.direction = select.value;
               current.textContent = 'נוכחי: ' + displayCurrent(f.direction);
+              refreshValidation();
             };
             return select;
           },
@@ -6762,8 +6873,9 @@ function buildFaultsDialogHtml_(faults) {
             input.oninput = () => {
               f.workDate = input.value;
               updateTimestampFromParts(f, input.value, f.fixTime || extractTime(f.timestamp));
-              title.textContent = formatTitle(f);
+              subtitle.textContent = formatSubtitle(f);
               current.textContent = 'נוכחי: ' + displayCurrent(f.workDate);
+              refreshValidation();
             };
             return input;
           },
@@ -6781,6 +6893,7 @@ function buildFaultsDialogHtml_(faults) {
               f.fixTime = input.value;
               updateTimestampFromParts(f, f.workDate, input.value);
               current.textContent = 'נוכחי: ' + displayCurrent(f.fixTime);
+              refreshValidation();
             };
             return input;
           },
@@ -6800,6 +6913,7 @@ function buildFaultsDialogHtml_(faults) {
             input.oninput = () => {
               f.units = input.value;
               current.textContent = 'נוכחי: ' + displayCurrent(f.units);
+              refreshValidation();
             };
             return input;
           },
@@ -6817,6 +6931,7 @@ function buildFaultsDialogHtml_(faults) {
             input.oninput = () => {
               f.note = input.value;
               current.textContent = 'נוכחי: ' + displayCurrent(f.note);
+              refreshValidation();
             };
             return input;
           },
@@ -6824,6 +6939,46 @@ function buildFaultsDialogHtml_(faults) {
 
         editSection.appendChild(editGrid);
         div.appendChild(editSection);
+
+        const tech = document.createElement('details');
+        const techSummary = document.createElement('summary');
+        techSummary.textContent = 'פרטי מזהים וחותמות זמן';
+        tech.appendChild(techSummary);
+        const techBody = document.createElement('div');
+        techBody.className = 'tech-body';
+        const addTech = (label, value) => {
+          const row = document.createElement('div');
+          row.className = 'tech-row';
+          const keyEl = document.createElement('span');
+          keyEl.className = 'tech-key';
+          keyEl.textContent = label + ':';
+          const valEl = document.createElement('span');
+          valEl.textContent = value || 'חסר';
+          row.appendChild(keyEl);
+          row.appendChild(valEl);
+          techBody.appendChild(row);
+        };
+        addTech('ID דיווח', f.shiftId || '');
+        addTech('ID עובד', f.employeeId || '');
+        addTech('ID סוג עבודה', f.jobTypeId || '');
+        addTech('מספר שורה', String(f.rowIndex || ''));
+        addTech('Hash', f.hash || '');
+        addTech('חותמת זמן גולמית', f.timestamp || '');
+        const copyHash = document.createElement('button');
+        copyHash.className = 'copy-btn';
+        copyHash.textContent = 'העתק Hash';
+        copyHash.onclick = () => navigator.clipboard && navigator.clipboard.writeText(f.hash || '');
+        const copyRow = document.createElement('div');
+        copyRow.className = 'tech-row';
+        copyRow.appendChild(copyHash);
+        techBody.appendChild(copyRow);
+        tech.appendChild(techBody);
+        div.appendChild(tech);
+
+        const saveHint = document.createElement('div');
+        saveHint.className = 'hint';
+        saveHint.textContent = 'שדות עם נקודה אדומה חובה או חסרים למילוי.';
+        div.appendChild(saveHint);
 
         const actions = document.createElement('div');
         actions.className = 'actions';
@@ -6839,7 +6994,7 @@ function buildFaultsDialogHtml_(faults) {
         const save = document.createElement('button');
         save.className = 'btn primary';
         save.textContent = 'שמור שינויים';
-        save.onclick = () => act(f, 'saveEdits');
+        save.onclick = () => act(f, 'saveEdits', save);
         actions.appendChild(save);
 
         const ack = document.createElement('button');
@@ -6850,8 +7005,13 @@ function buildFaultsDialogHtml_(faults) {
 
         const del = document.createElement('button');
         del.className = 'btn danger';
-        del.textContent = 'מחק שורה';
-        del.onclick = () => act(f, 'deleteRow');
+        del.textContent = 'מחק דיווח';
+        del.onclick = () => {
+          const confirmDelete = confirm('מחק את הדיווח הזה? פעולה זו בלתי הפיכה.');
+          if (confirmDelete) {
+            act(f, 'deleteRow', del);
+          }
+        };
         actions.appendChild(del);
 
         const skip = document.createElement('button');
@@ -6862,6 +7022,43 @@ function buildFaultsDialogHtml_(faults) {
 
         div.appendChild(actions);
         listEl.appendChild(div);
+
+        function evalErrors() {
+          const errs = {};
+          if (visibleKeys.has('workDate')) {
+            if (!f.workDate || !extractDate(f.workDate)) errs.workDate = 'נדרש תאריך תקין';
+          }
+          if (visibleKeys.has('fixTime')) {
+            if (!extractTime(f.fixTime || f.timestamp)) errs.fixTime = 'נדרשת שעה תקינה';
+          }
+          if (visibleKeys.has('units')) {
+            const num = Number(f.units);
+            if (String(f.units || '').trim() === '') {
+              errs.units = 'נדרשת כמות יחידות';
+            } else if (!isFinite(num) || num < 0) {
+              errs.units = 'ערך יחידות לא תקין';
+            }
+          }
+          return errs;
+        }
+
+        function refreshValidation() {
+          const errs = evalErrors();
+          Object.keys(errorRefs).forEach((key) => {
+            const el = errorRefs[key];
+            const msg = errs[key];
+            if (!el) return;
+            el.textContent = msg || '';
+            el.style.display = msg ? 'block' : 'none';
+            if (fieldWraps[key]) {
+              fieldWraps[key].classList.toggle('needs-fix', !!msg || needsFixSet.has(key));
+            }
+          });
+          const hasErrors = Object.keys(errs).length > 0;
+          save.disabled = hasErrors;
+        }
+
+        refreshValidation();
       });
       if (!faults.length) {
         listEl.innerHTML = '<div class="meta">אין תקלות להצגה.</div>';
@@ -6874,9 +7071,10 @@ function buildFaultsDialogHtml_(faults) {
       render();
     }
 
-    function act(fault, action) {
+    function act(fault, action, button) {
       statusEl.style.color = '#1b5e20';
       statusEl.textContent = 'מבצע פעולה...';
+      if (button) button.disabled = true;
       const edits = {
         direction: fault.direction || '',
         fixDate: fault.workDate || '',
@@ -6886,9 +7084,10 @@ function buildFaultsDialogHtml_(faults) {
       };
       google.script.run
         .withSuccessHandler((res) => {
+          if (button) button.disabled = false;
           if (res && res.ok) {
             statusEl.style.color = '#1b5e20';
-            statusEl.textContent = (res.message || 'בוצע') + ' · מרענן רשימה';
+            statusEl.textContent = (res.message || 'בוצע') + ' · עוברים לתקלה הבאה';
             removeFault(fault.hash, fault.issue);
           } else {
             statusEl.style.color = '#b00020';
@@ -6896,6 +7095,7 @@ function buildFaultsDialogHtml_(faults) {
           }
         })
         .withFailureHandler((err) => {
+          if (button) button.disabled = false;
           statusEl.style.color = '#b00020';
           statusEl.textContent = err && err.message ? err.message : 'שגיאה בפעולה';
         })
