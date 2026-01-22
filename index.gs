@@ -4137,11 +4137,6 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   const fixDateCol = getOptionalColumn_(headers, ["תיקון תאריך"]);
   const fixTimeCol = getOptionalColumn_(headers, ["תיקון שעה"]);
   const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
-  const unitsCol = getOptionalColumn_(headers, [
-    "כמות היחידות",
-    "כמות יחידות",
-    "דיווח יחידות",
-  ]);
   const noteCol = getOptionalColumn_(headers, [
     "הערות",
     "הערה",
@@ -4185,7 +4180,6 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     return [
       rec.employeeId,
       rec.jobTypeId,
-      rec.jobName,
       rec.department,
       rec.direction,
       rec.workDate,
@@ -4193,7 +4187,6 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
       rec.fixTime,
       rec.units,
       rec.note,
-      rec.timestamp,
     ].join("__");
   }
 
@@ -4219,10 +4212,20 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
           )
         : null;
 
+  if (
+    targetEventMs === null ||
+    targetEventMs === undefined ||
+    isNaN(targetEventMs)
+  ) {
+    return [];
+  }
+
   const results = [];
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const rec = buildCanonical_(row);
+    if (rec.eventMs === null || rec.eventMs === undefined || isNaN(rec.eventMs))
+      continue;
     if (rec.employeeId !== targetEmployee) continue;
     if (rec.jobTypeId !== targetJobType) continue;
     if (rec.direction !== targetDirection) continue;
@@ -4398,9 +4401,8 @@ function extractEventMs_(workDateRaw, timestampRaw, fixDate, fixTime) {
 }
 
 function isWithinDuplicateWindow_(msA, msB) {
-  if (msA === null || msA === undefined) return true;
-  if (msB === null || msB === undefined) return true;
-  if (isNaN(msA) || isNaN(msB)) return true;
+  if (msA === null || msA === undefined || isNaN(msA)) return false;
+  if (msB === null || msB === undefined || isNaN(msB)) return false;
   return Math.abs(msA - msB) <= DUPLICATE_TIME_WINDOW_MS;
 }
 
@@ -4433,7 +4435,13 @@ function __testDuplicateDetectMock_() {
 
   function key(rec) {
     const bucket = Math.floor((rec.eventMs || 0) / DUPLICATE_TIME_WINDOW_MS);
-    return [rec.employeeId, rec.jobTypeId, rec.direction, rec.workDate, bucket].join("__");
+    return [
+      rec.employeeId,
+      rec.jobTypeId,
+      rec.direction,
+      rec.workDate,
+      bucket,
+    ].join("__");
   }
 
   const groups = {};
@@ -6052,6 +6060,11 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
     "כניסה / יציאה",
     "דיווח שעות",
   ]);
+  const unitsCol = getOptionalColumn_(headers, [
+    "כמות היחידות",
+    "כמות יחידות",
+    "דיווח יחידות",
+  ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
     "תיקון תאריך",
@@ -6155,6 +6168,38 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
   return groups;
 }
 
+function workLogs_auditHeadersForDebug_() {
+  const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] || [];
+  const headers = headerRow.map(function (h) {
+    return stringValue(h);
+  });
+  const required = [
+    "ID דיווח",
+    "חותמת זמן",
+    "ID עובד",
+    "כניסה / יציאה",
+    "תיקון תאריך",
+    "תיקון שעה",
+    "ID סוג עבודה",
+    "סוג עבודה",
+    "מחלקה",
+    "כמות היחידות",
+    "הערות",
+  ];
+  const missing = required.filter(function (name) {
+    return headers.indexOf(name) === -1;
+  });
+
+  return {
+    sheetName: sheet.getName(),
+    requiredCount: required.length,
+    presentCount: headers.length,
+    missingRequired: missing,
+    headers: headers,
+  };
+}
+
 // --- Fault scan from menu ---
 
 function listFaultyWorkLogsForMenu_(maxRows) {
@@ -6190,6 +6235,11 @@ function listFaultyWorkLogsForMenu_(maxRows) {
   const directionCol = getOptionalColumn_(headers, [
     "כניסה / יציאה",
     "דיווח שעות",
+  ]);
+  const unitsCol = getOptionalColumn_(headers, [
+    "כמות היחידות",
+    "כמות יחידות",
+    "דיווח יחידות",
   ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
@@ -6375,7 +6425,7 @@ function buildFaultsDialogHtml_(faults) {
       const payKind = normalizePayKind(fault.payType);
       const time = extractTime(fault.timestamp);
       if (payKind === 'unit') {
-        return [fault.department || '', fault.units ? `${fault.units} יחידות` : '', fault.payType || '']
+        return [fault.department || '', fault.units ? fault.units + ' יחידות' : '', fault.payType || '']
           .filter(Boolean)
           .join(separator);
       }
