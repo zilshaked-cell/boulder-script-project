@@ -4131,8 +4131,8 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
-    "תיקון תאריך",
     "חותמת זמן",
+    "תיקון תאריך",
   ]);
   const fixDateCol = getOptionalColumn_(headers, ["תיקון תאריך"]);
   const fixTimeCol = getOptionalColumn_(headers, ["תיקון שעה"]);
@@ -4144,11 +4144,15 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
   ]);
 
   function buildCanonical_(row) {
-    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
-    const workDateIso = toIsoDate_(workDateRaw) || "";
     const timestampRaw = tsCol ? row[tsCol - 1] : "";
+    const baseWorkDateRaw = tsCol
+      ? row[tsCol - 1]
+      : workDateCol
+        ? row[workDateCol - 1]
+        : "";
     const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
     const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
+    const workDateIso = toIsoDate_(fixDateRaw || baseWorkDateRaw) || "";
     return {
       shiftId: reportIdCol ? stringValue(row[reportIdCol - 1]) : "",
       employeeId: empCol ? stringValue(row[empCol - 1]) : "",
@@ -4168,7 +4172,7 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
       note: noteCol ? stringValue(row[noteCol - 1]) : "",
       timestamp: tsCol ? stringValue(timestampRaw) : "",
       eventMs: extractEventMs_(
-        workDateRaw,
+        baseWorkDateRaw,
         timestampRaw,
         fixDateRaw,
         fixTimeRaw,
@@ -5886,8 +5890,8 @@ function shiftReport_handleFaultAction(fault, action) {
   ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
-    "תיקון תאריך",
     "חותמת זמן",
+    "תיקון תאריך",
   ]);
   const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
 
@@ -5895,14 +5899,18 @@ function shiftReport_handleFaultAction(fault, action) {
   let targetRowIndex = null;
 
   function rowMatchesHash(row, idx) {
-    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
+    const baseWorkDateRaw = tsCol
+      ? row[tsCol - 1]
+      : workDateCol
+        ? row[workDateCol - 1]
+        : "";
     const rec = {
       rowIndex: idx + 1,
       shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: stringValue(row[empCol - 1]),
       jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
-      workDate: toIsoDate_(workDateRaw) || "",
+      workDate: toIsoDate_(baseWorkDateRaw) || "",
       timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
     };
     const hash = buildFaultHash_(rec);
@@ -6078,10 +6086,15 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
   if (values.length <= 1) return [];
 
   function toRec(row, rowIndex) {
-    const workDateRaw = workDateCol ? row[workDateCol - 1] : row[tsCol - 1];
     const timestampRaw = tsCol ? row[tsCol - 1] : "";
+    const baseWorkDateRaw = tsCol
+      ? row[tsCol - 1]
+      : workDateCol
+        ? row[workDateCol - 1]
+        : "";
     const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
     const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
+    const workDateIso = toIsoDate_(fixDateRaw || baseWorkDateRaw) || "";
     return {
       shiftId: stringValue(row[shiftIdCol - 1]),
       employeeId: stringValue(row[empCol - 1]),
@@ -6090,12 +6103,12 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
-      workDate: toIsoDate_(workDateRaw) || "",
+      workDate: workDateIso,
       fixDate: fixDateCol ? toIsoDate_(fixDateRaw) : "",
       fixTime: fixTimeCol ? stringValue(fixTimeRaw) : "",
       timestamp: tsCol ? stringValue(timestampRaw) : "",
       eventMs: extractEventMs_(
-        workDateRaw,
+        baseWorkDateRaw,
         timestampRaw,
         fixDateRaw,
         fixTimeRaw,
@@ -6170,7 +6183,8 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
 
 function workLogs_auditHeadersForDebug_() {
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
-  const headerRow = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] || [];
+  const headerRow =
+    sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0] || [];
   const headers = headerRow.map(function (h) {
     return stringValue(h);
   });
