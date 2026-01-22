@@ -6319,21 +6319,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
   ]);
   const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
 
-  let jobTypes = [];
-  let jobTypePayMap = {};
-  try {
-    jobTypes = listJobTypes_();
-    (jobTypes || []).forEach(function (jt) {
-      if (!jt || !jt.id) return;
-      jobTypePayMap[jt.id] = {
-        payTypeId: jt.payTypeId || "",
-        payTypeName: jt.payTypeName || "",
-      };
-    });
-  } catch (_errJobTypes) {
-    jobTypes = [];
-    jobTypePayMap = {};
-  }
+  // job type pay defaults not used for fault scanning; rely on report or employee row
 
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) return [];
@@ -6367,13 +6353,11 @@ function listFaultyWorkLogsForMenu_(maxRows) {
     const paymentModeNameRaw = payModeNameCol
       ? stringValue(row[payModeNameCol - 1])
       : "";
-    const jobPay = rec.jobTypeId ? jobTypePayMap[rec.jobTypeId] || null : null;
-
     let paymentModeId = paymentModeIdRaw;
     let paymentModeName = paymentModeNameRaw;
     let paymentModeSource = "";
 
-    // Priority: explicit report value > employee override > job type default > fallback
+    // Priority: explicit report value > employee override; job-type defaults are not used here
     if (paymentModeId || paymentModeName) {
       paymentModeSource = "מהדיווח";
     }
@@ -6394,27 +6378,8 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       paymentModeSource = "פרטי עובדים";
     }
 
-    if (
-      !paymentModeId &&
-      !paymentModeName &&
-      jobPay &&
-      (jobPay.payTypeId || jobPay.payTypeName)
-    ) {
-      paymentModeId = jobPay.payTypeId || "";
-      paymentModeName = jobPay.payTypeName || "";
-      paymentModeSource = "מסוג עבודה";
-    }
-
     if (!paymentModeSource && (paymentModeId || paymentModeName)) {
-      paymentModeSource = employeePayMeta
-        ? "פרטי עובדים"
-        : jobPay
-          ? "מסוג עבודה"
-          : "מהדיווח";
-    }
-
-    if (!paymentModeSource) {
-      paymentModeSource = "ברירת מחדל";
+      paymentModeSource = employeePayMeta ? "פרטי עובדים" : "מהדיווח";
     }
 
     rec.paymentModeId = paymentModeId;
