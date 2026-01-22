@@ -184,6 +184,24 @@ function ensureModuleLoggerDefined_(operation) {
   return createScriptLogger_(ctx);
 }
 
+// In-memory smoke check for allowed/blocked fault edits.
+// Not executed automatically; use manually for quick validation.
+function __test_validateFaultEdits() {
+  const okPayload = { direction: 'כניסה', fixDate: '2025-12-01', fixTime: '08:30', units: '2', note: 'בדיקה' };
+  const badPayload = { direction: 'יציאה', employeeId: 'E1' };
+  function validate(edits) {
+    const ALLOWED_FIELDS = ["direction", "fixDate", "fixTime", "units", "note"];
+    const bad = Object.keys(edits || {}).filter(function (k) {
+      return ALLOWED_FIELDS.indexOf(k) === -1;
+    });
+    return bad.length ? { ok: false, badKeys: bad } : { ok: true };
+  }
+  return {
+    okCase: validate(okPayload),
+    badCase: validate(badPayload),
+  };
+}
+
 // Contract/health metadata used by the status endpoint
 const CONTRACT_SCHEMA_VERSION = 1;
 const SHEET_CONTRACT_SPEC = [
@@ -5853,13 +5871,15 @@ function shiftReport_showFaultsDialog() {
     .setWidth(720)
     .setHeight(760);
 
-  ui.showModalDialog(html, "תיקון תקלות משמרות");
+  ui.showModalDialog(html, "תיקון תקלות בדיווחי עובדים");
 }
 
 function shiftReport_handleFaultAction(fault, action) {
   if (!fault || !fault.hash || !action) {
     return { ok: false, error: "missing_fault_or_action" };
   }
+
+  const ALLOWED_FIELDS = ["direction", "fixDate", "fixTime", "units", "note"];
 
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
   const headers = getHeaderMap_(sheet);
@@ -5888,6 +5908,8 @@ function shiftReport_handleFaultAction(fault, action) {
     "כמות יחידות",
     "דיווח יחידות",
   ]);
+  const fixDateCol = getOptionalColumn_(headers, ["תיקון תאריך"]);
+  const fixTimeCol = getOptionalColumn_(headers, ["תיקון שעה"]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
     "חותמת זמן",
@@ -5944,35 +5966,51 @@ function shiftReport_handleFaultAction(fault, action) {
 
   if (action === "saveEdits") {
     const edits = (fault && fault.edits) || {};
+    const badKeys = Object.keys(edits || {}).filter(function (k) {
+      return ALLOWED_FIELDS.indexOf(k) === -1;
+    });
+    if (badKeys.length) {
+      appendSystemLog_({
+        operation: "WORK_LOG_FAULT_FIX",
+        step: "save-edits",
+        severity: "warning",
+        errorCode: "WORK_LOG_EDIT_FIELD_NOT_ALLOWED",
+        details: {
+          ok: false,
+          updatedFieldsCount: 0,
+          updatedFields: [],
+          badKeys: badKeys.slice(0, 5),
+        },
+      });
+      return {
+        ok: false,
+        error: "field_not_allowed",
+        errorCode: "WORK_LOG_EDIT_FIELD_NOT_ALLOWED",
+      };
+    }
+
     const mutations = [];
     function setIf(col, key, normalizer) {
       if (!col || !edits.hasOwnProperty(key)) return;
       const val = normalizer ? normalizer(edits[key]) : edits[key];
-      mutations.push({ col: col, val: val });
+      mutations.push({ col: col, val: val, key: key });
     }
 
-    setIf(empCol, "employeeId", stringValue);
-    setIf(jobTypeIdCol, "jobTypeId", stringValue);
-    setIf(jobNameCol, "jobName", stringValue);
     setIf(directionCol, "direction", stringValue);
-    setIf(workDateCol, "workDate", toIsoDate_);
-    setIf(tsCol, "timestamp", stringValue);
+    setIf(fixDateCol, "fixDate", toIsoDate_);
+    setIf(fixTimeCol, "fixTime", stringValue);
     setIf(unitsCol, "units", stringValue);
-
-    // Optional payType, note columns if exist
-    const payTypeCol = getOptionalColumn_(headers, [
-      "אופן תשלום",
-      "payType",
-      "סוג שכר",
-    ]);
     const noteCol = getOptionalColumn_(headers, [
       "הערות",
       "הערה",
       "הערה למנהל",
       "הערות למשמרת",
     ]);
-    setIf(payTypeCol, "payType", stringValue);
     setIf(noteCol, "note", stringValue);
+
+    const updatedFields = mutations.map(function (m) {
+      return m.key;
+    });
 
     mutations.forEach(function (m) {
       if (m.col) {
@@ -5982,13 +6020,14 @@ function shiftReport_handleFaultAction(fault, action) {
 
     setFaultAck_(fault.hash);
     appendSystemLog_({
-      operation: "WORK_LOG_FAULT",
+      operation: "WORK_LOG_FAULT_FIX",
       step: "save-edits",
       severity: "info",
       errorCode: null,
       details: {
-        rowIndex: targetRowIndex,
-        editedKeys: Object.keys(edits || {}),
+        ok: true,
+        updatedFieldsCount: updatedFields.length,
+        updatedFields: updatedFields,
       },
     });
     return { ok: true, message: "השינויים נשמרו" };
@@ -6255,12 +6294,36 @@ function listFaultyWorkLogsForMenu_(maxRows) {
     "כמות יחידות",
     "דיווח יחידות",
   ]);
+  const payModeIdCol = getOptionalColumn_(headers, [
+    "ID אופן תשלום",
+    "ID אופני תשלום",
+  ]);
+  const payModeNameCol = getOptionalColumn_(headers, [
+    "אופן תשלום",
+    "אופני תשלום",
+  ]);
   const workDateCol = getOptionalColumn_(headers, [
     "תאריך משמרת",
     "תיקון תאריך",
     "חותמת זמן",
   ]);
   const tsCol = getOptionalColumn_(headers, ["חותמת זמן"]);
+
+  let jobTypes = [];
+  let jobTypePayMap = {};
+  try {
+    jobTypes = listJobTypes_();
+    (jobTypes || []).forEach(function (jt) {
+      if (!jt || !jt.id) return;
+      jobTypePayMap[jt.id] = {
+        payTypeId: jt.payTypeId || "",
+        payTypeName: jt.payTypeName || "",
+      };
+    });
+  } catch (_errJobTypes) {
+    jobTypes = [];
+    jobTypePayMap = {};
+  }
 
   const values = sheet.getDataRange().getValues();
   if (values.length <= 1) return [];
@@ -6283,7 +6346,51 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
       units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
       payType: "",
+      paymentModeId: "",
+      paymentModeName: "",
+      paymentModeSource: "",
     };
+
+    const paymentModeIdRaw = payModeIdCol ? stringValue(row[payModeIdCol - 1]) : "";
+    const paymentModeNameRaw = payModeNameCol
+      ? stringValue(row[payModeNameCol - 1])
+      : "";
+    const jobPay = rec.jobTypeId ? jobTypePayMap[rec.jobTypeId] || null : null;
+
+    let paymentModeId = paymentModeIdRaw;
+    let paymentModeName = paymentModeNameRaw;
+    let paymentModeSource = "";
+
+    if (paymentModeId || paymentModeName) {
+      paymentModeSource = "מהדיווח";
+    } else if (jobPay && (jobPay.payTypeId || jobPay.payTypeName)) {
+      paymentModeId = jobPay.payTypeId || "";
+      paymentModeName = jobPay.payTypeName || "";
+      paymentModeSource = "מסוג עבודה";
+    }
+
+    if (!paymentModeId && !paymentModeName && employeesSheet && rec.employeeId && rec.jobTypeId) {
+      const payMeta = resolveEmployeeJobPayType_(
+        employeesSheet,
+        empHeaders,
+        rec.employeeId,
+        rec.jobTypeId,
+      );
+      if (payMeta) {
+        paymentModeId = paymentModeId || payMeta.payTypeId || "";
+        paymentModeName = paymentModeName || payMeta.payTypeName || "";
+        if (!paymentModeSource) paymentModeSource = "מסוג עבודה";
+      }
+    }
+
+    if (!paymentModeSource) {
+      paymentModeSource = "ברירת מחדל";
+    }
+
+    rec.paymentModeId = paymentModeId;
+    rec.paymentModeName = paymentModeName;
+    rec.paymentModeSource = paymentModeSource;
+    rec.payType = paymentModeName || paymentModeId || "";
 
     if (employeesSheet && rec.employeeId && rec.jobTypeId) {
       const payMeta = resolveEmployeeJobPayType_(
@@ -6293,7 +6400,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         rec.jobTypeId,
       );
       if (payMeta) {
-        rec.payType = payMeta.payTypeName || payMeta.payTypeId || "";
+        rec.payType = rec.payType || payMeta.payTypeName || payMeta.payTypeId || "";
       }
     }
 
@@ -6324,6 +6431,9 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         timestamp: rec.timestamp,
         units: rec.units,
         payType: rec.payType,
+        paymentModeId: rec.paymentModeId,
+        paymentModeName: rec.paymentModeName,
+        paymentModeSource: rec.paymentModeSource,
         note: rec.note,
       });
     });
@@ -6340,21 +6450,35 @@ function buildFaultsDialogHtml_(faults) {
 <html dir="rtl">
 <head>
   <style>
-    body{font-family:Arial,sans-serif;background:#f5f6fa;margin:0;padding:16px;}
+    body{font-family:Arial,sans-serif;background:#f5f6fa;margin:0;padding:16px;color:#0f172a;}
     .card{background:#fff;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:16px;}
-    .item{border:1px solid #e0e0e0;border-radius:10px;padding:12px;margin-bottom:10px;}
-    .title{font-weight:700;margin:0 0 4px;font-size:15px;color:#111;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
-    .title .dot{color:#9aa0b5;font-weight:400;}
-    .meta{font-size:12px;color:#555;line-height:1.6;}
-    .field{display:grid;grid-template-columns:120px 1fr;gap:8px 10px;font-size:12px;color:#333;align-items:center;margin-top:8px;}
-    .field label{color:#444;font-weight:700;}
-    .field input,.field select{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:12px;}
-    .field input[disabled]{background:#f3f4f6;color:#666;cursor:not-allowed;}
-    .pill{padding:4px 8px;border-radius:6px;font-size:12px;background:#ffebee;color:#b00020;display:inline-block;}
-    .reason{margin-top:10px;font-size:12px;color:#c62828;font-weight:700;}
+    .item{border:1px solid #e0e7ff;border-radius:12px;padding:12px;margin-bottom:12px;background:#fafbff;}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;}
+    .title{font-weight:700;margin:0;font-size:15px;color:#0f172a;flex:1;}
+    .pill{padding:4px 8px;border-radius:10px;font-size:12px;background:#eef2ff;color:#1a237e;display:inline-block;}
+    .reason{margin-top:10px;padding:10px;border:1px solid #fecdd3;background:#fff1f2;border-radius:10px;}
+    .reason-title{font-weight:700;font-size:13px;color:#b91c1c;margin:0 0 6px;display:flex;gap:6px;align-items:center;}
+    .reason-text{font-size:12px;color:#7f1d1d;font-weight:600;}
+    .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+    .chip{padding:4px 8px;border-radius:14px;font-size:11px;background:#fef2f2;color:#b91c1c;border:1px solid #fecdd3;}
+    .chip.source{background:#eef2ff;color:#1e3a8a;border:1px solid #e0e7ff;}
+    .section{border:1px solid #e5e7eb;border-radius:10px;padding:10px;margin-top:10px;background:#fff;}
+    .section.readonly{background:#f8fafc;}
+    .section-title{font-weight:700;font-size:13px;color:#0f172a;margin:0 0 8px;}
+    .readonly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;}
+    .ro-field{display:flex;flex-direction:column;font-size:12px;gap:2px;padding:8px;border:1px solid transparent;border-radius:8px;background:#fff;}
+    .ro-label{color:#475569;font-weight:700;}
+    .ro-value{color:#0f172a;font-weight:600;}
+    .edit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+    .edit-field{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#f9fafb;display:flex;flex-direction:column;gap:6px;}
+    .label-row{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;color:#0f172a;}
+    .dot{width:8px;height:8px;background:#ef4444;border-radius:999px;display:inline-block;}
+    .current{font-size:11px;color:#6b7280;}
+    .edit-field input,.edit-field select{width:100%;padding:7px 8px;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;background:#fff;}
+    .needs-fix{border-color:#ef4444;background:#fff7f7;}
     .actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
-    .btn{border:none;border-radius:8px;padding:8px 12px;font-weight:700;cursor:pointer;font-size:12px;}
-    .ghost{border:1px solid #ccc;background:#fff;color:#333;}
+    .btn{border:none;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer;font-size:12px;}
+    .ghost{border:1px solid #cbd5e1;background:#fff;color:#0f172a;}
     .primary{background:#3949ab;color:#fff;}
     .danger{background:#d32f2f;color:#fff;}
     #status{margin-top:10px;font-weight:700;color:#1b5e20;}
@@ -6363,7 +6487,7 @@ function buildFaultsDialogHtml_(faults) {
 <body>
   <div class="card">
     <h3 style="margin:0 0 6px;">תקלות דיווחי עובדים</h3>
-    <p style="margin:0 0 10px;color:#555;font-size:13px;">בחרו פעולה לכל תקלה: תיקון אוטומטי כשאפשר, סימון כתקין (לא נציג שוב), או מחיקה. ניתן לערוך שדות ולתקן לפני סימון.</p>
+    <p style="margin:0 0 10px;color:#555;font-size:13px;">רואים הקשר מלא ומתקנים רק את שדות הדיווח הרלוונטיים. סימון "לא תקלה / התעלם" לא משנה נתונים.</p>
     <div id="list"></div>
     <div id="status"></div>
     <div style="display:flex;gap:10px;margin-top:12px;">
@@ -6380,22 +6504,37 @@ function buildFaultsDialogHtml_(faults) {
     document.getElementById('refreshBtn').onclick = () => google.script.host.close();
 
     const separator = ' \u00b7 ';
-    const issueText = {
-      missing_shiftId: 'חסר מזהה דיווח',
-      missing_employeeId: 'חסר עובד',
-      missing_jobTypeId: 'חסר סוג עבודה',
-      missing_workDate: 'חסר תאריך דיווח',
+    const issueMetaMap = {
+      missing_shiftId: {
+        code: 'missing_shiftId',
+        description: 'חסר מזהה דיווח',
+        fields: [
+          { key: 'shiftId', label: 'ID דיווח' },
+        ],
+      },
+      missing_employeeId: {
+        code: 'missing_employeeId',
+        description: 'חסר עובד',
+        fields: [
+          { key: 'employeeId', label: 'ID עובד' },
+        ],
+      },
+      missing_jobTypeId: {
+        code: 'missing_jobTypeId',
+        description: 'חסר סוג עבודה',
+        fields: [
+          { key: 'jobTypeId', label: 'ID סוג עבודה' },
+        ],
+      },
+      missing_workDate: {
+        code: 'missing_workDate',
+        description: 'חסר תאריך דיווח',
+        fields: [
+          { key: 'workDate', label: 'תיקון תאריך' },
+          { key: 'fixTime', label: 'תיקון שעה' },
+        ],
+      },
     };
-
-    function normalizePayKind(raw) {
-      const s = String(raw || '').toLowerCase();
-      if (!s) return '';
-      if (s.includes('unit') || s.includes('יחיד')) return 'unit';
-      if (s.includes('שעת')) return 'hourly';
-      if (s.includes('יומ')) return 'daily';
-      if (s.includes('חוד')) return 'monthly';
-      return '';
-    }
 
     function extractDate(val) {
       if (!val) return '';
@@ -6435,19 +6574,6 @@ function buildFaultsDialogHtml_(faults) {
       return [employee, role, date].filter(Boolean).join(separator);
     }
 
-    function buildMeta(fault) {
-      const payKind = normalizePayKind(fault.payType);
-      const time = extractTime(fault.timestamp);
-      if (payKind === 'unit') {
-        return [fault.department || '', fault.units ? fault.units + ' יחידות' : '', fault.payType || '']
-          .filter(Boolean)
-          .join(separator);
-      }
-      return [fault.department || '', fault.direction || '', time || '', fault.payType || '']
-        .filter(Boolean)
-        .join(separator);
-    }
-
     function render() {
       listEl.innerHTML = '';
       faults.forEach((f, idx) => {
@@ -6456,123 +6582,248 @@ function buildFaultsDialogHtml_(faults) {
         if (currentDate && !f.workDate) f.workDate = currentDate;
         if (currentTime && !f.fixTime) f.fixTime = currentTime;
 
+        const needsFixSet = new Set(
+          (issueMetaMap[f.issue] && issueMetaMap[f.issue].fields
+            ? issueMetaMap[f.issue].fields.map((field) => field.key)
+            : []),
+        );
+
         const div = document.createElement('div');
         div.className = 'item';
+
+        const header = document.createElement('div');
+        header.className = 'header';
         const title = document.createElement('div');
         title.className = 'title';
         title.textContent = formatTitle(f);
-        div.appendChild(title);
-
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-        meta.textContent = buildMeta(f);
-        div.appendChild(meta);
+        header.appendChild(title);
 
         const pill = document.createElement('div');
         pill.className = 'pill';
         pill.textContent = 'שורה ' + f.rowIndex;
-        div.appendChild(pill);
-
-        const form = document.createElement('div');
-        form.className = 'field';
-
-        const addRow = (label, control) => {
-          const lab = document.createElement('label');
-          lab.textContent = label;
-          form.appendChild(lab);
-          form.appendChild(control);
-        };
-
-        const payKind = normalizePayKind(f.payType);
-
-        const jobInput = document.createElement('input');
-        jobInput.value = f.jobName || '';
-        jobInput.placeholder = 'שם תפקיד';
-        jobInput.oninput = () => {
-          f.jobName = jobInput.value;
-          title.textContent = formatTitle(f);
-        };
-        addRow('תפקיד', jobInput);
-
-        const payInput = document.createElement('input');
-        payInput.value = f.payType || '';
-        payInput.disabled = true;
-        payInput.placeholder = 'לא לשינוי ממסך זה';
-        addRow('אופן תשלום', payInput);
-
-        const dateInput = document.createElement('input');
-        dateInput.type = 'date';
-        dateInput.value = f.workDate || '';
-        dateInput.oninput = () => {
-          f.workDate = dateInput.value;
-          updateTimestampFromParts(f, dateInput.value, timeInput ? timeInput.value : '');
-          title.textContent = formatTitle(f);
-        };
-
-        addRow('תאריך', dateInput);
-
-        let timeInput = null;
-        if (payKind !== 'unit') {
-          timeInput = document.createElement('input');
-          timeInput.type = 'time';
-          timeInput.value = f.fixTime || '';
-          timeInput.oninput = () => {
-            f.fixTime = timeInput.value;
-            updateTimestampFromParts(f, f.workDate, timeInput.value);
-          };
-          addRow('שעה', timeInput);
-        }
-
-        if (payKind === 'unit') {
-          const unitsInput = document.createElement('input');
-          unitsInput.type = 'number';
-          unitsInput.min = '0';
-          unitsInput.step = 'any';
-          unitsInput.value = f.units || '';
-          unitsInput.placeholder = 'כמות יחידות';
-          unitsInput.oninput = () => {
-            f.units = unitsInput.value;
-            meta.textContent = buildMeta(f);
-          };
-          addRow('כמות יחידות', unitsInput);
-        } else {
-          const directionSelect = document.createElement('select');
-          const directions = [
-            { value: '', label: 'בחר כיוון' },
-            { value: 'כניסה', label: 'כניסה' },
-            { value: 'יציאה', label: 'יציאה' },
-          ];
-          if (f.direction && !directions.find((d) => d.value === f.direction)) {
-            directions.splice(1, 0, { value: f.direction, label: f.direction });
-          }
-          directions.forEach((opt) => {
-            const option = document.createElement('option');
-            option.value = opt.value;
-            option.textContent = opt.label;
-            directionSelect.appendChild(option);
-          });
-          directionSelect.value = f.direction || '';
-          directionSelect.onchange = () => {
-            f.direction = directionSelect.value;
-            meta.textContent = buildMeta(f);
-          };
-          addRow('כיוון', directionSelect);
-        }
-
-        const noteInput = document.createElement('input');
-        noteInput.value = f.note || '';
-        noteInput.placeholder = 'הוספת הערה';
-        noteInput.oninput = () => {
-          f.note = noteInput.value;
-        };
-        addRow('הערה', noteInput);
-
-        div.appendChild(form);
+        header.appendChild(pill);
+        div.appendChild(header);
 
         const reason = document.createElement('div');
         reason.className = 'reason';
-        reason.textContent = 'סיבת התקלה: ' + (issueText[f.issue] || f.issue);
+        const reasonTitle = document.createElement('div');
+        reasonTitle.className = 'reason-title';
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        reasonTitle.appendChild(dot);
+        const reasonLabel = document.createElement('span');
+        const meta = issueMetaMap[f.issue] || { code: f.issue || 'fault', description: 'תקלת דיווח' };
+        reasonLabel.textContent = 'סיבת התקלה';
+        reasonTitle.appendChild(reasonLabel);
+        reason.appendChild(reasonTitle);
+
+        const reasonText = document.createElement('div');
+        reasonText.className = 'reason-text';
+        reasonText.textContent = (meta.code ? meta.code + ' – ' : '') + (meta.description || '');
+        reason.appendChild(reasonText);
+
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        (meta.fields || []).forEach((field) => {
+          const chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.textContent = field.label || field.key;
+          chips.appendChild(chip);
+        });
+        if (chips.children.length) {
+          reason.appendChild(chips);
+        }
         div.appendChild(reason);
+
+        const readonlySection = document.createElement('div');
+        readonlySection.className = 'section readonly';
+        const roTitle = document.createElement('div');
+        roTitle.className = 'section-title';
+        roTitle.textContent = 'פרטי דיווח (לצפייה בלבד)';
+        readonlySection.appendChild(roTitle);
+        const roGrid = document.createElement('div');
+        roGrid.className = 'readonly-grid';
+
+        const addReadonly = (label, value, key, source) => {
+          const field = document.createElement('div');
+          field.className = 'ro-field' + (needsFixSet.has(key) ? ' needs-fix' : '');
+          const l = document.createElement('div');
+          l.className = 'ro-label';
+          l.textContent = label;
+          const v = document.createElement('div');
+          v.className = 'ro-value';
+          v.textContent = value || 'חסר';
+          if (source) {
+            v.appendChild(document.createTextNode(' '));
+            const chip = document.createElement('span');
+            chip.className = 'chip source';
+            chip.textContent = source;
+            v.appendChild(chip);
+          }
+          field.appendChild(l);
+          field.appendChild(v);
+          roGrid.appendChild(field);
+        };
+
+        addReadonly('ID דיווח', f.shiftId || '', 'shiftId');
+        addReadonly('שם עובד', f.employeeName || '', 'employeeId');
+        addReadonly('ID עובד', f.employeeId || '', 'employeeId');
+        addReadonly('סוג עבודה', f.jobName || '', 'jobTypeId');
+        addReadonly('ID סוג עבודה', f.jobTypeId || '', 'jobTypeId');
+        addReadonly('מחלקה', f.department || '', 'department');
+        const payDisplay = [f.paymentModeName || f.payType || '', f.paymentModeId || '']
+          .filter(Boolean)
+          .join(' (ID: ');
+        const payText = payDisplay && payDisplay.includes('(ID: ')
+          ? payDisplay + ')'
+          : payDisplay;
+        addReadonly('אופן תשלום', payText || '', 'payType', f.paymentModeSource);
+        addReadonly('חותמת זמן', f.timestamp || '', 'timestamp');
+        addReadonly('מספר שורה', String(f.rowIndex || ''), 'rowIndex');
+
+        readonlySection.appendChild(roGrid);
+        div.appendChild(readonlySection);
+
+        const editSection = document.createElement('div');
+        editSection.className = 'section';
+        const editTitle = document.createElement('div');
+        editTitle.className = 'section-title';
+        editTitle.textContent = 'תיקון שדות דיווח';
+        editSection.appendChild(editTitle);
+
+        const editGrid = document.createElement('div');
+        editGrid.className = 'edit-grid';
+
+        const displayCurrent = (val) => (val ? val : 'חסר');
+
+        const addEditableField = (opts) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'edit-field' + (needsFixSet.has(opts.key) ? ' needs-fix' : '');
+          const labelRow = document.createElement('div');
+          labelRow.className = 'label-row';
+          if (needsFixSet.has(opts.key)) {
+            const dotEl = document.createElement('span');
+            dotEl.className = 'dot';
+            labelRow.appendChild(dotEl);
+          }
+          const label = document.createElement('span');
+          label.textContent = opts.label;
+          labelRow.appendChild(label);
+          wrap.appendChild(labelRow);
+
+          const current = document.createElement('div');
+          current.className = 'current';
+          current.textContent = 'נוכחי: ' + displayCurrent(opts.currentGetter());
+          wrap.appendChild(current);
+
+          const control = opts.buildControl(current);
+          control.classList.add('input');
+          wrap.appendChild(control);
+          editGrid.appendChild(wrap);
+        };
+
+        addEditableField({
+          key: 'direction',
+          label: 'כניסה / יציאה',
+          currentGetter: () => f.direction,
+          buildControl: (current) => {
+            const select = document.createElement('select');
+            const directions = [
+              { value: '', label: 'בחר כיוון' },
+              { value: 'כניסה', label: 'כניסה' },
+              { value: 'יציאה', label: 'יציאה' },
+            ];
+            if (f.direction && !directions.find((d) => d.value === f.direction)) {
+              directions.splice(1, 0, { value: f.direction, label: f.direction });
+            }
+            directions.forEach((opt) => {
+              const option = document.createElement('option');
+              option.value = opt.value;
+              option.textContent = opt.label;
+              select.appendChild(option);
+            });
+            select.value = f.direction || '';
+            select.onchange = () => {
+              f.direction = select.value;
+              current.textContent = 'נוכחי: ' + displayCurrent(f.direction);
+            };
+            return select;
+          },
+        });
+
+        addEditableField({
+          key: 'workDate',
+          label: 'תיקון תאריך',
+          currentGetter: () => f.workDate,
+          buildControl: (current) => {
+            const input = document.createElement('input');
+            input.type = 'date';
+            input.value = f.workDate || '';
+            input.oninput = () => {
+              f.workDate = input.value;
+              updateTimestampFromParts(f, input.value, f.fixTime || extractTime(f.timestamp));
+              title.textContent = formatTitle(f);
+              current.textContent = 'נוכחי: ' + displayCurrent(f.workDate);
+            };
+            return input;
+          },
+        });
+
+        addEditableField({
+          key: 'fixTime',
+          label: 'תיקון שעה',
+          currentGetter: () => f.fixTime,
+          buildControl: (current) => {
+            const input = document.createElement('input');
+            input.type = 'time';
+            input.value = f.fixTime || '';
+            input.oninput = () => {
+              f.fixTime = input.value;
+              updateTimestampFromParts(f, f.workDate, input.value);
+              current.textContent = 'נוכחי: ' + displayCurrent(f.fixTime);
+            };
+            return input;
+          },
+        });
+
+        addEditableField({
+          key: 'units',
+          label: 'כמות היחידות',
+          currentGetter: () => f.units,
+          buildControl: (current) => {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = '0';
+            input.step = 'any';
+            input.value = f.units || '';
+            input.placeholder = 'כמות יחידות';
+            input.oninput = () => {
+              f.units = input.value;
+              current.textContent = 'נוכחי: ' + displayCurrent(f.units);
+            };
+            return input;
+          },
+        });
+
+        addEditableField({
+          key: 'note',
+          label: 'הערות',
+          currentGetter: () => f.note,
+          buildControl: (current) => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = f.note || '';
+            input.placeholder = 'הוספת הערה';
+            input.oninput = () => {
+              f.note = input.value;
+              current.textContent = 'נוכחי: ' + displayCurrent(f.note);
+            };
+            return input;
+          },
+        });
+
+        editSection.appendChild(editGrid);
+        div.appendChild(editSection);
 
         const actions = document.createElement('div');
         actions.className = 'actions';
@@ -6593,7 +6844,7 @@ function buildFaultsDialogHtml_(faults) {
 
         const ack = document.createElement('button');
         ack.className = 'btn ghost';
-        ack.textContent = 'סמן כתקין';
+        ack.textContent = 'לא תקלה / התעלם';
         ack.onclick = () => act(f, 'ack');
         actions.appendChild(ack);
 
@@ -6626,11 +6877,18 @@ function buildFaultsDialogHtml_(faults) {
     function act(fault, action) {
       statusEl.style.color = '#1b5e20';
       statusEl.textContent = 'מבצע פעולה...';
+      const edits = {
+        direction: fault.direction || '',
+        fixDate: fault.workDate || '',
+        fixTime: fault.fixTime || '',
+        units: fault.units || '',
+        note: fault.note || '',
+      };
       google.script.run
         .withSuccessHandler((res) => {
           if (res && res.ok) {
             statusEl.style.color = '#1b5e20';
-            statusEl.textContent = res.message || 'בוצע';
+            statusEl.textContent = (res.message || 'בוצע') + ' · מרענן רשימה';
             removeFault(fault.hash, fault.issue);
           } else {
             statusEl.style.color = '#b00020';
@@ -6641,7 +6899,7 @@ function buildFaultsDialogHtml_(faults) {
           statusEl.style.color = '#b00020';
           statusEl.textContent = err && err.message ? err.message : 'שגיאה בפעולה';
         })
-        .shiftReport_handleFaultAction({ hash: fault.hash, issue: fault.issue, rowIndex: fault.rowIndex, edits: fault }, action);
+        .shiftReport_handleFaultAction({ hash: fault.hash, issue: fault.issue, rowIndex: fault.rowIndex, edits: edits }, action);
     }
 
     render();

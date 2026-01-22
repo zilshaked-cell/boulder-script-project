@@ -62,7 +62,10 @@ function onOpen(e) {
 
     // פריט חדש: תיקון תקלות דיווחים
     if (typeof shiftReport_showFaultsDialog === "function") {
-      root.addItem("תיקון תקלות משמרות", "shiftReport_showFaultsDialog");
+      root.addItem(
+        "דיווחי עובדים – איתור ותיקון תקלות",
+        "shiftReport_showFaultsDialog",
+      );
     }
 
     root.addToUi();
