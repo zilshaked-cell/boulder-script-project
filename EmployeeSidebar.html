@@ -1,37 +1,28 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="he" dir="rtl">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <base target="_top" />
+    <?!= include_("UiTheme"); ?>
     <style>
-        :root {
-          --color-page-bg: #0b1224;
-          --color-surface: #0f172a;
+      :root {
+        --color-page-bg: var(--bg-page);
+        --color-surface: var(--bg-card);
+        --color-surface-2: var(--bg-elevated);
+        --color-surface-highlight: color-mix(in srgb, var(--accent) 8%, #fff);
+        --color-border: var(--border-subtle);
+        --color-border-strong: var(--border-strong);
+        --color-text-primary: var(--text-primary);
+        --color-text-muted: var(--text-muted);
+        --color-accent: var(--accent);
+        --color-accent-strong: var(--accent-strong);
+        --color-focus: color-mix(in srgb, var(--accent) 35%, transparent);
+        --color-success: var(--success);
+        --color-danger: var(--danger);
+      }
 
-      <div id="birthyear-overlay" class="birthyear-overlay hidden">
-        <div class="birthyear-modal">
-          <div class="birthyear-title">הזמן שנת לידה</div>
-          <div class="birthyear-sub">
-            שנה חסרה – השארנו עבורך את היום והחודש שמילאת.
-          </div>
-          <div class="birthyear-row">
-            <div id="birthyear-daymonth" class="birthyear-pill">--/--</div>
-            <input
-              id="birthyear-year-input"
-              class="birthyear-input"
-              type="number"
-              inputmode="numeric"
-              placeholder="הקלד שנת לידה"
-              min="1901"
-              max="2100"
-            <!DOCTYPE html>
-            <html lang="he" dir="rtl">
-              <head>
-                <meta charset="UTF-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <base target="_top" />
-                <?!= include_("UiTheme"); ?>
-                <style>
-                  body {
+      body {
                     background: var(--bg-page);
                     color: var(--text-primary);
                     -webkit-font-smoothing: antialiased;
@@ -357,11 +348,7 @@
                       transform: rotate(360deg);
                     }
                   }
-                </style>
-          background: rgba(148, 163, 184, 0.15);
-              <body class="app-shell">
-          color: #e2e8f0;
-        }
+
 
         .field-department[disabled] {
           background: #020617;
@@ -2365,7 +2352,7 @@
             if (!res || !res.ok) {
               setGlobalMessage(
                 (res && res.error) || "שגיאה בעדכון שנת לידה",
-                true
+                true,
               );
               return;
             }
@@ -2393,7 +2380,7 @@
           .EMP_applyPersonalFieldChoice(
             selectedEmployeeId,
             "birthdate",
-            newDate
+            newDate,
           );
       }
 
@@ -2488,7 +2475,7 @@
       function clearMismatchForField(fieldKey) {
         if (!fieldKey) return;
         var container = document.querySelector(
-          '.mismatch-options[data-field="' + fieldKey + '"]'
+          '.mismatch-options[data-field="' + fieldKey + '"]',
         );
         if (container) {
           container.innerHTML = "";
@@ -2571,7 +2558,7 @@
         PERSONAL_FIELDS.forEach(function (cfg) {
           var values = data.fields[cfg.key] || [];
           var container = document.querySelector(
-            '.mismatch-options[data-field="' + cfg.key + '"]'
+            '.mismatch-options[data-field="' + cfg.key + '"]',
           );
           if (!container) return;
           var rowEl = container.closest(".field-row");
@@ -2887,7 +2874,7 @@
         var idNumber = ($("emp-idnum").value || "").trim();
         var phone = formatPhoneForSave(($("emp-phone").value || "").trim());
         var birthdate = toDateInputValue(
-          ($("emp-birthdate").value || "").trim()
+          ($("emp-birthdate").value || "").trim(),
         );
         var email = ($("emp-email").value || "").trim();
         var shirtSize = ($("emp-shirt-size").value || "").trim();
@@ -2954,7 +2941,7 @@
             if (!res || !res.ok) {
               setGlobalMessage(
                 (res && res.error) || "שגיאה בשמירה (מצב עריכה בזמן אמת)",
-                true
+                true,
               );
               setSaveStateDirty();
               return;
@@ -2982,7 +2969,7 @@
             try {
               console.log(
                 "[EMP_DEBUG] sidebar bootstrap result:",
-                JSON.stringify(res)
+                JSON.stringify(res),
               );
             } catch (e) {
               // ignore log errors
@@ -3329,7 +3316,7 @@
             if (!res || !res.ok) {
               setGlobalMessage(
                 (res && res.error) || "שגיאה ביצירת עובד חדש",
-                true
+                true,
               );
               return;
             }
@@ -3661,7 +3648,7 @@
           }
           activeBtn.setAttribute(
             "data-active",
-            initialActive ? "true" : "false"
+            initialActive ? "true" : "false",
           );
           syncActiveButton();
           activeBtn.addEventListener("click", function () {
@@ -3870,7 +3857,7 @@
         if (searchWrap)
           searchWrap.classList.toggle(
             "hidden",
-            shiftsEmployeeMode !== "search"
+            shiftsEmployeeMode !== "search",
           );
 
         if (shiftsEmployeeMode === "all") {
@@ -4019,7 +4006,7 @@
             if (!res || !res.ok) {
               setShiftsMessage(
                 (res && res.error) || "שגיאה בקריאה מהגיליון",
-                true
+                true,
               );
               return;
             }
@@ -4240,7 +4227,7 @@
         filters.onlyWithIssues = isFilterButtonActive("shifts-toggle-issues");
         filters.onlyWithBonuses = isFilterButtonActive("shifts-toggle-bonuses");
         filters.onlyManualChanges = isFilterButtonActive(
-          "shifts-toggle-manual"
+          "shifts-toggle-manual",
         );
 
         if (resetOffset) filters.offset = 0;
@@ -4613,7 +4600,7 @@
               .filter(Boolean)
           : [];
         var buttons = document.querySelectorAll(
-          "#requests-status-buttons .request-status-btn"
+          "#requests-status-buttons .request-status-btn",
         );
         for (var i = 0; i < buttons.length; i++) {
           var key = buttons[i].getAttribute("data-status-key");
@@ -4635,7 +4622,7 @@
           return requestsState.filters.statusKeys.slice();
         }
         var buttons = document.querySelectorAll(
-          "#requests-status-buttons .request-status-btn.active"
+          "#requests-status-buttons .request-status-btn.active",
         );
         var keys = [];
         for (var i = 0; i < buttons.length; i++) {
@@ -4675,8 +4662,8 @@
           var vals = Array.isArray(cfg.values)
             ? cfg.values
             : cfg.value
-            ? [cfg.value]
-            : [];
+              ? [cfg.value]
+              : [];
           vals.forEach(function (v) {
             if (!v) return;
             if (statusValues.indexOf(v) === -1) statusValues.push(v);
@@ -4879,7 +4866,7 @@
             if (!res || !res.ok) {
               setRequestsMessage(
                 (res && res.error) || "שגיאה בטעינת בקשות",
-                true
+                true,
               );
               return;
             }
@@ -5137,7 +5124,7 @@
             if (!res || !res.ok) {
               setShiftsMessage(
                 (res && res.error) || "שגיאה בטעינת משמרות",
-                true
+                true,
               );
               return;
             }
@@ -5169,7 +5156,7 @@
 
             renderShiftsResults();
             renderShiftSearchResults(
-              $("shifts-search-term") ? $("shifts-search-term").value : ""
+              $("shifts-search-term") ? $("shifts-search-term").value : "",
             );
             loadHourlyOverlapSummary(filters);
           })
@@ -5209,7 +5196,7 @@
             if (!res || !res.ok) {
               setShiftsMessage(
                 (res && res.error) || "שגיאה בהוספת בונוס",
-                true
+                true,
               );
               return;
             }
@@ -5336,7 +5323,7 @@
             if (!res || !res.ok) {
               setShiftsMessage(
                 (res && res.error) || "שגיאה בשמירת משמרת",
-                true
+                true,
               );
               try {
                 console.log("SHIFT_EDIT_FAILED", {
@@ -5527,7 +5514,7 @@
           reqDateTo.addEventListener("change", scheduleRequestsFetch);
 
         var reqStatusButtons = document.querySelectorAll(
-          "#requests-status-buttons .request-status-btn"
+          "#requests-status-buttons .request-status-btn",
         );
         for (var rs = 0; rs < reqStatusButtons.length; rs++) {
           (function (btn) {
