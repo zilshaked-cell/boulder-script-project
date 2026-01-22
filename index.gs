@@ -1521,6 +1521,7 @@ function adminListEmployees_(payload, logger) {
       : "ALL";
   const jobTypeFilter = stringValue(payload.jobTypeId);
   const search = stringValue(payload.search).toLowerCase();
+  const searchDigits = search.replace(/\D/g, "");
   const employmentFilter = stringValue(payload.employmentStatus).toLowerCase();
   const branchFilter = stringValue(
     payload.branch || payload.branchId,
@@ -1828,10 +1829,13 @@ function adminListEmployees_(payload, logger) {
         .filter(function (v) {
           return !!v;
         });
-      const matched = haystack.some(function (v) {
+      const matchedText = haystack.some(function (v) {
         return v.indexOf(search) !== -1;
       });
-      if (!matched) return false;
+      const phoneDigits = stringValue(emp.phone).replace(/\D/g, "");
+      const matchedDigits =
+        !!searchDigits && phoneDigits.indexOf(searchDigits) !== -1;
+      if (!matchedText && !matchedDigits) return false;
     }
     return true;
   });
