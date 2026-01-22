@@ -23,501 +23,343 @@
               placeholder="הקלד שנת לידה"
               min="1901"
               max="2100"
-            />
-          </div>
-          <div class="birthyear-actions">
-            <button id="birthyear-submit" type="button" class="btn-secondary">
-              לא עכשיו
-            </button>
-          </div>
-        </div>
-      </div>
+            <!DOCTYPE html>
+            <html lang="he" dir="rtl">
+              <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <base target="_top" />
+                <?!= include_("UiTheme"); ?>
+                <style>
+                  body {
+                    background: var(--bg-page);
+                    color: var(--text-primary);
+                    -webkit-font-smoothing: antialiased;
+                    padding: 10px;
+                  }
 
-      <div id="notes-modal" class="sidebar-modal-overlay hidden">
-        <div class="sidebar-modal">
-          <h3>הערה</h3>
-          <p id="notes-modal-text"></p>
-          <button
-            id="notes-modal-close"
-            type="button"
-            class="btn-primary"
-            onclick="closeNotesModal()"
-          >
-            אישור
-          </button>
-        </div>
-      </div>
-          --color-surface-2: #111827;
-          --color-text-primary: #f8fafc;
-          --color-text-muted: #cbd5e1;
-          --color-accent: #fcd34d;
-          --color-accent-strong: #f59e0b;
-          --color-border: #1f2937;
-          --color-border-strong: #334155;
-          --color-focus: rgba(252, 211, 77, 0.6);
-          --color-surface-highlight: rgba(252, 211, 77, 0.12);
+                  .sidebar-topbar {
+                    display: flex;
+                    justify-content: flex-end;
+                    margin-bottom: 8px;
+                  }
 
-          --radius-lg: 16px;
-          --radius-md: 12px;
-          --radius-sm: 10px;
-          --radius-pill: 999px;
+                  .sidebar-icon-btn {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 38px;
+                    height: 38px;
+                    border-radius: var(--radius-pill);
+                    border: 1px solid var(--border-subtle);
+                    background: #ffffff;
+                    cursor: pointer;
+                    box-shadow: var(--shadow-soft);
+                    transition: transform 0.12s ease, box-shadow 0.2s ease;
+                  }
 
-          --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.18);
-          --shadow-strong: 0 20px 50px rgba(0, 0, 0, 0.35);
-        }
+                  .sidebar-icon-btn:hover {
+                    transform: translateY(-1px);
+                    box-shadow: var(--shadow-strong);
+                  }
 
-        body {
-          font-family: var(--font-heebo, "Heebo"), "Segoe UI", Arial, sans-serif;
-          font-size: 13px;
-          direction: rtl;
-          margin: 8px;
-          background: var(--color-page-bg);
-          color: var(--color-text-primary);
-          -webkit-font-smoothing: antialiased;
+                  .sidebar-layout {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    background: linear-gradient(145deg, #ffffff, #f2f6ff);
+                    border-radius: var(--radius-lg);
+                    padding: 10px;
+                    min-height: calc(100vh - 32px);
+                    border: 1px solid var(--border-subtle);
+                    box-shadow: var(--shadow-soft);
+                  }
 
-            <div id="birthyear-overlay" class="birthyear-overlay hidden">
-              <div class="birthyear-modal">
-                <div class="birthyear-title">הזמן שנת לידה</div>
-                <div class="birthyear-sub">
-                  שנה חסרה – השארנו עבורך את היום והחודש שמילאת.
-                </div>
-                <div class="birthyear-row">
-                  <div id="birthyear-daymonth" class="birthyear-pill">--/--</div>
-                  <input
-                    id="birthyear-year-input"
-                    class="birthyear-input"
-                    type="number"
-                    inputmode="numeric"
-                    placeholder="הקלד שנת לידה"
-                    min="1901"
-                    max="2100"
-                  />
-                </div>
-                <div class="birthyear-actions">
-                  <button
-                    id="birthyear-submit"
-                    type="button"
-                    class="btn-secondary"
-                  >
-                    לא עכשיו
-                  </button>
-                </div>
-              </div>
-            </div>
-          line-height: 1.6;
-        }
+                  .tabs {
+                    display: grid;
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                    gap: 8px;
+                    background: rgba(255, 255, 255, 0.82);
+                    border-radius: var(--radius-md);
+                    padding: 6px;
+                    border: 1px solid var(--border-subtle);
+                  }
 
-        .sidebar-layout {
-          display: flex;
-          flex-direction: column;
-          align-items: stretch;
-          gap: 10px;
-          background: var(--color-page-bg);
-          border-radius: var(--radius-lg);
-          padding: 8px 8px 10px;
-          min-height: calc(100vh - 24px);
-          overflow-y: auto;
-        }
-
-        .content-area {
-          background: transparent;
-          border-radius: var(--radius-md);
-          padding: 6px 8px 12px;
-          flex: 1;
-          min-height: 0;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          max-width: 440px;
-          width: 100%;
-          padding-bottom: 120px; /* מקום לכפתור הדביק שלא יכסה תוכן */
-        }
-
-        /* כפתורים צרים יותר בכותרות העליונות */
-        #manual-load-btn {
-          padding: 6px 10px;
-          font-size: 12px;
-          border-radius: 10px;
-        }
-
-        /* כותרות מתקפלות לסקשנים */
-        .collapsible-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 8px;
-          cursor: pointer;
-          padding: 6px 8px;
-          border-radius: var(--radius-sm);
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid var(--color-border-strong);
-        }
-
-        .collapsible-title {
-          font-weight: 700;
-          color: var(--color-text-primary);
-        }
-
-        .collapsible-caret {
-          width: 22px;
-          height: 22px;
-          border-radius: 6px;
-          border: 1px solid var(--color-border-strong);
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 12px;
-          background: linear-gradient(
-            135deg,
-            rgba(255, 255, 255, 0.05),
-            rgba(255, 255, 255, 0.01)
+                  .tab-button {
+                    border: 1px solid var(--border-subtle);
+                    background: rgba(255, 255, 255, 0.9);
+                    border-radius: var(--radius-pill);
+                    padding: 10px 8px;
+                    font-weight: 700;
+                    color: var(--text-primary);
+                    cursor: pointer;
+                    box-shadow: var(--shadow-soft);
+                    transition: background 0.15s ease, box-shadow 0.2s ease,
           );
-          color: var(--color-accent);
-          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-          transition: transform 0.18s ease, border-color 0.18s ease,
-            background 0.18s ease;
-        }
+                  }
 
-        .collapsible-caret:hover {
-          border-color: var(--color-accent);
-          background: var(--color-surface-highlight);
-        }
+                  .tab-button.active {
+                    background: linear-gradient(135deg, #fbbf24, var(--accent));
+                    border-color: color-mix(in srgb, var(--accent) 80%, transparent);
+                    color: #0f172a;
+                    transform: translateY(-1px);
+                  }
 
-        .collapsible-body {
-          margin-top: 8px;
-        }
+                  .content-area {
+                    background: rgba(255, 255, 255, 0.9);
+                    border-radius: var(--radius-lg);
+                    padding: 10px 12px 120px;
+                    flex: 1;
+                    min-height: 0;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                    border: 1px solid var(--border-subtle);
+                    box-shadow: var(--shadow-soft);
+                  }
 
-        .job-row.collapsed .job-row-body,
-        .employee-fields.collapsed .collapsible-body {
-          display: none;
-        }
+                  .section {
+                    margin-bottom: 10px;
+                    padding: 10px;
+                    border-radius: var(--radius-md);
+                    border: 1px solid var(--border-subtle);
+                    background: rgba(255, 255, 255, 0.85);
+                  }
 
-        .collapsible.collapsed .collapsible-caret,
-        .job-row.collapsed .collapsible-caret {
-          transform: rotate(-90deg);
-        }
+                  .label {
+                    font-size: 12px;
+                    color: var(--text-muted);
+                    margin-bottom: 4px;
+                    display: block;
+                  }
 
-        /* פופאפים בתוך הסיידבר (להערות וכו') */
-        .sidebar-modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.55);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 9999;
-        }
+                  .section-title {
+                    margin: 0 0 6px 0;
+                    font-size: 16px;
+                    font-weight: 800;
+                    color: var(--text-primary);
+                  }
 
-        .sidebar-modal {
-          background: var(--color-surface);
-          border: 1px solid var(--color-border-strong);
-          border-radius: var(--radius-md);
-          padding: 14px;
-          max-width: 320px;
-          box-shadow: var(--shadow-strong);
-        }
+                  .field-row {
+                    margin-bottom: 6px;
+                  }
 
-        .sidebar-modal h3 {
-          margin: 0 0 8px 0;
-          font-size: 14px;
-        }
+                  .field-row input[type="text"],
+                  .field-row input[type="number"],
+                  .field-row input[type="date"],
+                  .field-row input[type="email"],
+                  .field-row select {
+                    width: 100%;
+                    box-sizing: border-box;
+                    background: rgba(255, 255, 255, 0.95);
+                    border: 1px solid var(--border-subtle);
+                    color: var(--text-primary);
+                    border-radius: var(--radius-md);
+                    padding: 9px 10px;
+                  }
 
-        .sidebar-modal p {
-          margin: 0 0 12px 0;
-          font-size: 12px;
-          line-height: 1.5;
-          color: var(--color-text-primary);
-        }
+                  .search-item {
+                    padding: 6px 8px;
+                    cursor: pointer;
+                    color: var(--text-primary);
+                    border-bottom: 1px solid var(--border-subtle);
+                  }
+                  .search-item:hover {
+                    background: rgba(15, 23, 42, 0.05);
+                  }
 
-        .section {
-          margin-bottom: 8px;
-          background: rgba(255, 255, 255, 0.02);
-          border-radius: var(--radius-md);
-          padding: 8px;
-        }
+                  #search-results,
+                  #shifts-search-results,
+                  #shifts-employee-search-results {
+                    border: 1px solid var(--border-subtle);
+                    max-height: 180px;
+                    overflow-y: auto;
+                    margin-top: 4px;
+                    background: rgba(255, 255, 255, 0.95);
+                    border-radius: var(--radius-md);
+                  }
 
-        .label {
-          font-size: 11px;
-          color: var(--color-text-muted);
-          margin-bottom: 4px;
-          display: block;
-        }
+                  .jobs-container,
+                  .requests-container,
+                  .shifts-container {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                  }
 
-        .section-title {
-          margin: 0 0 4px 0;
-          font-size: 15px;
-          font-weight: 800;
-          color: var(--color-text-primary);
-        }
+                  .job-row,
+                  .request-row,
+                  .shift-row {
+                    border-radius: var(--radius-md);
+                    padding: 10px;
+                    background: rgba(255, 255, 255, 0.92);
+                    border: 1px solid var(--border-subtle);
+                    box-shadow: var(--shadow-soft);
+                  }
 
-        #employee-section {
-          background: rgba(255, 255, 255, 0.02);
-          border-radius: var(--radius-lg);
-          padding: 10px;
-        }
+                  .job-row-header,
+                  .request-row-header,
+                  .shift-row-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 6px;
+                  }
 
-        #search-results {
-          border: 1px solid var(--color-border-strong);
-          max-height: 160px;
-          overflow-y: auto;
-          margin-top: 4px;
-          background: var(--color-surface);
-          border-radius: var(--radius-sm);
-        }
-        #search-results.hidden {
-          display: none;
-        }
+                  .job-row-header-title {
+                    font-weight: 700;
+                  }
 
-        #shifts-search-results {
-          border: 1px solid var(--color-border-strong);
-          max-height: 160px;
-          overflow-y: auto;
-          margin-top: 4px;
-          background: var(--color-surface);
-          border-radius: var(--radius-sm);
-        }
-        #shifts-search-results.hidden {
-          display: none;
-        }
+                  .sidebar-modal-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: color-mix(in srgb, rgba(15, 23, 42, 0.25) 70%, transparent);
+                    display: grid;
+                    place-items: center;
+                    z-index: 9999;
+                    backdrop-filter: blur(8px) saturate(1.05);
+                  }
 
-        #shifts-employee-search-results {
-          border: 1px solid var(--color-border-strong);
-          max-height: 160px;
-          overflow-y: auto;
-          margin-top: 4px;
-          background: var(--color-surface);
-          border-radius: var(--radius-sm);
-        }
-        #shifts-employee-search-results.hidden {
-          display: none;
-        }
+                  .sidebar-modal {
+                    background: var(--bg-elevated);
+                    border: 1px solid var(--border-subtle);
+                    border-radius: var(--radius-lg);
+                    padding: 16px;
+                    box-shadow: var(--shadow-strong);
+                    min-width: min(420px, 92vw);
+                  }
 
-        .search-item {
-          padding: 6px 8px;
-          cursor: pointer;
-          color: var(--color-text-primary);
-        }
-        .search-item.small {
-          font-size: 11px;
-          color: var(--color-text-muted);
-        }
-        .search-item:hover {
-          background: #1f2937;
-        }
+                  .loader-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: color-mix(in srgb, rgba(15, 23, 42, 0.18) 70%, transparent);
+                    display: grid;
+                    place-items: center;
+                    z-index: 999;
+                    backdrop-filter: blur(8px) saturate(1.05);
+                  }
 
-        .field-row {
-          margin-bottom: 4px;
-        }
+                  .loader-box {
+                    background: var(--bg-elevated);
+                    border: 1px solid var(--border-subtle);
+                    padding: 16px 18px;
+                    border-radius: var(--radius-lg);
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    box-shadow: var(--shadow-strong);
+                  }
 
-        .field-row input[type="text"],
-        .field-row input[type="number"],
-        .field-row input[type="date"],
-        .field-row input[type="email"],
-        .field-row select {
-          width: 100%;
-          box-sizing: border-box;
-          background: var(--color-surface-2);
-          border: 1px solid var(--color-border-strong);
-          color: var(--color-text-primary);
-          border-radius: var(--radius-sm);
-          padding: 8px 10px;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease,
-            background 0.2s ease;
-        }
+                  .loader-spinner {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 50%;
+                    border: 3px solid rgba(15, 23, 42, 0.08);
+                    border-top-color: var(--accent);
+                    animation: spin 0.8s linear infinite;
+                  }
+                  .loader-spinner.small {
+                    width: 18px;
+                    height: 18px;
+                    border-width: 2px;
+                  }
 
-        .field-row input::placeholder {
-          color: var(--color-text-muted);
-        }
+                  .inline-loader {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 10px;
+                    border-radius: var(--radius-md);
+                    border: 1px solid var(--border-subtle);
+                    background: rgba(255, 255, 255, 0.9);
+                  }
 
-        .field-row input:focus,
-        .field-row select:focus {
-          outline: none;
-          border-color: var(--color-accent);
-          box-shadow: 0 0 0 2px var(--color-focus);
-          background: var(--color-surface);
-        }
+                  .inline-loader .loader-text {
+                    font-weight: 700;
+                  }
 
-        /* שומר על רקע כהה גם במצבי מילוי אוטומטי/ולידציה של הדפדפן */
-        .field-row input,
-        .field-row select {
-          background-color: var(--color-surface-2);
-          color: var(--color-text-primary);
-        }
+                  .inline-loader .loader-spinner {
+                    width: 16px;
+                    height: 16px;
+                    border-width: 2px;
+                  }
 
-        .field-row input:-webkit-autofill,
-        .field-row input:-webkit-autofill:hover,
-        .field-row input:-webkit-autofill:focus,
-        .field-row select:-webkit-autofill {
-          -webkit-box-shadow: 0 0 0 1000px var(--color-surface-2) inset;
-          -webkit-text-fill-color: var(--color-text-primary);
-        }
+                  .birthyear-overlay {
+                    position: fixed;
+                    inset: 0;
+                    background: color-mix(in srgb, rgba(15, 23, 42, 0.26) 78%, transparent);
+                    display: grid;
+                    place-items: center;
+                    z-index: 10000;
+                    backdrop-filter: blur(10px) saturate(1.05);
+                  }
 
-        .jobs-container {
-          margin-top: 6px;
-          display: flex;
-          flex-direction: column;
-          gap: 6px;
-        }
+                  .birthyear-modal {
+                    background: var(--bg-elevated);
+                    border: 1px solid var(--border-subtle);
+                    border-radius: var(--radius-lg);
+                    padding: 18px 16px;
+                    min-width: min(420px, 94vw);
+                    box-shadow: var(--shadow-strong);
+                    display: grid;
+                    gap: 10px;
+                  }
 
-        .job-row {
-          border-radius: var(--radius-md);
-          padding: 8px;
-          background: rgba(255, 255, 255, 0.03);
-        }
+                  .birthyear-title {
+                    font-weight: 800;
+                    font-size: 16px;
+                  }
 
-        .job-row-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 4px;
-        }
+                  .birthyear-sub {
+                    color: var(--text-muted);
+                  }
 
-        .job-row-header-actions {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-        }
+                  .birthyear-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                  }
 
-        .job-row-header-title {
-          font-weight: bold;
-          color: var(--color-text-primary);
-        }
+                  .birthyear-pill {
+                    padding: 6px 10px;
+                    border-radius: var(--radius-pill);
+                    background: rgba(15, 23, 42, 0.06);
+                    border: 1px solid var(--border-subtle);
+                    font-weight: 700;
+                    color: var(--text-primary);
+                    min-width: 96px;
+                    text-align: center;
+                  }
 
-        .job-note-btn {
-          padding: 4px 8px;
-          font-size: 11px;
-          border-radius: var(--radius-pill);
-        }
+                  .birthyear-input {
+                    flex: 1;
+                    background: rgba(255, 255, 255, 0.95);
+                    border: 1px solid var(--border-subtle);
+                    color: var(--text-primary);
+                    border-radius: var(--radius-md);
+                    padding: 8px 10px;
+                    font-size: 13px;
+                  }
 
-        button {
-          font-family: inherit;
-          font-size: 12px;
-          padding: 8px 12px;
-          margin-top: 4px;
-          border-radius: var(--radius-pill);
-          cursor: pointer;
-          border: 1px solid transparent;
-          transition: background 0.15s ease, box-shadow 0.15s ease,
-            transform 0.08s ease, border-color 0.15s ease;
-        }
+                  .birthyear-actions {
+                    display: flex;
+                    justify-content: flex-end;
+                    gap: 10px;
+                  }
 
-        button:focus-visible {
-          outline: none;
-          box-shadow: 0 0 0 2px var(--color-focus);
-          border-color: var(--color-accent);
-        }
+                  .hidden {
+                    display: none !important;
+                  }
 
-        .btn-primary {
-          background: linear-gradient(
-            135deg,
-            var(--color-accent),
-            var(--color-accent-strong)
-          );
-          color: #111827;
-          border: 1px solid var(--color-accent-strong);
-            inputId: "emp-system-role",
-          font-weight: 700;
-        }
-        .btn-primary:hover {
-          background: linear-gradient(
-            135deg,
-            var(--color-accent-strong),
-            #fbbf24
-          );
-          transform: translateY(-1px);
-          box-shadow: 0 12px 30px rgba(245, 158, 11, 0.32);
-        }
-        .btn-primary:active {
-          transform: translateY(0);
-          box-shadow: 0 6px 16px rgba(245, 158, 11, 0.24);
-        }
-
-        .btn-secondary {
-          background: var(--color-surface-2);
-          border: 1px solid var(--color-border-strong);
-          color: var(--color-text-primary);
-          font-weight: 600;
-        }
-        .btn-secondary:hover {
-          background: var(--color-surface-highlight);
-          border-color: var(--color-accent);
-        }
-
-        .btn-disabled,
-        button:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          box-shadow: none;
-          transform: none;
-        }
-
-        .save-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
-
-        .sidebar-save-footer {
-          position: sticky;
-          bottom: 0;
-          padding: 12px;
-          margin: 0 -12px;
-          background: linear-gradient(
-            180deg,
-            rgba(17, 24, 39, 0.4) 0%,
-            rgba(17, 24, 39, 0.9) 40%,
-            rgba(17, 24, 39, 0.98) 100%
-          );
-          border-top: 1px solid var(--color-border-strong);
-          box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.35);
-          z-index: 10;
-        }
-
-        .save-spinner {
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          border: 3px solid rgba(252, 211, 77, 0.25);
-          border-top-color: var(--color-accent-strong);
-          animation: spin 0.8s linear infinite;
-          display: none;
-        }
-
-        .save-spinner.active {
-          display: inline-block;
-        }
-
-        .edit-mode-live {
-          background: var(--color-accent-strong);
-          color: #111827;
-          border: none;
-          box-shadow: var(--shadow-strong);
-        }
-
-        .muted {
-          color: var(--color-text-muted);
-          font-size: 11px;
-        }
-
-        .row-active-btn {
-          border: 1px solid var(--color-border-strong);
-          background: #1f2937;
-          color: var(--color-text-primary);
-          padding: 6px 10px;
-          border-radius: var(--radius-pill);
-          font-weight: 700;
-          margin-top: 0;
-        }
-        .row-active-btn.active {
-          background: rgba(22, 163, 74, 0.2);
-          border-color: #16a34a;
-          color: #bbf7d0;
-          box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
-        }
-
-        .row-active-btn.inactive {
+                  @keyframes spin {
+                    to {
+                      transform: rotate(360deg);
+                    }
+                  }
+                </style>
           background: rgba(148, 163, 184, 0.15);
-          border-color: #475569;
+              <body class="app-shell">
           color: #e2e8f0;
         }
 

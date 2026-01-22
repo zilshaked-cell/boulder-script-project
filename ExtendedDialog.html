@@ -1,16 +1,18 @@
-<!DOCTYPE html>
+<!doctype html>
 <html dir="rtl" lang="he">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <base target="_top" />
+    <?!= include_("UiTheme"); ?>
     <style>
       body.boulder-dialog {
         margin: 0;
         min-height: 100vh;
         display: flex;
         flex-direction: column;
-        font-family: "Segoe UI", Arial, sans-serif;
-        background: #f7f7f7;
-        color: #111;
+        background: var(--bg-page);
+        color: var(--text-primary);
       }
 
       #dialog-root {
@@ -18,33 +20,35 @@
         display: flex;
         flex-direction: column;
         min-height: 0;
+        background: linear-gradient(145deg, #ffffff, #eef3fb);
       }
 
       .dialog-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 12px;
-        background: #e6e6e6;
-        border-bottom: 1px solid #d0d0d0;
+        padding: 12px 14px;
+        background: linear-gradient(
+          120deg,
+          rgba(255, 255, 255, 0.94),
+          rgba(255, 255, 255, 0.86)
+        );
+        border-bottom: 1px solid var(--border-subtle);
         gap: 8px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
       }
 
       .dialog-title {
-        font-weight: 600;
-        font-size: 15px;
+        font-weight: 800;
+        font-size: 16px;
       }
 
       .dialog-actions {
         display: flex;
-        gap: 6px;
+        gap: 8px;
         align-items: center;
-      }
-
-      .dialog-actions button {
-        padding: 4px 10px;
-        font-size: 14px;
-        cursor: pointer;
       }
 
       .dialog-body {
@@ -52,21 +56,21 @@
         padding: 16px;
         box-sizing: border-box;
         overflow: auto;
-        background: #ffffff;
+        background: rgba(255, 255, 255, 0.9);
       }
 
       .compact .dialog-body {
-        padding: 8px;
+        padding: 10px;
         font-size: 13px;
       }
 
       .dialog-errors {
-        background: #fff3cd;
-        border: 1px solid #ffeeba;
-        color: #6b5a00;
-        padding: 8px 10px;
+        background: color-mix(in srgb, var(--danger) 12%, #fff);
+        border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+        color: #7a1d1d;
+        padding: 10px;
         margin-bottom: 12px;
-        border-radius: 4px;
+        border-radius: var(--radius-md);
       }
 
       .field {
@@ -77,22 +81,25 @@
         display: block;
         font-size: 13px;
         margin-bottom: 4px;
-        color: #333;
+        color: var(--text-primary);
       }
 
       .field input,
-      .field select {
+      .field select,
+      .field textarea {
         width: 100%;
-        padding: 8px;
+        padding: 9px 10px;
         box-sizing: border-box;
-        border: 1px solid #d0d0d0;
-        border-radius: 4px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
         font-size: 14px;
+        background: rgba(255, 255, 255, 0.96);
+        color: var(--text-primary);
       }
 
       .jobs-section {
         margin-top: 16px;
-        border-top: 1px solid #e2e2e2;
+        border-top: 1px solid var(--border-subtle);
         padding-top: 12px;
       }
 
@@ -110,10 +117,11 @@
       }
 
       .job-row {
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
         padding: 10px;
-        background: #fafafa;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow-soft);
       }
 
       .job-row-header {
@@ -124,18 +132,18 @@
       }
 
       .job-row-title {
-        font-weight: 600;
+        font-weight: 700;
       }
 
       .job-active-toggle {
-        padding: 4px 8px;
+        padding: 6px 10px;
         font-size: 13px;
         cursor: pointer;
       }
 
       .job-active-toggle.inactive {
-        background: #f5f5f5;
-        color: #555;
+        background: rgba(15, 23, 42, 0.05);
+        color: var(--text-muted);
       }
 
       .job-grid {
@@ -150,14 +158,8 @@
         gap: 8px;
       }
 
-      .dialog-footer-actions button {
-        padding: 8px 12px;
-        font-size: 14px;
-        cursor: pointer;
-      }
-
       .placeholder {
-        color: #666;
+        color: var(--text-muted);
       }
 
       .filters-row {
@@ -180,19 +182,19 @@
 
       table.shifts-table th,
       table.shifts-table td {
-        border: 1px solid #e0e0e0;
+        border: 1px solid var(--border-subtle);
         padding: 8px;
         font-size: 13px;
         text-align: right;
       }
 
       table.shifts-table th {
-        background: #f5f5f5;
+        background: rgba(255, 255, 255, 0.86);
         font-weight: 600;
       }
 
       table.shifts-table tr:hover {
-        background: #f0f8ff;
+        background: color-mix(in srgb, var(--accent) 10%, #fff);
         cursor: pointer;
       }
 
@@ -203,10 +205,11 @@
       }
 
       .shifts-form {
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
         padding: 12px;
-        background: #fafafa;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow-soft);
       }
 
       .shifts-form .field textarea {
@@ -214,8 +217,8 @@
         min-height: 70px;
         padding: 8px;
         box-sizing: border-box;
-        border: 1px solid #d0d0d0;
-        border-radius: 4px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
         font-size: 14px;
       }
     </style>

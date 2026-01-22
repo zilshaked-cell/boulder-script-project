@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg-page: #f5f7fb;
+        --bg-card: rgba(255, 255, 255, 0.9);
+        --bg-elevated: rgba(255, 255, 255, 0.96);
+        --bg-veil: rgba(15, 23, 42, 0.08);
+        --text-primary: #0f172a;
+        --text-muted: #4b5563;
+        --border-subtle: rgba(15, 23, 42, 0.12);
+        --border-strong: rgba(15, 23, 42, 0.2);
+        --accent: #f59e0b;
+        --accent-strong: #d97706;
+        --success: #16a34a;
+        --danger: #dc2626;
+        --radius-sm: 10px;
+        <style>
+          :root {
+            color-scheme: light;
+            --bg-page: #f5f7fb;
+            --bg-card: rgba(255, 255, 255, 0.9);
+            --bg-elevated: rgba(255, 255, 255, 0.96);
+            --bg-veil: rgba(15, 23, 42, 0.08);
+            --text-primary: #0f172a;
+            --text-muted: #4b5563;
+            --border-subtle: rgba(15, 23, 42, 0.12);
+            --border-strong: rgba(15, 23, 42, 0.2);
+            --accent: #f59e0b;
+            --accent-strong: #d97706;
+            --success: #16a34a;
+            --danger: #dc2626;
+            --radius-sm: 10px;
+            --radius-md: 14px;
+            --radius-lg: 18px;
+            --radius-pill: 999px;
+            --shadow-soft: 0 14px 40px rgba(15, 23, 42, 0.12);
+            --shadow-strong: 0 18px 60px rgba(15, 23, 42, 0.16);
+          }
+
+          html,
+          body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg-page);
+            color: var(--text-primary);
+            font-family: "Segoe UI", "Heebo", system-ui, -apple-system, sans-serif;
+            direction: rtl;
+          }
+
+          .app-shell {
+            background: linear-gradient(145deg, #fdfefe, #eef3fb);
+            min-height: 100vh;
+          }
+
+          .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-soft);
+            backdrop-filter: blur(12px);
+          }
+
+          .surface {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-md);
+          }
+
+          .header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border-subtle);
+            background: linear-gradient(120deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.82));
+          }
+
+          .btn {
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-pill);
+            padding: 8px 14px;
+            background: #ffffff;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.12s ease, box-shadow 0.2s ease,
+              background 0.2s ease, border-color 0.2s ease;
+          }
+          .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-soft);
+            border-color: var(--accent);
+          }
+          .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+          }
+          .btn-primary {
+            background: linear-gradient(135deg, #fbbf24, var(--accent));
+            border-color: color-mix(in srgb, var(--accent) 80%, transparent);
+            color: #0f172a;
+            box-shadow: var(--shadow-soft);
+          }
+          .btn-ghost {
+            background: rgba(255, 255, 255, 0.72);
+          }
+
+          .input,
+          select,
+          textarea,
+          input,
+          button {
+            font-family: inherit;
+          }
+
+          .input,
+          select,
+          textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px 12px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-subtle);
+            background: rgba(255, 255, 255, 0.96);
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+          }
+          .input:focus,
+          select:focus,
+          textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          table th,
+          table td {
+            padding: 10px;
+            border: 1px solid var(--border-subtle);
+            text-align: right;
+          }
+          table th {
+            background: rgba(255, 255, 255, 0.86);
+            font-weight: 700;
+          }
+
+          .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: var(--radius-pill);
+            background: rgba(15, 23, 42, 0.04);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            font-size: 12px;
+            font-weight: 700;
+          }
+
+          .overlay {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            background: color-mix(in srgb, rgba(15, 23, 42, 0.25) 72%, transparent);
+            backdrop-filter: blur(10px) saturate(1.05);
+            z-index: 9999;
+          }
+          .overlay-card {
+            padding: 20px 18px;
+            min-width: min(420px, 92vw);
+            border-radius: var(--radius-lg);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            box-shadow: var(--shadow-strong);
+          }
+
+          .muted {
+            color: var(--text-muted);
+            font-size: 13px;
+          }
+    </style>
+  </head>
+</html>
