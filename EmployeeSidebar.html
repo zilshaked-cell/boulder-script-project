@@ -1520,7 +1520,7 @@
               class="btn-secondary"
               type="button"
               onclick="openEmployeeDialogFromSidebar()"
-              style="padding: 6px 10px; font-size: 11px"
+              style="padding: 8px 12px; font-size: 12px"
             >
               פתח כרטיס בחלון גדול
             </button>
@@ -1573,16 +1573,9 @@
           <!-- אזהרת פילטר לשורה מוסתרת -->
           <div
             id="emp-filter-warning"
-            style="
-              display: none;
-              margin-bottom: 8px;
-              padding: 6px;
-              border-radius: 4px;
-              background: #fff3cd;
-              font-size: 12px;
-            "
+            style="display: none; margin-bottom: 8px"
           >
-            <div style="margin-bottom: 4px">
+            <div class="muted" style="margin-bottom: 4px">
               השורה שאתה רוצה לערוך מוסתרת במסנן. זה לא מפריע לעריכה. תרצה לבטל
               את הסינון כדי לראות את השורה?
             </div>
@@ -1702,7 +1695,7 @@
               class="btn-secondary"
               type="button"
               onclick="openRequestsDialogFromSidebar()"
-              style="padding: 6px 10px; font-size: 11px"
+              style="padding: 8px 12px; font-size: 12px"
             >
               פתח בקשות בחלון גדול
             </button>
@@ -1785,7 +1778,7 @@
               class="btn-secondary"
               type="button"
               onclick="openShiftsDialogFromSidebar()"
-              style="padding: 6px 10px; font-size: 11px"
+              style="padding: 8px 12px; font-size: 12px"
             >
               פתח משמרות בחלון גדול
             </button>
@@ -1798,6 +1791,7 @@
                 id="shifts-load-active-btn"
                 class="btn-secondary"
                 type="button"
+                style="padding: 8px 12px; font-size: 12px"
               >
                 בחר משמרת מגיליון המשמרות
               </button>
@@ -1908,7 +1902,12 @@
             <button id="shifts-search-btn" class="btn-primary" type="button">
               חיפוש
             </button>
-            <button id="shifts-clear-btn" class="btn-secondary" type="button">
+            <button
+              id="shifts-clear-btn"
+              class="btn-secondary"
+              type="button"
+              style="padding: 8px 12px; font-size: 12px"
+            >
               ניקוי
             </button>
           </div>
@@ -1921,6 +1920,7 @@
                   id="overlap-refresh-btn"
                   class="btn-secondary"
                   type="button"
+                  style="padding: 8px 12px; font-size: 12px"
                 >
                   רענן
                 </button>
@@ -1928,6 +1928,7 @@
                   id="overlap-dialog-btn"
                   class="btn-secondary"
                   type="button"
+                  style="padding: 8px 12px; font-size: 12px"
                 >
                   חלון חפיפות
                 </button>
@@ -2052,7 +2053,12 @@
         <div class="section tab-hidden" data-tab-section="settings">
           <div class="section" id="edit-mode-section">
             <span class="label">מצב עריכה</span>
-            <button id="edit-mode-toggle" type="button" class="btn-secondary">
+            <button
+              id="edit-mode-toggle"
+              type="button"
+              class="btn-secondary"
+              style="padding: 8px 12px; font-size: 12px"
+            >
               מצב: שמירה ידנית
             </button>
             <div class="muted" id="edit-mode-explainer">
@@ -2064,13 +2070,19 @@
           <div class="section" id="auto-load-section">
             <span class="label">מצב טעינת עובד</span>
             <div class="pill-toggle">
-              <button id="auto-load-auto-btn" type="button" class="btn-primary">
+              <button
+                id="auto-load-auto-btn"
+                type="button"
+                class="btn-secondary"
+                style="padding: 8px 12px; font-size: 12px"
+              >
                 טעינת עובד אוטומטית
               </button>
               <button
                 id="auto-load-manual-btn"
                 type="button"
-                class="btn-secondary"
+                class="btn-primary"
+                style="padding: 8px 12px; font-size: 12px"
               >
                 טעינת עובד ידנית (כפתור)
               </button>
