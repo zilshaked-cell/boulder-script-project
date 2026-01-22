@@ -6394,14 +6394,23 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       paymentModeSource = "פרטי עובדים";
     }
 
-    if (!paymentModeId && !paymentModeName && jobPay && (jobPay.payTypeId || jobPay.payTypeName)) {
+    if (
+      !paymentModeId &&
+      !paymentModeName &&
+      jobPay &&
+      (jobPay.payTypeId || jobPay.payTypeName)
+    ) {
       paymentModeId = jobPay.payTypeId || "";
       paymentModeName = jobPay.payTypeName || "";
       paymentModeSource = "מסוג עבודה";
     }
 
     if (!paymentModeSource && (paymentModeId || paymentModeName)) {
-      paymentModeSource = employeePayMeta ? "פרטי עובדים" : jobPay ? "מסוג עבודה" : "מהדיווח";
+      paymentModeSource = employeePayMeta
+        ? "פרטי עובדים"
+        : jobPay
+          ? "מסוג עבודה"
+          : "מהדיווח";
     }
 
     if (!paymentModeSource) {
@@ -6413,7 +6422,8 @@ function listFaultyWorkLogsForMenu_(maxRows) {
     rec.paymentModeSource = paymentModeSource;
     rec.payType = paymentModeName || paymentModeId || "";
     if (!rec.payType && employeePayMeta) {
-      rec.payType = employeePayMeta.payTypeName || employeePayMeta.payTypeId || "";
+      rec.payType =
+        employeePayMeta.payTypeName || employeePayMeta.payTypeId || "";
     }
     if (!rec.payType && jobPay) {
       rec.payType = jobPay.payTypeName || jobPay.payTypeId || "";

@@ -174,7 +174,7 @@
                   .requests-container,
                   .shifts-container {
                     display: flex;
-                    flex-direction: column;
+                    margin-top: 10px;
                     gap: 8px;
                   }
 
@@ -185,7 +185,10 @@
                     padding: 10px;
                     background: rgba(255, 255, 255, 0.92);
                     border: 1px solid var(--border-subtle);
+                    border-radius: var(--radius-lg);
+                    padding: 14px 16px;
                     box-shadow: var(--shadow-soft);
+                    backdrop-filter: blur(6px);
                   }
 
                   .job-row-header,
@@ -196,6 +199,16 @@
                     align-items: center;
                     gap: 8px;
                     margin-bottom: 6px;
+                  }
+
+                  .info-card h3,
+                  .overlap-card h3,
+                  .requests-card h3,
+                  .hours-card h3,
+                  .pending-card h3,
+                  .summary-card h3 {
+                    color: var(--text-primary);
+                    letter-spacing: 0.01em;
                   }
 
                   .job-row-header-title {
@@ -417,27 +430,37 @@
         }
 
         .role-toggle {
-          min-width: 80px;
+          min-width: 90px;
           text-transform: lowercase;
-          background: var(--color-surface-2);
-          border: 1px solid var(--color-border-strong);
-          color: var(--color-text-primary);
-          font-weight: 700;
-          padding: 5px 10px;
+          background: rgba(255, 255, 255, 0.92);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
+          font-weight: 800;
+          padding: 7px 12px;
           font-size: 11px;
+          border-radius: var(--radius-pill);
+          box-shadow: var(--shadow-soft);
+          transition: background 0.18s ease, border-color 0.18s ease,
+            box-shadow 0.18s ease, color 0.18s ease, transform 0.12s ease;
+        }
+
+        .role-toggle:hover {
+          border-color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 12%, #fff);
+          transform: translateY(-1px);
         }
 
         .role-toggle.role-admin {
-          background: rgba(34, 197, 94, 0.2);
-          border-color: #16a34a;
-          color: #bbf7d0;
-          box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2);
+          background: linear-gradient(135deg, #fbbf24, var(--accent));
+          border-color: color-mix(in srgb, var(--accent) 80%, transparent);
+          color: #0f172a;
+          box-shadow: var(--shadow-soft);
         }
 
         .role-toggle.role-employee {
-          background: rgba(148, 163, 184, 0.14);
-          border-color: #475569;
-          color: #e2e8f0;
+          background: rgba(255, 255, 255, 0.9);
+          border-color: var(--border-subtle);
+          color: var(--text-primary);
         }
 
         .sidebar-layout {
@@ -544,20 +567,22 @@
         #search-input {
           width: 100%;
           box-sizing: border-box;
-          background: var(--color-surface-2);
-          border: 1px solid var(--color-border-strong);
-          color: var(--color-text-primary);
-          border-radius: var(--radius-sm);
-          padding: 8px 10px;
+          background: rgba(255, 255, 255, 0.96);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
+          border-radius: var(--radius-md);
+          padding: 9px 11px;
+          box-shadow: var(--shadow-soft);
           transition: border-color 0.2s ease, box-shadow 0.2s ease,
-            background 0.2s ease;
+            background 0.2s ease, transform 0.12s ease;
         }
 
         #search-input:focus {
           outline: none;
-          border-color: var(--color-accent);
-          box-shadow: 0 0 0 2px var(--color-focus);
-          background: var(--color-surface);
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+          background: color-mix(in srgb, var(--accent) 8%, #fff);
+          transform: translateY(-1px);
         }
 
         .tab-warning {
@@ -857,11 +882,12 @@
 
         .bonus-add-row select {
           min-width: 160px;
-          background: var(--color-surface-2);
-          color: var(--color-text-primary);
-          border: 1px solid var(--color-border-strong);
-          border-radius: var(--radius-sm);
-          padding: 6px 8px;
+          background: rgba(255, 255, 255, 0.94);
+          color: var(--text-primary);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          padding: 8px 10px;
+          box-shadow: var(--shadow-soft);
         }
 
         .shifts-actions {
@@ -879,10 +905,12 @@
         }
 
         .overlap-summary {
-          border: 1px solid var(--color-border-strong);
-          border-radius: var(--radius-md);
-          padding: 8px;
-          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          padding: 12px;
+          background: rgba(255, 255, 255, 0.92);
+          box-shadow: var(--shadow-soft);
+          backdrop-filter: blur(6px);
         }
 
         .overlap-summary-actions {
@@ -894,48 +922,51 @@
         .overlap-summary-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-          gap: 8px;
-          margin-top: 8px;
+          gap: 10px;
+          margin-top: 10px;
         }
 
         .overlap-summary-card {
-          background: var(--color-surface-2);
-          border: 1px solid var(--color-border-strong);
-          border-radius: var(--radius-md);
-          padding: 8px;
+          background: rgba(255, 255, 255, 0.94);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          padding: 10px;
+          box-shadow: var(--shadow-soft);
         }
 
         .overlap-summary-card .metric-label {
           font-size: 11px;
-          color: var(--color-text-muted);
+          color: var(--text-muted);
         }
 
         .overlap-summary-card .metric-value {
           font-size: 16px;
           font-weight: 800;
+          color: var(--text-primary);
         }
 
         .overlap-summary-status.error {
-          color: #fca5a5;
+          color: #dc2626;
         }
 
         .overlap-top-list {
-          margin-top: 8px;
+          margin-top: 10px;
           display: flex;
           flex-direction: column;
-          gap: 6px;
+          gap: 8px;
         }
 
         .overlap-top-item {
-          background: var(--color-surface-2);
-          border: 1px solid var(--color-border-strong);
-          border-radius: var(--radius-sm);
-          padding: 6px 8px;
+          background: color-mix(in srgb, var(--accent) 8%, #ffffff);
+          border: 1px solid color-mix(in srgb, var(--accent) 18%, #dbeafe);
+          border-radius: var(--radius-md);
+          padding: 8px 10px;
           font-size: 12px;
+          box-shadow: var(--shadow-soft);
         }
 
         .overlap-top-item small {
-          color: var(--color-text-muted);
+          color: var(--text-muted);
           display: block;
           margin-top: 2px;
         }
@@ -954,11 +985,12 @@
           flex-direction: column;
           gap: 8px;
           margin-bottom: 6px;
-          background: var(--bg-elevated);
+          background: rgba(255, 255, 255, 0.92);
           border: 1px solid var(--border-subtle);
-          padding: 10px;
-          border-radius: var(--radius-md);
+          padding: 12px;
+          border-radius: var(--radius-lg);
           box-shadow: var(--shadow-soft);
+          backdrop-filter: blur(6px);
         }
 
         .requests-status-buttons {
@@ -1009,11 +1041,13 @@
         }
 
         .request-card {
-          border: 1px solid var(--color-border-strong);
-          border-radius: var(--radius-md);
-          padding: 8px;
-          background: rgba(255, 255, 255, 0.03);
-          transition: border-color 0.2s ease, background 0.2s ease;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          padding: 12px;
+          background: rgba(255, 255, 255, 0.94);
+          box-shadow: var(--shadow-soft);
+          transition: border-color 0.2s ease, background 0.2s ease,
+            box-shadow 0.2s ease;
         }
 
         .request-card-header {
@@ -1038,33 +1072,37 @@
 
         .request-card-header .request-title-secondary {
           font-size: 11px;
-          color: var(--color-text-muted);
+          color: var(--text-muted);
         }
 
         .request-card-toggle {
-          border-radius: 8px;
-          border: 1px solid var(--color-border-strong);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-subtle);
           width: 24px;
           height: 24px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           font-size: 12px;
-          transition: transform 0.18s ease, border-color 0.18s ease;
+          transition: transform 0.18s ease, border-color 0.18s ease,
+            background 0.2s ease;
+          background: rgba(255, 255, 255, 0.9);
+          box-shadow: var(--shadow-soft);
         }
 
         .request-card[data-open="true"] .request-card-toggle {
           transform: rotate(180deg);
-          border-color: var(--color-accent);
+          border-color: var(--accent);
+          background: color-mix(in srgb, var(--accent) 12%, #fff);
         }
 
         .request-card-body {
           display: none;
-          margin-top: 6px;
-          border-top: 1px solid var(--color-border-strong);
-          padding-top: 6px;
+          margin-top: 8px;
+          border-top: 1px solid var(--border-subtle);
+          padding-top: 8px;
           font-size: 12px;
-          color: var(--color-text-primary);
+          color: var(--text-primary);
         }
 
         .request-card[data-open="true"] .request-card-body {
@@ -1076,7 +1114,7 @@
           flex-wrap: wrap;
           gap: 6px;
           font-size: 12px;
-          color: var(--color-text-muted);
+          color: var(--text-muted);
         }
 
         .request-meta-inline {
@@ -1084,16 +1122,17 @@
           align-items: center;
           gap: 6px;
           font-size: 11px;
-          color: var(--color-text-muted);
+          color: var(--text-muted);
         }
 
         .request-badge {
           display: inline-block;
           padding: 3px 8px;
           border-radius: var(--radius-pill);
-          border: 1px solid var(--color-border);
-          background: var(--color-surface-2);
+          border: 1px solid var(--border-subtle);
+          background: rgba(255, 255, 255, 0.9);
           font-size: 11px;
+          box-shadow: var(--shadow-soft);
         }
 
         .request-status-row {
@@ -1112,30 +1151,33 @@
           width: 22px;
           height: 22px;
           border-radius: 50%;
-          border: 1px solid var(--color-border-strong);
-          background: var(--color-surface-2);
-          color: var(--color-text-primary);
+          border: 1px solid var(--border-subtle);
+          background: rgba(255, 255, 255, 0.92);
+          color: var(--text-primary);
           font-size: 12px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           pointer-events: none;
+          box-shadow: var(--shadow-soft);
         }
 
         .request-status-circle.approve {
           border-color: #22c55e;
-          color: #22c55e;
+          color: #15803d;
+          background: color-mix(in srgb, #22c55e 12%, #ffffff);
         }
 
         .request-status-circle.reject {
           border-color: #ef4444;
-          color: #ef4444;
+          color: #b91c1c;
+          background: color-mix(in srgb, #ef4444 10%, #ffffff);
         }
 
         .request-note {
           margin-top: 6px;
           font-size: 12px;
-          color: var(--color-text-primary);
+          color: var(--text-primary);
         }
 
         .request-detail-row {
@@ -1146,12 +1188,12 @@
         }
 
         .request-detail-label {
-          color: var(--color-text-muted);
+          color: var(--text-muted);
           min-width: 90px;
         }
 
         .requests-empty {
-          color: var(--color-text-muted);
+          color: var(--text-muted);
           font-size: 12px;
           padding: 6px 0;
         }
