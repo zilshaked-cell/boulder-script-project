@@ -3102,6 +3102,12 @@ function handleShiftReportSubmit_(payload, logger) {
 
   // Detect duplicates after writing (to include the new row in the list).
   var duplicateScanStartMs = new Date().getTime();
+  const eventMsForCriteria = extractEventMs_(
+    normalized.workDate,
+    normalized.timestamp,
+    normalized.fixDate,
+    normalized.fixTime,
+  );
   const duplicates = findDuplicateWorkLogs_(
     {
       employeeId: employeeId,
@@ -3110,6 +3116,10 @@ function handleShiftReportSubmit_(payload, logger) {
       department: department,
       direction: normalized.direction,
       workDate: normalized.workDate,
+      fixDate: normalized.fixDate,
+      fixTime: normalized.fixTime,
+      timestamp: normalized.timestamp,
+      eventMs: eventMsForCriteria,
     },
     shiftId,
   );
@@ -3117,6 +3127,18 @@ function handleShiftReportSubmit_(payload, logger) {
     count: duplicates.length,
   });
   const duplicatesFound = duplicates.length >= 2;
+
+  appendSystemLog_({
+    operation: "WORK_LOG_DUP_SCAN",
+    step: "scan",
+    severity: "info",
+    errorCode: null,
+    details: {
+      foundCount: duplicates.length,
+      includeShiftId: Boolean(shiftId),
+      timeWindowMs: DUPLICATE_TIME_WINDOW_MS,
+    },
+  });
 
   if (duplicatesFound) {
     const cleanup = cleanupExactDuplicateWorkLogs_(duplicates);
@@ -4133,8 +4155,8 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     const fixDateRaw = fixDateCol ? row[fixDateCol - 1] : "";
     const fixTimeRaw = fixTimeCol ? row[fixTimeCol - 1] : "";
     return {
-      shiftId: "", // אל תציג מזהים למשתמש
-      employeeId: "",
+      shiftId: reportIdCol ? stringValue(row[reportIdCol - 1]) : "",
+      employeeId: empCol ? stringValue(row[empCol - 1]) : "",
       jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
@@ -4161,7 +4183,6 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
 
   function canonicalKey_(rec) {
     return [
-      rec.shiftId,
       rec.employeeId,
       rec.jobTypeId,
       rec.jobName,
@@ -4186,14 +4207,17 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
     (criteria.timestamp && String(criteria.timestamp).match(/\d{1,2}:\d{2}/)) ||
     (criteria.workDate && String(criteria.workDate).match(/\d{1,2}:\d{2}/)),
   );
-  const targetEventMs = hasTimeInCriteria
-    ? extractEventMs_(
-        criteria.workDate,
-        criteria.timestamp,
-        criteria.fixDate,
-        criteria.fixTime,
-      )
-    : null;
+  const targetEventMs =
+    typeof criteria.eventMs === "number"
+      ? criteria.eventMs
+      : hasTimeInCriteria
+        ? extractEventMs_(
+            criteria.workDate,
+            criteria.timestamp,
+            criteria.fixDate,
+            criteria.fixTime,
+          )
+        : null;
 
   const results = [];
   for (let i = 1; i < values.length; i++) {
@@ -4231,6 +4255,7 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
 function cleanupExactDuplicateWorkLogs_(duplicates) {
   if (!duplicates || duplicates.length < 2) return { deletedCount: 0 };
   const sheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+  const foundCount = duplicates.length;
   const groups = {};
   duplicates.forEach(function (d) {
     if (!d || !d.canonicalKey) return;
@@ -4251,7 +4276,7 @@ function cleanupExactDuplicateWorkLogs_(duplicates) {
 
   if (!rowsToDelete.length) return { deletedCount: 0 };
 
-  const MAX_DELETE = 50;
+  const MAX_DELETE = 100;
   rowsToDelete.sort(function (a, b) {
     return b - a;
   });
@@ -4266,8 +4291,10 @@ function cleanupExactDuplicateWorkLogs_(duplicates) {
     severity: "info",
     errorCode: null,
     details: {
+      foundCount: foundCount,
       deletedCount: limited.length,
       capped: rowsToDelete.length > MAX_DELETE,
+      timeWindowMs: DUPLICATE_TIME_WINDOW_MS,
     },
   });
 
@@ -4375,6 +4402,61 @@ function isWithinDuplicateWindow_(msA, msB) {
   if (msB === null || msB === undefined) return true;
   if (isNaN(msA) || isNaN(msB)) return true;
   return Math.abs(msA - msB) <= DUPLICATE_TIME_WINDOW_MS;
+}
+
+// Lightweight in-memory check to validate duplicate window behavior without touching sheets.
+function __testDuplicateDetectMock_() {
+  const base = Date.parse("2024-01-01T10:00:00Z");
+  const samples = [
+    {
+      employeeId: "E1",
+      jobTypeId: "J1",
+      direction: "IN",
+      workDate: "2024-01-01",
+      eventMs: base,
+    },
+    {
+      employeeId: "E1",
+      jobTypeId: "J1",
+      direction: "IN",
+      workDate: "2024-01-01",
+      eventMs: base + 5 * 60 * 1000,
+    },
+    {
+      employeeId: "E1",
+      jobTypeId: "J1",
+      direction: "IN",
+      workDate: "2024-01-01",
+      eventMs: base + 20 * 60 * 1000,
+    },
+  ];
+
+  function key(rec) {
+    const bucket = Math.floor((rec.eventMs || 0) / DUPLICATE_TIME_WINDOW_MS);
+    return [rec.employeeId, rec.jobTypeId, rec.direction, rec.workDate, bucket].join("__");
+  }
+
+  const groups = {};
+  samples.forEach(function (rec) {
+    const k = key(rec);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(rec);
+  });
+
+  const withinWindow = Object.values(groups).some(function (list) {
+    return Array.isArray(list) && list.length >= 2;
+  });
+
+  const outsideWindow = samples.filter(function (rec) {
+    return !isWithinDuplicateWindow_(rec.eventMs, base);
+  }).length;
+
+  return {
+    sampleCount: samples.length,
+    buckets: Object.keys(groups).length,
+    withinWindowDuplicateDetected: withinWindow,
+    outsideWindowCount: outsideWindow,
+  };
 }
 
 function buildDuplicateKey_(
