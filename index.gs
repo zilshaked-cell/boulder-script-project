@@ -5868,8 +5868,8 @@ function shiftReport_showFaultsDialog() {
   }
 
   const html = HtmlService.createHtmlOutput(buildFaultsDialogHtml_(faults))
-    .setWidth(720)
-    .setHeight(760);
+    .setWidth(1100)
+    .setHeight(900);
 
   ui.showModalDialog(html, "תיקון תקלות בדיווחי עובדים");
 }
