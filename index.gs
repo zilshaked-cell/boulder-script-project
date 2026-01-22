@@ -6568,12 +6568,24 @@ function buildFaultsDialogHtml_(faults) {
 
     function extractDate(val) {
       if (!val) return '';
+      if (val instanceof Date || !isNaN(new Date(val))) {
+        const d = val instanceof Date ? val : new Date(val);
+        if (!isNaN(d)) return d.toISOString().slice(0, 10);
+      }
       const match = String(val).match(/(\d{4}-\d{2}-\d{2})/);
       return match && match[1] ? match[1] : '';
     }
 
     function extractTime(val) {
       if (!val) return '';
+      if (val instanceof Date || !isNaN(new Date(val))) {
+        const d = val instanceof Date ? val : new Date(val);
+        if (!isNaN(d)) {
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mm = String(d.getMinutes()).padStart(2, '0');
+          return hh + ':' + mm;
+        }
+      }
       const raw = String(val);
       const iso = raw.match(/T(\d{2}:\d{2})/);
       if (iso && iso[1]) return iso[1];
@@ -6601,6 +6613,14 @@ function buildFaultsDialogHtml_(faults) {
 
     function formatDisplayDateTime(val) {
       if (!val) return '';
+      if (val instanceof Date || !isNaN(new Date(val))) {
+        const d = val instanceof Date ? val : new Date(val);
+        if (!isNaN(d)) {
+          const date = [String(d.getDate()).padStart(2, '0'), String(d.getMonth() + 1).padStart(2, '0'), d.getFullYear()].join('/');
+          const time = [String(d.getHours()).padStart(2, '0'), String(d.getMinutes()).padStart(2, '0')].join(':');
+          return date + ' ' + time;
+        }
+      }
       const date = formatDisplayDate(extractDate(val));
       const time = formatDisplayTime(val);
       return [date, time].filter(Boolean).join(' ');
@@ -6658,7 +6678,7 @@ function buildFaultsDialogHtml_(faults) {
       listEl.innerHTML = '';
       faults.forEach((f, idx) => {
         const currentDate = extractDate(f.workDate || f.timestamp);
-        const currentTime = extractTime(f.timestamp);
+        const currentTime = extractTime(f.fixTime || f.timestamp);
         if (currentDate && !f.workDate) f.workDate = currentDate;
         if (currentTime && !f.fixTime) f.fixTime = currentTime;
 
@@ -6709,6 +6729,9 @@ function buildFaultsDialogHtml_(faults) {
         const reasonText = document.createElement('div');
         reasonText.className = 'reason-text';
         reasonText.textContent = (meta.code ? meta.code + ' – ' : '') + (meta.description || '');
+        if (!reasonText.textContent.trim()) {
+          reasonText.textContent = 'תקלת דיווח';
+        }
         reason.appendChild(reasonText);
 
         const focusMap = {};
@@ -7001,6 +7024,10 @@ function buildFaultsDialogHtml_(faults) {
         save.onclick = () => act(f, 'saveEdits', save);
         actions.appendChild(save);
 
+        const actionHint = document.createElement('div');
+        actionHint.className = 'error-text';
+        actionHint.style.display = 'none';
+
         const ack = document.createElement('button');
         ack.className = 'btn ghost';
         ack.textContent = 'לא תקלה / התעלם';
@@ -7025,6 +7052,7 @@ function buildFaultsDialogHtml_(faults) {
         actions.appendChild(skip);
 
         div.appendChild(actions);
+        div.appendChild(actionHint);
         listEl.appendChild(div);
 
         function evalErrors() {
@@ -7060,6 +7088,13 @@ function buildFaultsDialogHtml_(faults) {
           });
           const hasErrors = Object.keys(errs).length > 0;
           save.disabled = hasErrors;
+          if (hasErrors) {
+            actionHint.style.display = 'block';
+            actionHint.textContent = 'מלאו את השדות החסרים כדי לשמור.';
+          } else {
+            actionHint.style.display = 'none';
+            actionHint.textContent = '';
+          }
         }
 
         refreshValidation();
