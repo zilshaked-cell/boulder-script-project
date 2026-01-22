@@ -6373,32 +6373,35 @@ function listFaultyWorkLogsForMenu_(maxRows) {
     let paymentModeName = paymentModeNameRaw;
     let paymentModeSource = "";
 
+    // Priority: explicit report value > employee override > job type default > fallback
     if (paymentModeId || paymentModeName) {
       paymentModeSource = "מהדיווח";
-    } else if (jobPay && (jobPay.payTypeId || jobPay.payTypeName)) {
-      paymentModeId = jobPay.payTypeId || "";
-      paymentModeName = jobPay.payTypeName || "";
-      paymentModeSource = "מסוג עבודה";
     }
 
-    if (
-      !paymentModeId &&
-      !paymentModeName &&
-      employeesSheet &&
-      rec.employeeId &&
-      rec.jobTypeId
-    ) {
-      const payMeta = resolveEmployeeJobPayType_(
+    let employeePayMeta = null;
+    if (employeesSheet && rec.employeeId && rec.jobTypeId) {
+      employeePayMeta = resolveEmployeeJobPayType_(
         employeesSheet,
         empHeaders,
         rec.employeeId,
         rec.jobTypeId,
       );
-      if (payMeta) {
-        paymentModeId = paymentModeId || payMeta.payTypeId || "";
-        paymentModeName = paymentModeName || payMeta.payTypeName || "";
-        if (!paymentModeSource) paymentModeSource = "מסוג עבודה";
-      }
+    }
+
+    if (!paymentModeId && !paymentModeName && employeePayMeta) {
+      paymentModeId = employeePayMeta.payTypeId || "";
+      paymentModeName = employeePayMeta.payTypeName || "";
+      paymentModeSource = "פרטי עובדים";
+    }
+
+    if (!paymentModeId && !paymentModeName && jobPay && (jobPay.payTypeId || jobPay.payTypeName)) {
+      paymentModeId = jobPay.payTypeId || "";
+      paymentModeName = jobPay.payTypeName || "";
+      paymentModeSource = "מסוג עבודה";
+    }
+
+    if (!paymentModeSource && (paymentModeId || paymentModeName)) {
+      paymentModeSource = employeePayMeta ? "פרטי עובדים" : jobPay ? "מסוג עבודה" : "מהדיווח";
     }
 
     if (!paymentModeSource) {
@@ -6409,18 +6412,11 @@ function listFaultyWorkLogsForMenu_(maxRows) {
     rec.paymentModeName = paymentModeName;
     rec.paymentModeSource = paymentModeSource;
     rec.payType = paymentModeName || paymentModeId || "";
-
-    if (employeesSheet && rec.employeeId && rec.jobTypeId) {
-      const payMeta = resolveEmployeeJobPayType_(
-        employeesSheet,
-        empHeaders,
-        rec.employeeId,
-        rec.jobTypeId,
-      );
-      if (payMeta) {
-        rec.payType =
-          rec.payType || payMeta.payTypeName || payMeta.payTypeId || "";
-      }
+    if (!rec.payType && employeePayMeta) {
+      rec.payType = employeePayMeta.payTypeName || employeePayMeta.payTypeId || "";
+    }
+    if (!rec.payType && jobPay) {
+      rec.payType = jobPay.payTypeName || jobPay.payTypeId || "";
     }
 
     const hash = buildFaultHash_(rec);
@@ -6488,7 +6484,10 @@ function buildFaultsDialogHtml_(faults) {
     .readonly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
     .ro-field{display:flex;flex-direction:column;font-size:12px;gap:2px;padding:8px;border:1px solid transparent;border-radius:8px;background:#fff;}
     .ro-label{color:#475569;font-weight:700;}
-    .ro-value{color:#0f172a;font-weight:600;}
+    .ro-value{color:#0f172a;font-weight:600;word-break:break-word;overflow-wrap:anywhere;}
+    .reason-text{word-break:break-word;overflow-wrap:anywhere;}
+    .subtitle{word-break:break-word;overflow-wrap:anywhere;}
+    .chip{word-break:break-word;overflow-wrap:anywhere;}
     .edit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;}
     .edit-field{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#f9fafb;display:flex;flex-direction:column;gap:6px;}
     .label-row{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;color:#0f172a;}
