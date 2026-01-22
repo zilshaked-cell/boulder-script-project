@@ -6390,9 +6390,6 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       rec.payType =
         employeePayMeta.payTypeName || employeePayMeta.payTypeId || "";
     }
-    if (!rec.payType && jobPay) {
-      rec.payType = jobPay.payTypeName || jobPay.payTypeId || "";
-    }
 
     const hash = buildFaultHash_(rec);
     if (ack[hash]) continue;
