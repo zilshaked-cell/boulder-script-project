@@ -4115,6 +4115,11 @@ function normalizeShiftForWrite_({
 }
 
 function resolveEmployeeJobPayType_(sheet, headers, employeeId, jobTypeId) {
+  Logger.log(
+    "[resolveEmployeeJobPayType_] start empId=%s jobTypeId=%s",
+    employeeId,
+    jobTypeId,
+  );
   if (!jobTypeId) return null;
   const empIdCol = getRequiredColumn_(
     headers,
@@ -4135,9 +4140,30 @@ function resolveEmployeeJobPayType_(sheet, headers, employeeId, jobTypeId) {
   const values = sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    if (stringValue(row[empIdCol - 1]) !== employeeId) continue;
-    if (statusCol && stringValue(row[statusCol - 1]) === "לא פעיל") continue;
-    if (stringValue(row[jobTypeCol - 1]) !== jobTypeId) continue;
+    const rowEmpId = stringValue(row[empIdCol - 1]);
+    const rowJobTypeId = stringValue(row[jobTypeCol - 1]);
+    const rowStatus = statusCol ? stringValue(row[statusCol - 1]) : "";
+    if (rowEmpId === employeeId) {
+      Logger.log(
+        "[resolveEmployeeJobPayType_] candidate row=%s rowEmpId=%s rowJobTypeId=%s rowStatus=%s (wanted jobTypeId=%s)",
+        i + 1,
+        rowEmpId,
+        rowJobTypeId,
+        rowStatus,
+        jobTypeId,
+      );
+    }
+    if (rowEmpId !== employeeId) continue;
+    if (statusCol && rowStatus === "לא פעיל") continue;
+    if (rowJobTypeId !== jobTypeId) continue;
+    Logger.log(
+      "[resolveEmployeeJobPayType_] MATCH row=%s empId=%s jobTypeId=%s payTypeId=%s payTypeName=%s",
+      i + 1,
+      employeeId,
+      jobTypeId,
+      payIdCol ? stringValue(row[payIdCol - 1]) : "",
+      payNameCol ? stringValue(row[payNameCol - 1]) : "",
+    );
     return {
       payTypeId: payIdCol ? stringValue(row[payIdCol - 1]) : "",
       payTypeName: payNameCol ? stringValue(row[payNameCol - 1]) : "",
@@ -6584,6 +6610,17 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       paymentModeSource = "מהדיווח";
     }
 
+    Logger.log(
+      "[FaultyWorkLogs] row=%s shiftId=%s empId=%s jobTypeId=%s payModeIdRaw=%s payModeNameRaw=%s willResolve=%s",
+      i + 1,
+      rec.shiftId,
+      rec.employeeId,
+      rec.jobTypeId,
+      paymentModeIdRaw,
+      paymentModeNameRaw,
+      !!(employeesSheet && rec.employeeId && rec.jobTypeId),
+    );
+
     let employeePayMeta = null;
     if (employeesSheet && rec.employeeId && rec.jobTypeId) {
       employeePayMeta = resolveEmployeeJobPayType_(
@@ -6593,6 +6630,13 @@ function listFaultyWorkLogsForMenu_(maxRows) {
         rec.jobTypeId,
       );
     }
+
+    Logger.log(
+      "[FaultyWorkLogs] resolveEmployeeJobPayType_ result empId=%s jobTypeId=%s -> %s",
+      rec.employeeId,
+      rec.jobTypeId,
+      employeePayMeta ? JSON.stringify(employeePayMeta) : "null",
+    );
 
     if (!paymentModeId && !paymentModeName && employeePayMeta) {
       paymentModeId = employeePayMeta.payTypeId || "";
