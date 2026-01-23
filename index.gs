@@ -265,6 +265,7 @@ function mapActionToOperation_(action) {
     "employee.linkedJobs": "REPORT_LOAD",
     "admin.runBulkAction": "ADMIN_BULK_ACTION_RUN",
     "admin.listEmployees": "ADMIN_EMPLOYEES_LIST",
+    "admin.saveEmployee": "ADMIN_EMPLOYEE_SAVE",
     "workLogs.listByEmployee": "WORK_LOG_LOAD",
     "requests.listByEmployee": "REQUEST_LIST",
     reportAccessIssue: "REPORT_SAVE",
@@ -306,6 +307,9 @@ function getActionRegistry_() {
     },
     "admin.listEmployees": function (payload, logger) {
       return adminListEmployees_(payload || {}, logger);
+    },
+    "admin.saveEmployee": function (payload, logger) {
+      return adminSaveEmployee_(payload || {}, logger);
     },
     "admin.listRequests": function (payload, logger) {
       return adminListRequests_(payload || {}, logger);
@@ -1851,6 +1855,224 @@ function adminListEmployees_(payload, logger) {
   });
 
   return { employees: filtered };
+}
+
+function adminSaveEmployee_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("ADMIN_EMPLOYEE_SAVE");
+  var startMs = new Date().getTime();
+
+  const sheet = getEmployeesSheet_();
+  const headers = getHeaderMap_(sheet);
+  const sheetName = sheet.getName();
+
+  const idCol = getRequiredColumn_(
+    headers,
+    ["מזהה עובד", "ID עובד", "Employee ID"],
+    sheetName,
+  );
+  const emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
+  const phoneCol = getOptionalColumn_(headers, [
+    "טלפון",
+    "פלאפון",
+    "נייד",
+    "phone",
+    "mobile",
+  ]);
+  const genderCol = getOptionalColumn_(headers, ["מין", "gender"]);
+  const nationalIdCol = getOptionalColumn_(headers, [
+    "תז",
+    "id",
+    "id number",
+    "תעודת זהות",
+  ]);
+  const birthDateCol = getOptionalColumn_(headers, [
+    "ת. לידה",
+    "תאריך לידה",
+    "birth date",
+    "birthday",
+  ]);
+  const shirtSizeCol = getOptionalColumn_(headers, [
+    "מידת חולצה",
+    "shirt size",
+    "shirt",
+  ]);
+  const travelAllowanceCol = getOptionalColumn_(headers, [
+    "עלות החזרי נסיעות יומי",
+    "החזר נסיעות",
+    "נסיעות",
+    "travel allowance",
+  ]);
+  const statusCol = getOptionalColumn_(headers, [
+    "סטטוס",
+    "סטטוס פעיל",
+    "active",
+    "status",
+  ]);
+  const employmentStatusCol = getOptionalColumn_(headers, [
+    "סטטוס העסקה",
+    "employment status",
+    "Employment Status",
+  ]);
+  const branchCol = getOptionalColumn_(headers, [
+    "סניף",
+    "branch",
+    "Branch",
+    "Branch Id",
+    "branch id",
+    "branchId",
+  ]);
+  const roleTitleCol = getOptionalColumn_(headers, [
+    "תפקיד",
+    "role title",
+    "title",
+    "תיאור תפקיד",
+  ]);
+  const notesCol = getOptionalColumn_(headers, ["הערות", "notes"]);
+  const sizeWebAppCol = getOptionalColumn_(headers, ["מידה (WebApp)"]);
+  const sizeSourceCol = getOptionalColumn_(headers, ["SOURCE_SIZE"]);
+
+  const employeeId = stringValue(payload.employeeId);
+  if (!employeeId) {
+    return {
+      ok: false,
+      error: "employeeId is required",
+      errorCode: ERROR_CODES.VALIDATION_FAILED,
+    };
+  }
+
+  const modeRaw = stringValue(payload.mode).toUpperCase();
+  const isDryRun = modeRaw === "DRY_RUN" || payload.dryRun === true;
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= EMPLOYEE_HEADER_ROW) {
+    return {
+      ok: false,
+      error: "employee_not_found",
+      errorCode: ERROR_CODES.EMPLOYEE_NOT_FOUND,
+    };
+  }
+
+  var dataRange = sheet.getRange(
+    EMPLOYEE_HEADER_ROW + 1,
+    1,
+    lastRow - EMPLOYEE_HEADER_ROW,
+    lastCol,
+  );
+  var values = dataRange.getValues();
+
+  var targetIndex = -1;
+  for (var i = 0; i < values.length; i++) {
+    var row = values[i];
+    var idVal = stringValue(row[idCol - 1]);
+    if (idVal === employeeId) {
+      targetIndex = i;
+      break;
+    }
+  }
+
+  if (targetIndex === -1) {
+    return {
+      ok: false,
+      error: "employee_not_found",
+      errorCode: ERROR_CODES.EMPLOYEE_NOT_FOUND,
+    };
+  }
+
+  var rowValues = values[targetIndex];
+  var updates = 0;
+
+  function setIf(col, value) {
+    if (!col) return;
+    rowValues[col - 1] = value;
+    updates++;
+  }
+
+  if (statusCol && typeof payload.isActive === "boolean") {
+    setIf(statusCol, payload.isActive ? "פעיל" : "לא פעיל");
+  }
+
+  if (branchCol && payload.branch !== undefined) {
+    setIf(branchCol, stringValue(payload.branch));
+  }
+
+  if (employmentStatusCol && payload.employmentStatus !== undefined) {
+    setIf(employmentStatusCol, stringValue(payload.employmentStatus));
+  }
+
+  if (roleTitleCol && payload.roleTitle !== undefined) {
+    setIf(roleTitleCol, stringValue(payload.roleTitle));
+  }
+
+  if (notesCol && payload.notes !== undefined) {
+    setIf(notesCol, stringValue(payload.notes));
+  }
+
+  if (emailCol && payload.email !== undefined) {
+    setIf(emailCol, stringValue(payload.email));
+  }
+
+  if (phoneCol && payload.phone !== undefined) {
+    setIf(phoneCol, stringValue(payload.phone));
+  }
+
+  if (genderCol && payload.gender !== undefined) {
+    setIf(genderCol, stringValue(payload.gender));
+  }
+
+  if (nationalIdCol && payload.nationalId !== undefined) {
+    setIf(nationalIdCol, stringValue(payload.nationalId));
+  }
+
+  if (birthDateCol && payload.birthDate !== undefined) {
+    var birthRaw = stringValue(payload.birthDate);
+    var birthVal = birthRaw ? new Date(birthRaw) : "";
+    setIf(birthDateCol, birthVal);
+  }
+
+  if (shirtSizeCol && payload.shirtSize !== undefined) {
+    setIf(shirtSizeCol, stringValue(payload.shirtSize));
+  }
+
+  if (travelAllowanceCol && payload.travelAllowanceDaily !== undefined) {
+    setIf(travelAllowanceCol, payload.travelAllowanceDaily);
+  }
+
+  if (sizeWebAppCol && payload.shirtSize !== undefined) {
+    setIf(sizeWebAppCol, stringValue(payload.shirtSize));
+  }
+
+  if (sizeSourceCol && payload.shirtSize !== undefined) {
+    setIf(sizeSourceCol, payload.sizeSource || "admin");
+  }
+
+  if (isDryRun) {
+    logDuration_(lg, "admin.saveEmployee.dryRun", startMs, {
+      employeeId: employeeId,
+      updates: updates,
+      row: targetIndex + EMPLOYEE_HEADER_ROW,
+    });
+    return {
+      ok: true,
+      dryRun: true,
+      employeeId: employeeId,
+      updates: updates,
+    };
+  }
+
+  if (updates > 0) {
+    sheet
+      .getRange(targetIndex + EMPLOYEE_HEADER_ROW + 1, 1, 1, lastCol)
+      .setValues([rowValues]);
+  }
+
+  logDuration_(lg, "admin.saveEmployee.total", startMs, {
+    employeeId: employeeId,
+    updates: updates,
+    row: targetIndex + EMPLOYEE_HEADER_ROW + 1,
+  });
+
+  return { ok: true, employeeId: employeeId, updates: updates };
 }
 
 function adminRunBulkAction_(payload, logger) {
