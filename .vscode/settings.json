@@ -6,12 +6,12 @@
       "icon": "cloud-upload",
       "command_terminal": "cd \"c:/Users/User/OneDrive/מסמכים/boulder-system/boulder-script-project\" && clasp push",
       "when": ".*"
-    },
     {
       "type": "button",
-      "name": "Run Dev",
-      "icon": "play",
-      "command_terminal": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ } | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }; cd 'c:/Users/User/OneDrive/מסמכים/boulder-system/boulder-shifts-app'; $env:PORT='3000'; npm run dev\"",
+      "name": "DEV Check",
+      "icon": "check-all",
+      "tooltip": "Dev checkpoint (web, no push)",
+      "command_terminal": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"cd 'c:/Users/User/OneDrive/מסמכים/boulder-system/boulder-shifts-app'; npm run lint; npm run build; git add -A; git commit -m \\\"$(Get-Date -Format 'yyyy-MM-dd HH:mm') - dev-check\\\"\"",
       "when": ".*"
     },
     {
