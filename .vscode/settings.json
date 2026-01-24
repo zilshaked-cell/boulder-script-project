@@ -47,7 +47,7 @@
       "name": "DEV Check",
       "icon": "check-all",
       "tooltip": "Lint + Build + Commit (dev-check)",
-      "command_terminal": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"cd 'c:/Users/User/OneDrive/מסמכים/boulder-system/boulder-shifts-app'; npm run lint; npm run build; git add -A; git commit -m `\"$(Get-Date -Format 'yyyy-MM-dd HH:mm') - dev-check`\"\"",
+      "command_terminal": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"cd 'c:/Users/User/OneDrive/מסמכים/boulder-system/boulder-shifts-app'; npm run lint; npm run build; git add -A; git commit -m `\"$(Get-Date -Format 'yyyy-MM-dd HH:mm') - dev-check`\"; git push\"",
       "when": ".*"
     },
     {
