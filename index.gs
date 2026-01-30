@@ -2768,213 +2768,249 @@ function listRequestsByEmployee_(payload, logger) {
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
   if (!employeeId) throw new Error("Missing employeeId");
-  const employeesSheet = getEmployeesSheet_();
-  const empHeaders = getHeaderMap_(employeesSheet);
-  const empSheetName = employeesSheet.getName();
-  const empIdCol = getRequiredColumn_(
-    empHeaders,
-    ["מזהה עובד", "ID עובד"],
-    empSheetName,
-  );
-  const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
-  const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
-  const empRows = employeesSheet.getDataRange().getValues();
-  let tzValue = "";
-  let fullName = "";
-  for (let i = 1; i < empRows.length; i++) {
-    const row = empRows[i];
-    if (stringValue(row[empIdCol - 1]) === employeeId) {
-      tzValue = stringValue(row[tzCol - 1]);
-      fullName = stringValue(row[nameCol - 1]);
-      break;
-    }
-  }
-  if (!tzValue && lg && lg.warn) {
-    lg.warn("employee-lookup", { employeeId: employeeId, missing: "tz" });
-  }
-
-  const reqSheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
-  const reqHeaders = getHeaderMap_(reqSheet);
-  const reqSheetName = reqSheet.getName();
-  const reqEmpCol = getRequiredColumn_(
-    reqHeaders,
-    ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-    reqSheetName,
-  );
-  const statusCol = getRequiredColumn_(
-    reqHeaders,
-    ["סטטוס", "סטטוס בקשה"],
-    reqSheetName,
-  );
-  const requestIdCol = getOptionalColumn_(reqHeaders, [
-    "ID בקשה",
-    "Request ID",
-    "RequestID",
-  ]);
-  const jobNameCol = getRequiredColumn_(
-    reqHeaders,
-    ["סוג עבודה", "סוגי עבודה"],
-    reqSheetName,
-  );
-  const workDateCol = getOptionalColumn_(reqHeaders, [
-    "תאריך משמרת",
-    "תיקון תאריך",
-    "חותמת זמן",
-  ]);
-  const directionCol = getOptionalColumn_(reqHeaders, [
-    "דיווח שעות",
-    "כניסה / יציאה",
-  ]);
-  const unitsCol = getOptionalColumn_(reqHeaders, [
-    "כמות היחידות",
-    "דיווח יחידות",
-  ]);
-  const noteCol = getOptionalColumn_(reqHeaders, [
-    "הערה למנהל",
-    "הערות",
-    "הערות למשמרת",
-  ]);
-  const submittedCol = getOptionalColumn_(reqHeaders, [
-    "תאריך נשלח",
-    "חותמת זמן",
-  ]);
-  const decidedCol = getOptionalColumn_(reqHeaders, ["תאריך החלטה"]);
-  const shiftIdCol = getRequiredColumn_(reqHeaders, ["ID משמרת"], reqSheetName);
-  const requestTypeCol = getOptionalColumn_(reqHeaders, ["סוג בקשה"]);
-  const jobTypeIdCol = getRequiredColumn_(
-    reqHeaders,
-    ["ID סוג עבודה", "ID סוגי עבודה"],
-    reqSheetName,
-  );
-  const fixDateCol = getOptionalColumn_(reqHeaders, ["תיקון תאריך"]);
-  const fixTimeCol = getOptionalColumn_(reqHeaders, ["תיקון שעה"]);
-  const payTypeCol = getOptionalColumn_(reqHeaders, [
-    "אופן תשלום",
-    "אופני תשלום",
-  ]);
-  const payTypeIdCol = getOptionalColumn_(reqHeaders, [
-    "ID אופן תשלום",
-    "ID אופני תשלום",
-  ]);
-
-  const jobTypes = listJobTypes_();
-  const jobTypeNames = jobTypes.map((j) => j.name);
-
-  const values = reqSheet.getDataRange().getValues();
-  const requests = [];
-
-  function pad2_(n) {
-    return n < 10 ? "0" + n : String(n);
-  }
-
-  function normalizeTimeString_(val) {
-    if (val === null || val === undefined || val === "") return "";
-    const asDate = val instanceof Date ? val : new Date(val);
-    if (!isNaN(asDate.getTime())) {
-      return pad2_(asDate.getHours()) + ":" + pad2_(asDate.getMinutes());
-    }
-    const s = stringValue(val);
-    const hhmm = s.match(/(\d{1,2}):(\d{2})/);
-    if (hhmm) return pad2_(Number(hhmm[1])) + ":" + pad2_(Number(hhmm[2]));
-    return "";
-  }
-
-  function normalizeIsoDateTime_(primary, datePart, timePart) {
-    var candidate = primary instanceof Date ? primary : new Date(primary || "");
-    if (!isNaN(candidate.getTime())) return candidate.toISOString();
-
-    const baseDate = toIsoDate_(datePart || "");
-    if (!baseDate) return "";
-
-    const normalizedTime = normalizeTimeString_(timePart || "");
-    if (normalizedTime) {
-      const joined = new Date(baseDate + "T" + normalizedTime + ":00");
-      if (!isNaN(joined.getTime())) return joined.toISOString();
-    }
-
-    const midnight = new Date(baseDate + "T00:00:00");
-    return isNaN(midnight.getTime()) ? "" : midnight.toISOString();
-  }
-
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    const rowEmpValue = stringValue(row[reqEmpCol - 1]);
-    if (rowEmpValue !== tzValue && rowEmpValue !== employeeId) continue;
-    const requestId = requestIdCol ? stringValue(row[requestIdCol - 1]) : "";
-    const requestKey = requestId || stringValue(row[shiftIdCol - 1]);
-    const jobName = stringValue(row[jobNameCol - 1]);
-    let requestType = requestTypeCol
-      ? stringValue(row[requestTypeCol - 1])
-      : "";
-    if (!requestType) {
-      requestType =
-        jobTypeNames.indexOf(jobName) >= 0 ? "job_not_linked" : "new_job_type";
-    }
-    const workDateRaw = workDateCol ? row[workDateCol - 1] : "";
-    const submittedAt = normalizeIsoDateTime_(
-      submittedCol ? row[submittedCol - 1] : "",
-      workDateRaw,
-      fixTimeCol ? row[fixTimeCol - 1] : "",
+  try {
+    lg.info("requests.list.start", { employeeId: employeeId });
+    const employeesSheet = getEmployeesSheet_();
+    const empHeaders = getHeaderMap_(employeesSheet);
+    const empSheetName = employeesSheet.getName();
+    const empIdCol = getRequiredColumn_(
+      empHeaders,
+      ["מזהה עובד", "ID עובד"],
+      empSheetName,
     );
-    const requestedSummary =
-      stringValue(row[directionCol - 1]) ||
-      (unitsCol ? stringValue(row[unitsCol - 1]) : "");
-    const noteToManager = noteCol ? stringValue(row[noteCol - 1]) : "";
-    const rawPayType = payTypeCol ? stringValue(row[payTypeCol - 1]) : "";
-    const payType = normalizePayType_(rawPayType);
-    let correction = null;
-    if (requestType === "shift_correction" && noteToManager) {
-      try {
-        const parsed = JSON.parse(noteToManager);
-        if (parsed && typeof parsed === "object") {
-          correction = parsed;
-        }
-      } catch (err) {
-        correction = null;
+    const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
+    const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
+    const empRows = employeesSheet.getDataRange().getValues();
+    let tzValue = "";
+    let fullName = "";
+    for (let i = 1; i < empRows.length; i++) {
+      const row = empRows[i];
+      if (stringValue(row[empIdCol - 1]) === employeeId) {
+        tzValue = stringValue(row[tzCol - 1]);
+        fullName = stringValue(row[nameCol - 1]);
+        break;
       }
     }
-    const workDate = workDateCol ? stringValue(row[workDateCol - 1]) : "";
+    if (!tzValue && lg && lg.warn) {
+      lg.warn("employee-lookup", { employeeId: employeeId, missing: "tz" });
+    }
 
-    const fixDate = fixDateCol ? toIsoDate_(row[fixDateCol - 1]) : "";
-    const fixTime = fixTimeCol ? normalizeTimeString_(row[fixTimeCol - 1]) : "";
+    const reqSheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
+    const reqHeaders = getHeaderMap_(reqSheet);
+    const reqSheetName = reqSheet.getName();
+    const reqEmpCol = getRequiredColumn_(
+      reqHeaders,
+      ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
+      reqSheetName,
+    );
+    const statusCol = getRequiredColumn_(
+      reqHeaders,
+      ["סטטוס", "סטטוס בקשה"],
+      reqSheetName,
+    );
+    const requestIdCol = getOptionalColumn_(reqHeaders, [
+      "ID בקשה",
+      "Request ID",
+      "RequestID",
+    ]);
+    const jobNameCol = getRequiredColumn_(
+      reqHeaders,
+      ["סוג עבודה", "סוגי עבודה"],
+      reqSheetName,
+    );
+    const workDateCol = getOptionalColumn_(reqHeaders, [
+      "תאריך משמרת",
+      "תיקון תאריך",
+      "חותמת זמן",
+    ]);
+    const directionCol = getOptionalColumn_(reqHeaders, [
+      "דיווח שעות",
+      "כניסה / יציאה",
+    ]);
+    const unitsCol = getOptionalColumn_(reqHeaders, [
+      "כמות היחידות",
+      "דיווח יחידות",
+    ]);
+    const noteCol = getOptionalColumn_(reqHeaders, [
+      "הערה למנהל",
+      "הערות",
+      "הערות למשמרת",
+    ]);
+    const submittedCol = getOptionalColumn_(reqHeaders, [
+      "תאריך נשלח",
+      "חותמת זמן",
+    ]);
+    const decidedCol = getOptionalColumn_(reqHeaders, ["תאריך החלטה"]);
+    const shiftIdCol = getRequiredColumn_(
+      reqHeaders,
+      ["ID משמרת"],
+      reqSheetName,
+    );
+    const requestTypeCol = getOptionalColumn_(reqHeaders, ["סוג בקשה"]);
+    const jobTypeIdCol = getRequiredColumn_(
+      reqHeaders,
+      ["ID סוג עבודה", "ID סוגי עבודה"],
+      reqSheetName,
+    );
+    const fixDateCol = getOptionalColumn_(reqHeaders, ["תיקון תאריך"]);
+    const fixTimeCol = getOptionalColumn_(reqHeaders, ["תיקון שעה"]);
+    const payTypeCol = getOptionalColumn_(reqHeaders, [
+      "אופן תשלום",
+      "אופני תשלום",
+    ]);
+    const payTypeIdCol = getOptionalColumn_(reqHeaders, [
+      "ID אופן תשלום",
+      "ID אופני תשלום",
+    ]);
 
-    requests.push({
-      id: requestKey,
-      status: stringValue(row[statusCol - 1]),
-      jobName: jobName,
-      workDate: workDate,
-      requestedSummary: requestedSummary,
-      units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
-      noteToManager: noteToManager,
-      submittedAt: submittedAt,
-      decidedAt: normalizeIsoDateTime_(
-        decidedCol ? row[decidedCol - 1] : "",
+    const jobTypes = listJobTypes_();
+    const jobTypeNames = jobTypes.map((j) => j.name);
+
+    const values = reqSheet.getDataRange().getValues();
+    const requests = [];
+
+    function pad2_(n) {
+      return n < 10 ? "0" + n : String(n);
+    }
+
+    function normalizeTimeString_(val) {
+      if (val === null || val === undefined || val === "") return "";
+      const asDate = val instanceof Date ? val : new Date(val);
+      if (!isNaN(asDate.getTime())) {
+        return pad2_(asDate.getHours()) + ":" + pad2_(asDate.getMinutes());
+      }
+      const s = stringValue(val);
+      const hhmm = s.match(/(\d{1,2}):(\d{2})/);
+      if (hhmm) return pad2_(Number(hhmm[1])) + ":" + pad2_(Number(hhmm[2]));
+      return "";
+    }
+
+    function normalizeIsoDateTime_(primary, datePart, timePart) {
+      var candidate =
+        primary instanceof Date ? primary : new Date(primary || "");
+      if (!isNaN(candidate.getTime())) return candidate.toISOString();
+
+      const baseDate = toIsoDate_(datePart || "");
+      if (!baseDate) return "";
+
+      const normalizedTime = normalizeTimeString_(timePart || "");
+      if (normalizedTime) {
+        const joined = new Date(baseDate + "T" + normalizedTime + ":00");
+        if (!isNaN(joined.getTime())) return joined.toISOString();
+      }
+
+      const midnight = new Date(baseDate + "T00:00:00");
+      return isNaN(midnight.getTime()) ? "" : midnight.toISOString();
+    }
+
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+      const rowEmpValue = stringValue(row[reqEmpCol - 1]);
+      if (rowEmpValue !== tzValue && rowEmpValue !== employeeId) continue;
+      const requestId = requestIdCol ? stringValue(row[requestIdCol - 1]) : "";
+      const requestKey = requestId || stringValue(row[shiftIdCol - 1]);
+      const jobName = stringValue(row[jobNameCol - 1]);
+      let requestType = requestTypeCol
+        ? stringValue(row[requestTypeCol - 1])
+        : "";
+      if (!requestType) {
+        requestType =
+          jobTypeNames.indexOf(jobName) >= 0
+            ? "job_not_linked"
+            : "new_job_type";
+      }
+      const workDateRaw = workDateCol ? row[workDateCol - 1] : "";
+      const submittedAt = normalizeIsoDateTime_(
+        submittedCol ? row[submittedCol - 1] : "",
         workDateRaw,
         fixTimeCol ? row[fixTimeCol - 1] : "",
-      ),
-      type: requestType,
+      );
+      const requestedSummary =
+        stringValue(row[directionCol - 1]) ||
+        (unitsCol ? stringValue(row[unitsCol - 1]) : "");
+      const noteToManager = noteCol ? stringValue(row[noteCol - 1]) : "";
+      const rawPayType = payTypeCol ? stringValue(row[payTypeCol - 1]) : "";
+      const payType = normalizePayType_(rawPayType);
+      let correction = null;
+      if (requestType === "shift_correction" && noteToManager) {
+        try {
+          const parsed = JSON.parse(noteToManager);
+          if (parsed && typeof parsed === "object") {
+            correction = parsed;
+          }
+        } catch (err) {
+          correction = null;
+        }
+      }
+      const workDate = workDateCol ? stringValue(row[workDateCol - 1]) : "";
+
+      const fixDate = fixDateCol ? toIsoDate_(row[fixDateCol - 1]) : "";
+      const fixTime = fixTimeCol
+        ? normalizeTimeString_(row[fixTimeCol - 1])
+        : "";
+
+      requests.push({
+        id: requestKey,
+        status: stringValue(row[statusCol - 1]),
+        jobName: jobName,
+        workDate: workDate,
+        requestedSummary: requestedSummary,
+        units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
+        noteToManager: noteToManager,
+        submittedAt: submittedAt,
+        decidedAt: normalizeIsoDateTime_(
+          decidedCol ? row[decidedCol - 1] : "",
+          workDateRaw,
+          fixTimeCol ? row[fixTimeCol - 1] : "",
+        ),
+        type: requestType,
+        employeeId: employeeId,
+        employeeName: fullName,
+        shiftId: stringValue(row[shiftIdCol - 1]),
+        requestId: requestId,
+        jobTypeId: stringValue(row[jobTypeIdCol - 1]),
+        fixDate: fixDate,
+        fixTime: fixTime,
+        payType: payType,
+        payTypeLabel: rawPayType,
+        payTypeId: payTypeIdCol ? stringValue(row[payTypeIdCol - 1]) : "",
+        createdAt: submittedAt,
+        description:
+          jobName && workDate
+            ? jobName + " • " + workDate
+            : jobName || workDate,
+        correction: correction,
+      });
+    }
+    logDuration_(lg, "requests.list", startMs, {
       employeeId: employeeId,
-      employeeName: fullName,
-      shiftId: stringValue(row[shiftIdCol - 1]),
-      requestId: requestId,
-      jobTypeId: stringValue(row[jobTypeIdCol - 1]),
-      fixDate: fixDate,
-      fixTime: fixTime,
-      payType: payType,
-      payTypeLabel: rawPayType,
-      payTypeId: payTypeIdCol ? stringValue(row[payTypeIdCol - 1]) : "",
-      createdAt: submittedAt,
-      description:
-        jobName && workDate ? jobName + " • " + workDate : jobName || workDate,
-      correction: correction,
+      rowsScanned: Math.max(values.length - 1, 0),
+      returned: requests.length,
     });
+    return { requests };
+  } catch (err) {
+    logDuration_(
+      lg,
+      "requests.list",
+      startMs,
+      { employeeId: employeeId, failed: true },
+      "error",
+      "REQUEST_LIST_FAILED",
+      err,
+    );
+    if (lg && typeof lg.error === "function") {
+      lg.error(
+        "requests.list.error",
+        {
+          employeeId: employeeId,
+          message: err && err.message ? String(err.message) : String(err),
+        },
+        "REQUEST_LIST_FAILED",
+        err,
+      );
+    }
+    throw err;
   }
-  logDuration_(lg, "requests.list", startMs, {
-    employeeId: employeeId,
-    rowsScanned: Math.max(values.length - 1, 0),
-    returned: requests.length,
-  });
-  return { requests };
 }
 
 function findRequestById_(requestId) {
@@ -3066,371 +3102,408 @@ function handleShiftReportSubmit_(payload, logger) {
   var fnStartMs = new Date().getTime();
   const nowIso = new Date().toISOString();
 
-  if (logger) {
-    logger.info("shift.submit.start", {
+  logger = logger || ensureModuleLoggerDefined_("WORK_LOG_SAVE");
+  const lg = logger;
+
+  let employeeId = "";
+  let shiftId = "";
+
+  try {
+    lg.info("shift.submit.start", {
       reportMode: payload && payload.reportMode,
       employeeId: payload && payload.employeeId,
       rawShiftId: payload && payload.shiftId,
     });
-  }
-  const shiftId = payload.shiftId || Utilities.getUuid();
-  const employeeId = stringValue(payload.employeeId);
-  if (!employeeId) throw new Error("Missing employeeId");
+    shiftId = payload.shiftId || Utilities.getUuid();
+    employeeId = stringValue(payload.employeeId);
+    if (!employeeId) throw new Error("Missing employeeId");
 
-  const employeesSheet = getEmployeesSheet_();
-  const empHeaders = getHeaderMap_(employeesSheet);
-  const empSheetName = employeesSheet.getName();
-  const empIdCol = getRequiredColumn_(
-    empHeaders,
-    ["מזהה עובד", "ID עובד"],
-    empSheetName,
-  );
-  const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
-  const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
-  const emailCol = getOptionalColumn_(empHeaders, EMAIL_HEADER_CANDIDATES);
-  var employeeScanStartMs = new Date().getTime();
-  const empValues = employeesSheet.getDataRange().getValues();
-  let employeeName = "";
-  let employeeTz = "";
-  let employeeEmail = "";
-  for (let i = 1; i < empValues.length; i++) {
-    const row = empValues[i];
-    if (stringValue(row[empIdCol - 1]) === employeeId) {
-      employeeName = stringValue(row[nameCol - 1]);
-      employeeTz = stringValue(row[tzCol - 1]);
-      if (emailCol && !employeeEmail) {
-        employeeEmail = stringValue(row[emailCol - 1]);
+    const employeesSheet = getEmployeesSheet_();
+    const empHeaders = getHeaderMap_(employeesSheet);
+    const empSheetName = employeesSheet.getName();
+    const empIdCol = getRequiredColumn_(
+      empHeaders,
+      ["מזהה עובד", "ID עובד"],
+      empSheetName,
+    );
+    const nameCol = getRequiredColumn_(empHeaders, ["שם מלא"], empSheetName);
+    const tzCol = getRequiredColumn_(empHeaders, ["ת.ז", "תז"], empSheetName);
+    const emailCol = getOptionalColumn_(empHeaders, EMAIL_HEADER_CANDIDATES);
+    var employeeScanStartMs = new Date().getTime();
+    const empValues = employeesSheet.getDataRange().getValues();
+    let employeeName = "";
+    let employeeTz = "";
+    let employeeEmail = "";
+    for (let i = 1; i < empValues.length; i++) {
+      const row = empValues[i];
+      if (stringValue(row[empIdCol - 1]) === employeeId) {
+        employeeName = stringValue(row[nameCol - 1]);
+        employeeTz = stringValue(row[tzCol - 1]);
+        if (emailCol && !employeeEmail) {
+          employeeEmail = stringValue(row[emailCol - 1]);
+        }
+        break;
       }
-      break;
     }
-  }
-  if (!employeeName) throw new Error("Employee not found: " + employeeId);
-  logDuration_(logger, "shift.submit.resolve-employee", employeeScanStartMs, {
-    sheet: empSheetName,
-    found: !!employeeName,
-  });
-
-  const jobTypes = listJobTypes_();
-  const jobMap = {};
-  jobTypes.forEach((j) => (jobMap[j.id] = j));
-  var linkedStartMs = new Date().getTime();
-  const linked = listEmployeeLinkedJobIds_({ employeeId }).jobTypeIds;
-
-  const isOther = payload.jobId === "__other__";
-  const jobTypeId = isOther ? "" : stringValue(payload.jobId);
-  const job = isOther ? null : jobMap[jobTypeId];
-  const jobNameInput = stringValue(payload.jobName);
-  const jobName = isOther
-    ? jobNameInput
-    : job
-      ? stringValue(job.name)
-      : jobNameInput;
-  if (!jobName) throw new Error("Missing jobName");
-  const department = isOther ? "" : job ? stringValue(job.department) : "";
-  const isLinked = jobTypeId ? linked.indexOf(jobTypeId) >= 0 : false;
-  const direction = normalizeDirectionToHebrew_(payload.direction);
-  const fixDate = stringValue(payload.fixDate);
-  const fixTime = stringValue(payload.fixTime);
-  const units =
-    payload.units !== null && payload.units !== undefined ? payload.units : "";
-  const timestamp = stringValue(payload.timestamp) || nowIso;
-  const workDate = stringValue(payload.workDate) || timestamp.split("T")[0];
-
-  const employeePay = jobTypeId
-    ? resolveEmployeeJobPayType_(
-        employeesSheet,
-        empHeaders,
-        employeeId,
-        jobTypeId,
-      )
-    : null;
-  const payTypeName = employeePay
-    ? employeePay.payTypeName
-    : job
-      ? stringValue(job.payTypeName)
-      : "";
-  const payTypeId = employeePay
-    ? employeePay.payTypeId
-    : job
-      ? stringValue(job.payTypeId)
-      : "";
-  const payType = normalizePayType_(payTypeName);
-  const payTypeForRequestRow = payType || payTypeName;
-  logDuration_(logger, "shift.submit.resolve-job", linkedStartMs, {
-    jobTypeCount: jobTypes.length,
-    linkedCount: linked.length,
-    isOther: isOther,
-    payType: payType || payTypeName,
-  });
-
-  // Hourly/directional reports must include a valid direction; otherwise we
-  // would write an ambiguous log that later surfaces as "כיוון דיווח לא מזוהה".
-  const needsDirection =
-    payType !== "unit" && payType !== "daily" && payType !== "monthly";
-  if (needsDirection) {
-    if (!direction) {
-      throw new Error("Missing direction for directional report");
-    }
-    if (direction !== "כניסה" && direction !== "יציאה") {
-      throw new Error("Invalid direction value: " + direction);
-    }
-  }
-
-  if (payType === "monthly") {
-    return {
-      ok: true,
-      status: "monthly_no_report",
-      message: "סוג העבודה הזה לא דורש דיווח. אם זו טעות, לחץ כאן.",
-    };
-  }
-
-  const timestampDate = timestamp.split("T")[0];
-  const reportMode = stringValue(payload.mode || payload.reportMode);
-  const manualDate = stringValue(payload.manualDate || payload.fixDate);
-  const manualTime = stringValue(payload.manualTime || payload.fixTime);
-  const isManualHourly =
-    payType === "hourly" &&
-    (reportMode.toLowerCase() === "manual" || !!manualDate || !!manualTime);
-
-  var normalizeStartMs = new Date().getTime();
-  let normalized = {
-    workDate: workDate || timestampDate,
-    direction: direction,
-    fixDate: fixDate,
-    fixTime: fixTime,
-    units: units,
-  };
-
-  if (payType === "hourly") {
-    normalized.units = "";
-    if (isManualHourly) {
-      normalized.fixDate = manualDate || workDate || timestampDate;
-      normalized.fixTime = manualTime;
-      normalized.workDate = normalized.fixDate || timestampDate;
-    } else {
-      normalized.fixDate = "";
-      normalized.fixTime = "";
-      normalized.workDate = timestampDate;
-    }
-  } else if (payType === "unit") {
-    normalized.direction = "";
-    normalized.fixDate = "";
-    normalized.fixTime = "";
-    normalized.workDate = workDate || timestampDate;
-  } else if (payType === "daily") {
-    normalized.direction = "";
-    normalized.fixDate = "";
-    normalized.fixTime = "";
-    normalized.units = "";
-    normalized.workDate = workDate || timestampDate;
-  }
-
-  if (payType === "unit" && normalized.units !== "") {
-    const parsedUnits = Number(normalized.units);
-    normalized.units = isNaN(parsedUnits) ? normalized.units : parsedUnits;
-  }
-  logDuration_(logger, "shift.submit.normalize", normalizeStartMs, {
-    payType: payType || payTypeName,
-    isManualHourly: isManualHourly,
-    mode: reportMode.toLowerCase ? reportMode.toLowerCase() : reportMode,
-  });
-
-  const explicitRequestType = stringValue(payload.requestType);
-  let requestType =
-    explicitRequestType &&
-    (explicitRequestType === "new_job_type" ||
-      explicitRequestType === "job_not_linked")
-      ? explicitRequestType
-      : isOther
-        ? "new_job_type"
-        : "job_not_linked";
-
-  const needsApproval =
-    payload.requiresApproval === true || isOther || !isLinked;
-
-  if (needsApproval) {
-    const reqSheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
-    const headers = getHeaderMap_(reqSheet);
-    const reqSheetName = reqSheet.getName();
-    getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
-    getRequiredColumn_(headers, ["סטטוס"], reqSheetName);
-    getRequiredColumn_(
-      headers,
-      ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-      reqSheetName,
-    );
-    getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
-    getRequiredColumn_(headers, ["סטטוס", "סטטוס בקשה"], reqSheetName);
-    getRequiredColumn_(
-      headers,
-      ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
-      reqSheetName,
-    );
-    getRequiredColumn_(headers, ["שם מלא"], reqSheetName);
-    getRequiredColumn_(headers, ["סוג עבודה", "סוגי עבודה"], reqSheetName);
-    getRequiredColumn_(
-      headers,
-      ["ID סוג עבודה", "ID סוגי עבודה"],
-      reqSheetName,
-    );
-    getOptionalColumn_(headers, ["תאריך משמרת", "תיקון תאריך", "חותמת זמן"]);
-    getOptionalColumn_(headers, ["דיווח שעות", "כניסה / יציאה"]);
-    getOptionalColumn_(headers, ["תיקון תאריך"]);
-    getOptionalColumn_(headers, ["תיקון שעה"]);
-    getOptionalColumn_(headers, ["כמות היחידות", "דיווח יחידות"]);
-    getOptionalColumn_(headers, ["תאריך נשלח", "חותמת זמן"]);
-    getOptionalColumn_(headers, ["הערה למנהל", "הערות", "הערות למשמרת"]);
-    getOptionalColumn_(headers, ["סוג בקשה"]);
-    getRequiredColumn_(headers, ["סוג בקשה"], reqSheetName);
-    var requestAppendStartMs = new Date().getTime();
-    const row = buildRowFromHeaders_(headers, {
-      id: shiftId,
-      shiftId: shiftId,
-      status: "ממתין",
-      employeeId: employeeId,
-      employeeName: employeeName,
-      nationalId: employeeTz,
-      jobName: jobName,
-      jobTypeId: jobTypeId,
-      workDate: normalized.workDate,
-      direction: normalized.direction,
-      fixDate: normalized.fixDate,
-      fixTime: normalized.fixTime,
-      units: normalized.units,
-      noteToManager: stringValue(
-        payload.noteToManager || payload.note || payload.shiftNote,
-      ),
-      submittedAt: nowIso,
-      timestamp: nowIso,
-      decidedAt: "",
-      managerDecision: "",
-      requestType: requestType,
-      payTypeId: payTypeId,
-      payType: payTypeForRequestRow,
+    if (!employeeName) throw new Error("Employee not found: " + employeeId);
+    logDuration_(lg, "shift.submit.resolve-employee", employeeScanStartMs, {
+      sheet: empSheetName,
+      found: !!employeeName,
     });
-    reqSheet.appendRow(row);
-    logDuration_(logger, "shift.submit.request-append", requestAppendStartMs, {
-      sheet: reqSheetName,
-      requestType: requestType,
-    });
-    logDuration_(logger, "shift.submit.total", fnStartMs, {
-      requiresApproval: true,
-      jobTypeId: jobTypeId,
+
+    const jobTypes = listJobTypes_();
+    const jobMap = {};
+    jobTypes.forEach((j) => (jobMap[j.id] = j));
+    var linkedStartMs = new Date().getTime();
+    const linked = listEmployeeLinkedJobIds_({ employeeId }).jobTypeIds;
+
+    const isOther = payload.jobId === "__other__";
+    const jobTypeId = isOther ? "" : stringValue(payload.jobId);
+    const job = isOther ? null : jobMap[jobTypeId];
+    const jobNameInput = stringValue(payload.jobName);
+    const jobName = isOther
+      ? jobNameInput
+      : job
+        ? stringValue(job.name)
+        : jobNameInput;
+    if (!jobName) throw new Error("Missing jobName");
+    const department = isOther ? "" : job ? stringValue(job.department) : "";
+    const isLinked = jobTypeId ? linked.indexOf(jobTypeId) >= 0 : false;
+    const direction = normalizeDirectionToHebrew_(payload.direction);
+    const fixDate = stringValue(payload.fixDate);
+    const fixTime = stringValue(payload.fixTime);
+    const units =
+      payload.units !== null && payload.units !== undefined
+        ? payload.units
+        : "";
+    const timestamp = stringValue(payload.timestamp) || nowIso;
+    const workDate = stringValue(payload.workDate) || timestamp.split("T")[0];
+
+    const employeePay = jobTypeId
+      ? resolveEmployeeJobPayType_(
+          employeesSheet,
+          empHeaders,
+          employeeId,
+          jobTypeId,
+        )
+      : null;
+    const payTypeName = employeePay
+      ? employeePay.payTypeName
+      : job
+        ? stringValue(job.payTypeName)
+        : "";
+    const payTypeId = employeePay
+      ? employeePay.payTypeId
+      : job
+        ? stringValue(job.payTypeId)
+        : "";
+    const payType = normalizePayType_(payTypeName);
+    const payTypeForRequestRow = payType || payTypeName;
+    logDuration_(lg, "shift.submit.resolve-job", linkedStartMs, {
+      jobTypeCount: jobTypes.length,
+      linkedCount: linked.length,
+      isOther: isOther,
       payType: payType || payTypeName,
     });
-    return {
-      ok: true,
-      success: true,
-      requiresApproval: true,
-      shiftId: shiftId,
-      requestType: requestType,
-      status: "saved_as_request",
+
+    // Hourly/directional reports must include a valid direction; otherwise we
+    // would write an ambiguous log that later surfaces as "כיוון דיווח לא מזוהה".
+    const needsDirection =
+      payType !== "unit" && payType !== "daily" && payType !== "monthly";
+    if (needsDirection) {
+      if (!direction) {
+        throw new Error("Missing direction for directional report");
+      }
+      if (direction !== "כניסה" && direction !== "יציאה") {
+        throw new Error("Invalid direction value: " + direction);
+      }
+    }
+
+    if (payType === "monthly") {
+      return {
+        ok: true,
+        status: "monthly_no_report",
+        message: "סוג העבודה הזה לא דורש דיווח. אם זו טעות, לחץ כאן.",
+      };
+    }
+
+    const timestampDate = timestamp.split("T")[0];
+    const reportMode = stringValue(payload.mode || payload.reportMode);
+    const manualDate = stringValue(payload.manualDate || payload.fixDate);
+    const manualTime = stringValue(payload.manualTime || payload.fixTime);
+    const isManualHourly =
+      payType === "hourly" &&
+      (reportMode.toLowerCase() === "manual" || !!manualDate || !!manualTime);
+
+    var normalizeStartMs = new Date().getTime();
+    let normalized = {
+      workDate: workDate || timestampDate,
+      direction: direction,
+      fixDate: fixDate,
+      fixTime: fixTime,
+      units: units,
     };
-  }
 
-  normalized.shiftId = shiftId;
-  normalized.jobTypeId = jobTypeId;
-  normalized.jobName = jobName;
-  normalized.department = department;
-  normalized.timestamp = timestamp;
+    if (payType === "hourly") {
+      normalized.units = "";
+      if (isManualHourly) {
+        normalized.fixDate = manualDate || workDate || timestampDate;
+        normalized.fixTime = manualTime;
+        normalized.workDate = normalized.fixDate || timestampDate;
+      } else {
+        normalized.fixDate = "";
+        normalized.fixTime = "";
+        normalized.workDate = timestampDate;
+      }
+    } else if (payType === "unit") {
+      normalized.direction = "";
+      normalized.fixDate = "";
+      normalized.fixTime = "";
+      normalized.workDate = workDate || timestampDate;
+    } else if (payType === "daily") {
+      normalized.direction = "";
+      normalized.fixDate = "";
+      normalized.fixTime = "";
+      normalized.units = "";
+      normalized.workDate = workDate || timestampDate;
+    }
 
-  var writeStartMs = new Date().getTime();
-  const writeResult = writeWorkLogFromNormalizedShift_(
-    normalized,
-    {
-      employeeId: employeeId,
-      employeeName: employeeName,
-      note: payload.note,
-    },
-    logger,
-  );
-  logDuration_(logger, "shift.submit.write-worklog", writeStartMs, {
-    jobTypeId: jobTypeId,
-    payType: payType || payTypeName,
-    direction: normalized.direction,
-  });
+    if (payType === "unit" && normalized.units !== "") {
+      const parsedUnits = Number(normalized.units);
+      normalized.units = isNaN(parsedUnits) ? normalized.units : parsedUnits;
+    }
+    logDuration_(lg, "shift.submit.normalize", normalizeStartMs, {
+      payType: payType || payTypeName,
+      isManualHourly: isManualHourly,
+      mode: reportMode.toLowerCase ? reportMode.toLowerCase() : reportMode,
+    });
 
-  // Detect duplicates after writing (to include the new row in the list).
-  var duplicateScanStartMs = new Date().getTime();
-  const eventMsForCriteria = extractEventMs_(
-    normalized.workDate,
-    normalized.timestamp,
-    normalized.fixDate,
-    normalized.fixTime,
-  );
-  const duplicates = findDuplicateWorkLogs_(
-    {
-      employeeId: employeeId,
-      jobTypeId: jobTypeId,
-      jobName: jobName,
-      department: department,
-      direction: normalized.direction,
-      workDate: normalized.workDate,
-      fixDate: normalized.fixDate,
-      fixTime: normalized.fixTime,
-      timestamp: normalized.timestamp,
-      eventMs: eventMsForCriteria,
-    },
-    shiftId,
-  );
-  logDuration_(logger, "shift.submit.duplicates-scan", duplicateScanStartMs, {
-    count: duplicates.length,
-  });
-  const duplicatesFound = duplicates.length >= 2;
+    const explicitRequestType = stringValue(payload.requestType);
+    let requestType =
+      explicitRequestType &&
+      (explicitRequestType === "new_job_type" ||
+        explicitRequestType === "job_not_linked")
+        ? explicitRequestType
+        : isOther
+          ? "new_job_type"
+          : "job_not_linked";
 
-  appendSystemLog_({
-    operation: "WORK_LOG_DUP_SCAN",
-    step: "scan",
-    severity: "info",
-    errorCode: null,
-    details: {
-      foundCount: duplicates.length,
-      includeShiftId: Boolean(shiftId),
-      timeWindowMs: DUPLICATE_TIME_WINDOW_MS,
-    },
-  });
+    const needsApproval =
+      payload.requiresApproval === true || isOther || !isLinked;
 
-  if (duplicatesFound) {
-    const cleanup = cleanupExactDuplicateWorkLogs_(duplicates);
-    if (cleanup.deletedCount > 0) {
-      logDuration_(logger, "shift.submit.total", fnStartMs, {
-        requiresApproval: false,
-        duplicatesFound: true,
-        autoDeleted: cleanup.deletedCount,
+    if (needsApproval) {
+      const reqSheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
+      const headers = getHeaderMap_(reqSheet);
+      const reqSheetName = reqSheet.getName();
+      getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
+      getRequiredColumn_(headers, ["סטטוס"], reqSheetName);
+      getRequiredColumn_(
+        headers,
+        ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
+        reqSheetName,
+      );
+      getRequiredColumn_(headers, ["ID משמרת"], reqSheetName);
+      getRequiredColumn_(headers, ["סטטוס", "סטטוס בקשה"], reqSheetName);
+      getRequiredColumn_(
+        headers,
+        ["מזהה עובד", "ID עובד", "ת.ז", "תז"],
+        reqSheetName,
+      );
+      getRequiredColumn_(headers, ["שם מלא"], reqSheetName);
+      getRequiredColumn_(headers, ["סוג עבודה", "סוגי עבודה"], reqSheetName);
+      getRequiredColumn_(
+        headers,
+        ["ID סוג עבודה", "ID סוגי עבודה"],
+        reqSheetName,
+      );
+      getOptionalColumn_(headers, ["תאריך משמרת", "תיקון תאריך", "חותמת זמן"]);
+      getOptionalColumn_(headers, ["דיווח שעות", "כניסה / יציאה"]);
+      getOptionalColumn_(headers, ["תיקון תאריך"]);
+      getOptionalColumn_(headers, ["תיקון שעה"]);
+      getOptionalColumn_(headers, ["כמות היחידות", "דיווח יחידות"]);
+      getOptionalColumn_(headers, ["תאריך נשלח", "חותמת זמן"]);
+      getOptionalColumn_(headers, ["הערה למנהל", "הערות", "הערות למשמרת"]);
+      getOptionalColumn_(headers, ["סוג בקשה"]);
+      getRequiredColumn_(headers, ["סוג בקשה"], reqSheetName);
+      var requestAppendStartMs = new Date().getTime();
+      const row = buildRowFromHeaders_(headers, {
+        id: shiftId,
+        shiftId: shiftId,
+        status: "ממתין",
+        employeeId: employeeId,
+        employeeName: employeeName,
+        nationalId: employeeTz,
+        jobName: jobName,
+        jobTypeId: jobTypeId,
+        workDate: normalized.workDate,
+        direction: normalized.direction,
+        fixDate: normalized.fixDate,
+        fixTime: normalized.fixTime,
+        units: normalized.units,
+        noteToManager: stringValue(
+          payload.noteToManager || payload.note || payload.shiftNote,
+        ),
+        submittedAt: nowIso,
+        timestamp: nowIso,
+        decidedAt: "",
+        managerDecision: "",
+        requestType: requestType,
+        payTypeId: payTypeId,
+        payType: payTypeForRequestRow,
+      });
+      reqSheet.appendRow(row);
+      logDuration_(lg, "shift.submit.request-append", requestAppendStartMs, {
+        sheet: reqSheetName,
+        requestType: requestType,
+      });
+      logDuration_(lg, "shift.submit.total", fnStartMs, {
+        requiresApproval: true,
         jobTypeId: jobTypeId,
         payType: payType || payTypeName,
       });
       return {
         ok: true,
-        status: "duplicate_auto_deleted",
+        success: true,
+        requiresApproval: true,
         shiftId: shiftId,
-        deletedCount: cleanup.deletedCount,
-        capped: cleanup.capped === true,
+        requestType: requestType,
+        status: "saved_as_request",
       };
     }
 
-    logDuration_(logger, "shift.submit.total", fnStartMs, {
+    normalized.shiftId = shiftId;
+    normalized.jobTypeId = jobTypeId;
+    normalized.jobName = jobName;
+    normalized.department = department;
+    normalized.timestamp = timestamp;
+
+    var writeStartMs = new Date().getTime();
+    const writeResult = writeWorkLogFromNormalizedShift_(
+      normalized,
+      {
+        employeeId: employeeId,
+        employeeName: employeeName,
+        note: payload.note,
+      },
+      logger,
+    );
+    logDuration_(lg, "shift.submit.write-worklog", writeStartMs, {
+      jobTypeId: jobTypeId,
+      payType: payType || payTypeName,
+      direction: normalized.direction,
+    });
+
+    // Detect duplicates after writing (to include the new row in the list).
+    var duplicateScanStartMs = new Date().getTime();
+    const eventMsForCriteria = extractEventMs_(
+      normalized.workDate,
+      normalized.timestamp,
+      normalized.fixDate,
+      normalized.fixTime,
+    );
+    const duplicates = findDuplicateWorkLogs_(
+      {
+        employeeId: employeeId,
+        jobTypeId: jobTypeId,
+        jobName: jobName,
+        department: department,
+        direction: normalized.direction,
+        workDate: normalized.workDate,
+        fixDate: normalized.fixDate,
+        fixTime: normalized.fixTime,
+        timestamp: normalized.timestamp,
+        eventMs: eventMsForCriteria,
+      },
+      shiftId,
+    );
+    logDuration_(lg, "shift.submit.duplicates-scan", duplicateScanStartMs, {
+      count: duplicates.length,
+    });
+    const duplicatesFound = duplicates.length >= 2;
+
+    appendSystemLog_({
+      operation: "WORK_LOG_DUP_SCAN",
+      step: "scan",
+      severity: "info",
+      errorCode: null,
+      details: {
+        foundCount: duplicates.length,
+        includeShiftId: Boolean(shiftId),
+        timeWindowMs: DUPLICATE_TIME_WINDOW_MS,
+      },
+    });
+
+    if (duplicatesFound) {
+      const cleanup = cleanupExactDuplicateWorkLogs_(duplicates);
+      if (cleanup.deletedCount > 0) {
+        logDuration_(lg, "shift.submit.total", fnStartMs, {
+          requiresApproval: false,
+          duplicatesFound: true,
+          autoDeleted: cleanup.deletedCount,
+          jobTypeId: jobTypeId,
+          payType: payType || payTypeName,
+        });
+        return {
+          ok: true,
+          status: "duplicate_auto_deleted",
+          shiftId: shiftId,
+          deletedCount: cleanup.deletedCount,
+          capped: cleanup.capped === true,
+        };
+      }
+
+      logDuration_(lg, "shift.submit.total", fnStartMs, {
+        requiresApproval: false,
+        duplicatesFound: true,
+        jobTypeId: jobTypeId,
+        payType: payType || payTypeName,
+      });
+      return {
+        ok: true,
+        status: "duplicate_found",
+        shiftId: shiftId,
+        duplicates: duplicates,
+      };
+    }
+
+    logDuration_(lg, "shift.submit.total", fnStartMs, {
       requiresApproval: false,
-      duplicatesFound: true,
+      duplicatesFound: false,
       jobTypeId: jobTypeId,
       payType: payType || payTypeName,
     });
-    return {
-      ok: true,
-      status: "duplicate_found",
-      shiftId: shiftId,
-      duplicates: duplicates,
-    };
+
+    return writeResult;
+  } catch (err) {
+    logDuration_(
+      lg,
+      "shift.submit.total",
+      fnStartMs,
+      {
+        failed: true,
+        shiftId: shiftId || (payload && payload.shiftId) || null,
+        employeeId: employeeId || (payload && payload.employeeId) || null,
+      },
+      "error",
+      "WORK_LOG_SAVE_FAILED",
+      err,
+    );
+
+    if (lg && typeof lg.error === "function") {
+      lg.error(
+        "shift.submit.error",
+        {
+          message:
+            err && err.message ? String(err.message) : String(err || "error"),
+          shiftId: shiftId || (payload && payload.shiftId) || null,
+          employeeId: employeeId || (payload && payload.employeeId) || null,
+        },
+        "WORK_LOG_SAVE_FAILED",
+        err,
+      );
+    }
+    throw err;
   }
-
-  logDuration_(logger, "shift.submit.total", fnStartMs, {
-    requiresApproval: false,
-    duplicatesFound: false,
-    jobTypeId: jobTypeId,
-    payType: payType || payTypeName,
-  });
-
-  return writeResult;
 }
 
 function handleShiftReportMonthlyErrorNotify_(payload) {
