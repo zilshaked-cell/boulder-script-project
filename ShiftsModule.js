@@ -1,4 +1,5 @@
-/* global SHEET_NAME, OPT */
+/* eslint-disable no-redeclare */
+/* global OPT, MAX_YESTERDAY_REBUILD_PAIRS, stringValue */
 /* exported SHIFTS_list, SHIFTS_get, SHIFTS_getSelectedRef, SHIFTS_updateShift, SHIFTS_updateBonuses, BONUSES_listAll */
 var SHIFTS = SHIFTS || {};
 var BONUSES = BONUSES || {};
@@ -10,6 +11,13 @@ var BONUSES = BONUSES || {};
     SHEET_NAME:
       typeof SHIFTS_SHEET_NAME !== "undefined" ? SHIFTS_SHEET_NAME : "משמרות",
     HEADER_ROW: (typeof OPT !== "undefined" && OPT.shiftsHeaderRow) || 1,
+    BONUS_SEPARATOR: ",",
+    COLS: {
+      shiftId: { candidates: ["ID משמרת"] },
+      employeeId: { candidates: ["ID עובד", "מזהה עובד"] },
+      employeeName: { candidates: ["שם מלא"] },
+      email: { candidates: ["מייל", "email", "Email"] },
+    },
   };
 
   // Local Work Logs sheet name for this module.
@@ -72,6 +80,17 @@ var BONUSES = BONUSES || {};
     "spanHours",
     "status",
   ];
+
+  function getLogger_(operation) {
+    try {
+      if (typeof ensureModuleLoggerDefined_ === "function") {
+        return ensureModuleLoggerDefined_(operation || "SHIFTS_MODULE");
+      }
+    } catch (_ignored) {
+      // Ignore logger initialization failures
+    }
+    return null;
+  }
 
   function formatNumericColumn_(sheet, colIndex) {
     if (!colIndex) return;
@@ -242,13 +261,6 @@ var BONUSES = BONUSES || {};
       sheet
         .getRange(CONFIG.HEADER_ROW + 1, payCol + 1, rows, 1)
         .setNumberFormat("0.00");
-  }
-
-  function getOrCreateShiftsSheet_() {
-    var sh = getSheet_();
-    var map = getShiftsHeaderMap_();
-    ensureSpanAndPayFormats_(sh, map);
-    return sh;
   }
 
   function getShiftsHeaderMap_() {

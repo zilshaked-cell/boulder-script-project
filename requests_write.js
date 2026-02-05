@@ -4,6 +4,7 @@
 const SHEET_NAME_REQUESTS = "בקשות עובדים";
 const SHEET_NAME_EMPLOYEES_FOR_LOOKUP = "פרטי עובדים";
 
+// eslint-disable-next-line no-unused-vars
 function handleRequestPost(e) {
   var logger = null;
   var startMs = new Date().getTime();
@@ -11,7 +12,9 @@ function handleRequestPost(e) {
     if (typeof ensureModuleLoggerDefined_ === "function") {
       logger = ensureModuleLoggerDefined_("REQUEST_POST");
     }
-  } catch (_ignoredLogger) {}
+  } catch (_ignoredLogger) {
+    // Logger unavailable, continue without it
+  }
 
   function finish_(res, errorCode, err) {
     if (typeof logDuration_ === "function") {
@@ -27,36 +30,56 @@ function handleRequestPost(e) {
         },
         res && res.success ? "info" : "warn",
         errorCode,
-        err
+        err,
       );
     }
     return res;
   }
 
   var lock = LockService.getDocumentLock();
-  lock.waitLock(30000);
+  var hasLock = lock.tryLock(30000);
+  if (!hasLock) {
+    return finish_(
+      jsonResponse({
+        success: false,
+        error: "Lock unavailable (concurrent write)",
+      }),
+      "LOCK_UNAVAILABLE",
+    );
+  }
 
   try {
-    if (!e || !e.postData || !e.postData.contents) {
-      return finish_(
-        jsonResponse({ success: false, error: "NO_POST_DATA" }),
-        "NO_POST_DATA"
-      );
+    var raw = e && e.postData && e.postData.contents ? e.postData.contents : "";
+    var data = null;
+
+    // Try JSON body first
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (err) {
+        return finish_(
+          jsonResponse({
+            success: false,
+            error: "INVALID_JSON",
+            details: String(err),
+            rawSample: raw.slice(0, 200),
+          }),
+          "INVALID_JSON",
+          err,
+        );
+      }
     }
 
-    var data;
-    try {
-      data = JSON.parse(e.postData.contents);
-    } catch (err) {
+    // Fallback: try e.parameter (legacy calls with query params)
+    if (!data && e && e.parameter && typeof e.parameter === "object") {
+      data = e.parameter;
+    }
+
+    // Still no data → fail
+    if (!data || typeof data !== "object") {
       return finish_(
-        jsonResponse({
-          success: false,
-          error: "INVALID_JSON",
-          details: String(err),
-          rawSample: String(e.postData.contents).slice(0, 200),
-        }),
-        "INVALID_JSON",
-        err
+        jsonResponse({ success: false, error: "Missing body or parameter" }),
+        "NO_POST_DATA",
       );
     }
 
@@ -69,7 +92,7 @@ function handleRequestPost(e) {
           error: "SHEET_NOT_FOUND",
           sheetName: SHEET_NAME_REQUESTS,
         }),
-        "SHEET_NOT_FOUND"
+        "SHEET_NOT_FOUND",
       );
     }
 
@@ -127,7 +150,7 @@ function handleRequestPost(e) {
           details:
             'חסרות כותרות חובה (לפחות "ID בקשה" ו-"חותמת זמן") בכרטיסייה "בקשות עובדים".',
         }),
-        "MISSING_REQUIRED_HEADERS"
+        "MISSING_REQUIRED_HEADERS",
       );
     }
 
@@ -222,7 +245,7 @@ function handleRequestPost(e) {
           requestId: requestId,
           mode: "updated",
           rowIndex: existingRow,
-        })
+        }),
       );
     }
 
@@ -257,7 +280,7 @@ function handleRequestPost(e) {
         requestId: requestId,
         mode: "inserted",
         rowIndex: newRowIndex,
-      })
+      }),
     );
   } catch (err2) {
     return finish_(
@@ -267,12 +290,14 @@ function handleRequestPost(e) {
         details: String(err2),
       }),
       "UNEXPECTED",
-      err2
+      err2,
     );
   } finally {
     try {
       lock.releaseLock();
-    } catch (e2) {}
+    } catch (e2) {
+      // Lock release error, continue
+    }
   }
 }
 
@@ -335,6 +360,8 @@ function resolveJob_(jobId, jobName) {
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    // Intentionally ignore OPT lookup errors
+  }
   return null;
 }

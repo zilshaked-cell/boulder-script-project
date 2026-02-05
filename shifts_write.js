@@ -1,6 +1,17 @@
+// shifts_write.gs
+// Global modules available in Apps Script runtime
+/* global EMP, SHIFTS_upsertAroundWorkLog_ */
+
+// eslint-disable-next-line no-unused-vars
 function handleShiftPost(e) {
   var lock = LockService.getDocumentLock();
-  lock.tryLock(30000);
+  var hasLock = lock.tryLock(30000);
+  if (!hasLock) {
+    return jsonResponse({
+      success: false,
+      error: "Lock unavailable (concurrent write)"
+    });
+  }
 
   var logger = null;
   var startMs = new Date().getTime();
@@ -8,7 +19,9 @@ function handleShiftPost(e) {
     if (typeof ensureModuleLoggerDefined_ === "function") {
       logger = ensureModuleLoggerDefined_("SHIFT_POST");
     }
-  } catch (_ignoredLogger) {}
+  } catch (_ignoredLogger) {
+    // Logger unavailable, continue without it
+  }
 
   function finish_(res, errorCode, err) {
     if (typeof logDuration_ === "function") {
@@ -27,20 +40,31 @@ function handleShiftPost(e) {
 
   try {
     var raw = e && e.postData && e.postData.contents ? e.postData.contents : "";
-    if (!raw)
-      return finish_(
-        jsonResponse({ success: false, error: "Missing body" }),
-        "MISSING_BODY"
-      );
+    var data = null;
 
-    var data;
-    try {
-      data = JSON.parse(raw);
-    } catch (err) {
+    // Try JSON body first
+    if (raw) {
+      try {
+        data = JSON.parse(raw);
+      } catch (err) {
+        return finish_(
+          jsonResponse({ success: false, error: "Invalid JSON: " + err }),
+          "INVALID_JSON",
+          err
+        );
+      }
+    }
+
+    // Fallback: try e.parameter (legacy calls with query params)
+    if (!data && e && e.parameter && typeof e.parameter === "object") {
+      data = e.parameter;
+    }
+
+    // Still no data → fail
+    if (!data || typeof data !== "object") {
       return finish_(
-        jsonResponse({ success: false, error: "Invalid JSON: " + err }),
-        "INVALID_JSON",
-        err
+        jsonResponse({ success: false, error: "Missing body or parameter" }),
+        "MISSING_BODY"
       );
     }
 
@@ -90,7 +114,9 @@ function handleShiftPost(e) {
       if (typeof EMP !== "undefined" && EMP.ensureEmployeeIds) {
         try {
           EMP.ensureEmployeeIds();
-        } catch (e) {}
+        } catch (e) {
+          // Ignore EMP.ensureEmployeeIds errors, continue without it
+        }
       }
 
       var headerRow = 1;
@@ -258,7 +284,9 @@ function handleShiftPost(e) {
   } finally {
     try {
       lock.releaseLock();
-    } catch (e) {}
+    } catch (e) {
+      // Intentionally silent: lock already released or unavailable
+    }
   }
 }
 
