@@ -1,1 +1,15 @@
 node_modules/
+
+# Build outputs
+.dist/
+dist/
+coverage/
+
+# Logs
+*.log
+
+# Local-only CHG pointer (if present in this repo)
+project-audit/current-change.json
+
+# Bundles & zips
+**/*.zip

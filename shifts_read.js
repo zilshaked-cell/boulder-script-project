@@ -1,3 +1,17 @@
+/* exported handleGetShifts */
+
+/**
+ * handleGetShifts - קריאת משמרות מטאב "דיווח שעות עבודה"
+ *
+ * תלויות גלובליות:
+ * - SHEET_NAME (מוגדר ב-config_and_utils.js)
+ * - ensureModuleLoggerDefined_, logDuration_ (מוגדרים ב-index.gs)
+ * - jsonResponse (מוגדר ב-config_and_utils.js)
+ *
+ * @param {Object} params - פרמטרים לסינון: employeeId, empId, employeeName, employee
+ * @returns {Object} תשובת JSON עם success, shifts, items
+ */
+// eslint-disable-next-line no-unused-vars
 function handleGetShifts(params) {
   var logger = null;
   var startMs = new Date().getTime();
@@ -5,7 +19,9 @@ function handleGetShifts(params) {
     if (typeof ensureModuleLoggerDefined_ === "function") {
       logger = ensureModuleLoggerDefined_("SHIFT_GET");
     }
-  } catch (_ignoredLogger) {}
+  } catch (_ignoredLogger) {
+    // Logger initialization failed, continue without logging
+  }
 
   function finish_(res, errorCode, err) {
     if (typeof logDuration_ === "function") {
@@ -23,7 +39,7 @@ function handleGetShifts(params) {
         },
         res && res.success ? "info" : "warn",
         errorCode,
-        err
+        err,
       );
     }
     return res;
@@ -34,7 +50,7 @@ function handleGetShifts(params) {
   if (!sheet) {
     return finish_(
       jsonResponse({ success: false, error: "Sheet not found: " + SHEET_NAME }),
-      "SHEET_NOT_FOUND"
+      "SHEET_NOT_FOUND",
     );
   }
 
@@ -45,7 +61,7 @@ function handleGetShifts(params) {
         success: true,
         shifts: [],
         items: [],
-      })
+      }),
     );
   }
 
@@ -59,7 +75,7 @@ function handleGetShifts(params) {
 
   var employeeIdFilter = norm_(params && (params.employeeId || params.empId));
   var employeeNameFilter = norm_(
-    params && (params.employeeName || params.employee)
+    params && (params.employeeName || params.employee),
   );
 
   var out = [];
@@ -100,6 +116,6 @@ function handleGetShifts(params) {
       success: true,
       shifts: out,
       items: out,
-    })
+    }),
   );
 }

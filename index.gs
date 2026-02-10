@@ -363,8 +363,8 @@ function getActionRegistry_() {
     "requests.approve": function (payload, _logger) {
       return handleRequestApprove_(payload);
     },
-    "employee.save": function (payload, _logger) {
-      return handleEmployeeSave_(payload);
+    "employee.save": function (payload, logger) {
+      return handleEmployeeSave_(payload || {}, logger);
     },
     employeeExistsByEmail: function (payload, _logger) {
       return employeeExistsByEmail_(payload || {});
@@ -2136,7 +2136,6 @@ function adminReportBulkActionIssue_(request, context) {
   return EmployeesModule_adminReportBulkActionIssue_(request, context);
 }
 
-// TODO(admin-requests): mapping based on existing sheet: id = requestId or shiftId; employeeId + employeeName; raw status from "סטטוס בקשה"; createdAt from "חותמת זמן"/"תאריך משמרת"; optional shiftId, jobTypeId/name, department, units, manager note.
 function normalizeAdminRequestStatus_(raw) {
   var val = stringValue(raw).toUpperCase();
   if (!val) return "PENDING";
@@ -2186,6 +2185,85 @@ function toBooleanCell_(val) {
   return false;
 }
 
+function normalizeAdminRequestType_(raw) {
+  var val = stringValue(raw).toLowerCase().trim();
+  if (!val) return "";
+
+  if (
+    val === "job_not_linked" ||
+    val === "job-not-linked" ||
+    val === "job not linked"
+  ) {
+    return "job_not_linked";
+  }
+  if (
+    val === "shift_correction" ||
+    val === "shift-correction" ||
+    val === "shift correction"
+  ) {
+    return "shift_correction";
+  }
+  if (
+    val === "new_job_type" ||
+    val === "new-job-type" ||
+    val === "new job type"
+  ) {
+    return "new_job_type";
+  }
+  if (
+    val === "new_job_assignment" ||
+    val === "new-job-assignment" ||
+    val === "new job assignment"
+  ) {
+    return "new_job_assignment";
+  }
+
+  if (val.indexOf("תיקון") !== -1) return "shift_correction";
+  if (val.indexOf("שיוך") !== -1 || val.indexOf("assignment") !== -1) {
+    return "new_job_assignment";
+  }
+  if (
+    val.indexOf("חסר") !== -1 ||
+    val.indexOf("לא משויך") !== -1 ||
+    val.indexOf("not linked") !== -1
+  ) {
+    return "job_not_linked";
+  }
+  if (
+    (val.indexOf("חדש") !== -1 && val.indexOf("סוג") !== -1) ||
+    val.indexOf("new job type") !== -1
+  ) {
+    return "new_job_type";
+  }
+
+  return "";
+}
+
+function normalizeAdminRequestSource_(raw) {
+  var val = stringValue(raw).toUpperCase().trim();
+  if (!val) return null;
+
+  if (val === "WEB_APP" || val === "WEBAPP" || val === "WEB" || val === "APP")
+    return "WEB_APP";
+  if (val === "SIDEBAR") return "SIDEBAR";
+  if (val === "ADMIN") return "ADMIN";
+  if (val === "IMPORT") return "IMPORT";
+  if (val === "OTHER") return "OTHER";
+
+  if (val.indexOf("WEB") !== -1 || val.indexOf("APP") !== -1) {
+    return "WEB_APP";
+  }
+  if (val.indexOf("SIDEBAR") !== -1) return "SIDEBAR";
+  if (val.indexOf("ADMIN") !== -1 || val.indexOf("מנהל") !== -1) {
+    return "ADMIN";
+  }
+  if (val.indexOf("IMPORT") !== -1 || val.indexOf("ייבוא") !== -1) {
+    return "IMPORT";
+  }
+
+  return "OTHER";
+}
+
 function resolveRequestColumns_(options) {
   var sheet = getSheetByPossibleNames_(REQUESTS_SHEET_NAMES);
   var headers = getHeaderMap_(sheet);
@@ -2209,10 +2287,50 @@ function resolveRequestColumns_(options) {
     sheet: sheet,
     headers: headers,
     statusCol: required(["סטטוס בקשה", "סטטוס", "Status"]),
-    requestIdCol: optional(["ID בקשה", "Request ID", "RequestID"]),
-    shiftIdCol: optional(["ID משמרת", "Shift ID", "מזהה משמרת"]),
-    createdAtCol: optional(["חותמת זמן", "תאריך משמרת", "תיקון תאריך"]),
-    shiftDateCol: optional(["תאריך משמרת", "תיקון תאריך", "חותמת זמן"]),
+    requestIdCol: optional([
+      "ID בקשה",
+      "ID בקשות",
+      "מזהה בקשה",
+      "Request ID",
+      "RequestID",
+      "requestId",
+      "request_id",
+    ]),
+    shiftIdCol: optional([
+      "ID משמרת",
+      "Shift ID",
+      "מזהה משמרת",
+      "shiftId",
+      "ShiftID",
+    ]),
+    createdAtCol: optional([
+      "תאריך נשלח",
+      "submittedAt",
+      "createdAt",
+      "תאריך יצירה",
+      "תאריך בקשה",
+      "חותמת זמן",
+      "timestamp",
+      "Timestamp",
+      "תאריך משמרת",
+      "תיקון תאריך",
+    ]),
+    submittedAtCol: optional([
+      "תאריך נשלח",
+      "submittedAt",
+      "createdAt",
+      "תאריך יצירה",
+      "תאריך בקשה",
+      "חותמת זמן",
+    ]),
+    shiftDateCol: optional([
+      "תאריך משמרת",
+      "תיקון תאריך",
+      "תאריך יחיד",
+      "singleDate",
+      "workDate",
+      "חותמת זמן",
+    ]),
     employeeIdCol: required([
       "מזהה עובד",
       "ID עובד",
@@ -2220,29 +2338,80 @@ function resolveRequestColumns_(options) {
       "ת.ז",
       "תז",
     ]),
-    employeeNameCol: optional(["שם מלא", "שם עובד", "Employee Name"]),
+    employeeNameCol: optional([
+      "שם מלא",
+      "שם עובד",
+      "שם",
+      "Employee Name",
+      "employeeName",
+    ]),
     requestTypeIdCol: optional([
       "ID סוג בקשה",
-      "ID סוג עבודה",
-      "ID סוגי עבודה",
-      "Job Type ID",
+      "Request Type ID",
+      "requestTypeId",
+      "RequestTypeId",
     ]),
     requestTypeLabelCol: optional([
       "סוג בקשה",
+      "סוג בקשות",
+      "requestType",
+      "requestTypeName",
+      "requestTypeLabel",
+      "Request Type",
       "תיאור בקשה",
+    ]),
+    jobTypeIdCol: optional([
+      "ID סוג עבודה",
+      "ID סוגי עבודה",
+      "מזהה סוג עבודה",
+      "Job Type ID",
+      "jobTypeId",
+      "JobTypeId",
+    ]),
+    jobTypeNameCol: optional([
       "סוג עבודה",
       "סוגי עבודה",
       "שם סוג עבודה",
+      "jobTypeName",
+      "Job Type",
     ]),
-    departmentCol: optional(["מחלקה", "מחלקות", "Department"]),
-    unitsCol: optional(["כמות היחידות", "דיווח יחידות", "Units"]),
-    managerCommentCol: optional(["הערת מנהל", "הערות מנהל", "Manager Comment"]),
+    departmentCol: optional(["מחלקה", "מחלקות", "Department", "department"]),
+    unitsCol: optional(["כמות היחידות", "דיווח יחידות", "כמות יחידות", "יחידות", "units", "Units"]),
+    managerCommentCol: optional([
+      "הערת מנהל",
+      "הערה מנהל",
+      "הערת מנהלת",
+      "הערות מנהל",
+      "הערת טיפול",
+      "Manager Comment",
+      "managerComment",
+      "managerNotes",
+    ]),
+    managerNoteCol: optional([
+      "הערה למנהל",
+      "הערות למנהל",
+      "הערה למנהל",
+      "noteToManager",
+      "Manager Note",
+      "הערות",
+      "פירוט",
+    ]),
     employeeCommentCol: optional([
       "הערות למשמרת",
       "הערת עובד",
+      "הערות עובד",
       "Employee Comment",
+      "employeeComment",
+      "description",
+      "פירוט בקשה",
     ]),
-    sourceCol: optional(["מקור", "Source"]),
+    sourceCol: optional([
+      "מקור",
+      "Source",
+      "source",
+      "sourceOverride",
+      "מקור דיווחים",
+    ]),
     isArchivedCol: optional(["בארכיון", "ארכיון", "Archived", "isArchived"]),
     decisionAtCol: optional(["תאריך החלטה", "decisionAt"]),
     decidedByNameCol: optional(["מקבל החלטה", "הוחלט על ידי", "decidedByName"]),
@@ -2267,12 +2436,15 @@ function mapRequestRow_(row, cols) {
 
   var statusRaw = stringValue(cell(cols.statusCol));
   var status = normalizeAdminRequestStatus_(statusRaw);
-  var createdAt = cols.createdAtCol
+  var createdAtRaw = cols.createdAtCol
     ? normalizeIsoDateTimeValue_(cell(cols.createdAtCol))
+    : "";
+  var submittedAtRaw = cols.submittedAtCol
+    ? normalizeIsoDateTimeValue_(cell(cols.submittedAtCol))
     : "";
   var shiftDate = cols.shiftDateCol
     ? normalizeIsoDateTimeValue_(cell(cols.shiftDateCol))
-    : createdAt;
+    : "";
   var dateFrom = cols.dateFromCol
     ? normalizeIsoDateTimeValue_(cell(cols.dateFromCol))
     : "";
@@ -2281,10 +2453,22 @@ function mapRequestRow_(row, cols) {
     : "";
   var singleDate = cols.singleDateCol
     ? normalizeIsoDateTimeValue_(cell(cols.singleDateCol))
-    : shiftDate;
+    : "";
+  if (!shiftDate) {
+    shiftDate =
+      singleDate || dateFrom || dateTo || createdAtRaw || submittedAtRaw || "";
+  }
+  var createdAt =
+    createdAtRaw ||
+    submittedAtRaw ||
+    shiftDate ||
+    singleDate ||
+    dateFrom ||
+    dateTo ||
+    "";
+  var submittedAt = submittedAtRaw || createdAt || null;
 
-  var sourceRaw = stringValue(cell(cols.sourceCol)).toUpperCase();
-  var source = sourceRaw ? sourceRaw : null;
+  var source = normalizeAdminRequestSource_(cell(cols.sourceCol)) || null;
   var isArchived = cols.isArchivedCol
     ? toBooleanCell_(cell(cols.isArchivedCol))
     : false;
@@ -2293,8 +2477,47 @@ function mapRequestRow_(row, cols) {
   var idFromShift = stringValue(cell(cols.shiftIdCol));
   var id = idFromRequest || idFromShift;
 
+  var requestTypeIdRaw = stringValue(cell(cols.requestTypeIdCol));
+  var requestTypeLabelRaw = stringValue(cell(cols.requestTypeLabelCol));
+  var jobTypeIdRaw = stringValue(cell(cols.jobTypeIdCol));
+  var jobTypeNameRaw = stringValue(cell(cols.jobTypeNameCol));
+  var employeeCommentRaw = stringValue(cell(cols.employeeCommentCol));
+  var managerNote = stringValue(cell(cols.managerNoteCol));
+  var managerCommentRaw = stringValue(cell(cols.managerCommentCol));
+
+  var canonicalRequestType = "";
+  var requestTypeCandidates = [
+    requestTypeIdRaw,
+    requestTypeLabelRaw,
+    jobTypeIdRaw,
+    jobTypeNameRaw,
+    employeeCommentRaw,
+    managerNote,
+  ];
+  for (var t = 0; t < requestTypeCandidates.length; t++) {
+    var normalizedType = normalizeAdminRequestType_(requestTypeCandidates[t]);
+    if (normalizedType) {
+      canonicalRequestType = normalizedType;
+      break;
+    }
+  }
+  var requestTypeId = canonicalRequestType || requestTypeIdRaw || null;
+  var requestTypeLabel =
+    requestTypeLabelRaw || canonicalRequestType || jobTypeNameRaw || null;
+  var requestTypeName =
+    canonicalRequestType ||
+    requestTypeLabelRaw ||
+    requestTypeIdRaw ||
+    jobTypeNameRaw ||
+    null;
+
+  var managerNotes = managerNote || managerCommentRaw || null;
+  var managerComment = managerCommentRaw || managerNote || null;
+  var employeeComment = employeeCommentRaw || managerNote || null;
+
   return {
     id: id,
+    requestId: idFromRequest || idFromShift || null,
     employeeId: stringValue(cell(cols.employeeIdCol)),
     employeeName: stringValue(cell(cols.employeeNameCol)),
     employeeEmail: null,
@@ -2302,6 +2525,7 @@ function mapRequestRow_(row, cols) {
     rawStatus: statusRaw,
     statusLabel: statusRaw || status,
     createdAt: createdAt || null,
+    submittedAt: submittedAt || createdAt || null,
     updatedAt: cols.updatedAtCol
       ? normalizeIsoDateTimeValue_(cell(cols.updatedAtCol)) || null
       : null,
@@ -2314,24 +2538,18 @@ function mapRequestRow_(row, cols) {
     shiftRefDate: shiftDate || null,
     shiftId: idFromShift || null,
     shiftRef: { shiftId: idFromShift || null, shiftDate: shiftDate || null },
-    requestTypeId: stringValue(cell(cols.requestTypeIdCol)) || null,
-    requestTypeLabel:
-      stringValue(cell(cols.requestTypeLabelCol)) ||
-      stringValue(cell(cols.requestTypeIdCol)) ||
-      null,
-    requestTypeName:
-      stringValue(cell(cols.requestTypeLabelCol)) ||
-      stringValue(cell(cols.requestTypeIdCol)) ||
-      null,
-    jobTypeId: stringValue(cell(cols.requestTypeIdCol)) || null,
-    jobTypeName: stringValue(cell(cols.requestTypeLabelCol)) || null,
+    requestTypeId: requestTypeId,
+    requestTypeLabel: requestTypeLabel || requestTypeId,
+    requestTypeName: requestTypeName,
+    jobTypeId: jobTypeIdRaw || null,
+    jobTypeName: jobTypeNameRaw || null,
     department: stringValue(cell(cols.departmentCol)) || null,
     units: cell(cols.unitsCol) !== "" ? cell(cols.unitsCol) : null,
     source: source,
     isArchived: isArchived,
-    managerNotes: stringValue(cell(cols.managerCommentCol)) || null,
-    managerComment: stringValue(cell(cols.managerCommentCol)) || null,
-    employeeComment: stringValue(cell(cols.employeeCommentCol)) || null,
+    managerNotes: managerNotes,
+    managerComment: managerComment,
+    employeeComment: employeeComment,
     decidedById: stringValue(cell(cols.decidedByIdCol)) || null,
     decidedByName: stringValue(cell(cols.decidedByNameCol)) || null,
     decidedByRole: stringValue(cell(cols.decidedByRoleCol)) || null,
@@ -2404,7 +2622,31 @@ function adminListRequests_(payload, logger) {
     if (!includeArchived && req.isArchived) continue;
 
     if (filters.requestTypeId) {
-      if (req.requestTypeId !== stringValue(filters.requestTypeId)) continue;
+      var desiredTypeRaw = stringValue(filters.requestTypeId).trim();
+      var desiredTypeLower = desiredTypeRaw.toLowerCase();
+      var desiredCanonicalType = normalizeAdminRequestType_(desiredTypeRaw);
+      var reqCanonicalType =
+        normalizeAdminRequestType_(req.requestTypeId) ||
+        normalizeAdminRequestType_(req.requestTypeName) ||
+        normalizeAdminRequestType_(req.requestTypeLabel) ||
+        normalizeAdminRequestType_(req.jobTypeId) ||
+        normalizeAdminRequestType_(req.jobTypeName);
+      if (desiredTypeLower === "other" || desiredTypeLower === "אחר") {
+        if (reqCanonicalType) continue;
+      } else {
+        var desiredType = desiredCanonicalType || desiredTypeLower;
+        var reqTypeCandidates = [
+          reqCanonicalType,
+          stringValue(req.requestTypeId).toLowerCase().trim(),
+          stringValue(req.requestTypeName).toLowerCase().trim(),
+          stringValue(req.requestTypeLabel).toLowerCase().trim(),
+          stringValue(req.jobTypeId).toLowerCase().trim(),
+          stringValue(req.jobTypeName).toLowerCase().trim(),
+        ].filter(function (v) {
+          return !!v;
+        });
+        if (reqTypeCandidates.indexOf(desiredType) === -1) continue;
+      }
     }
 
     if (filters.source && stringValue(filters.source).toUpperCase() !== "ALL") {
@@ -2412,14 +2654,33 @@ function adminListRequests_(payload, logger) {
       if (!req.source || req.source !== desiredSource) continue;
     }
 
-    if (dateFromFilter && req.createdAt) {
-      var reqDate = new Date(req.createdAt);
-      if (!isNaN(reqDate.getTime()) && reqDate < dateFromFilter) continue;
+    var reqDate = null;
+    var reqDateCandidates = [
+      req.createdAt,
+      req.submittedAt,
+      req.shiftRefDate,
+      req.singleDate,
+      req.dateFrom,
+      req.dateTo,
+    ];
+    for (var d = 0; d < reqDateCandidates.length; d++) {
+      var candidateDate = stringValue(reqDateCandidates[d]);
+      if (!candidateDate) continue;
+      var parsedDate = new Date(candidateDate);
+      if (!isNaN(parsedDate.getTime())) {
+        reqDate = parsedDate;
+        break;
+      }
     }
 
-    if (dateToFilter && req.createdAt) {
-      var reqDateTo = new Date(req.createdAt);
-      if (!isNaN(reqDateTo.getTime()) && reqDateTo > dateToFilter) continue;
+    if (dateFromFilter && reqDate && reqDate < dateFromFilter) continue;
+
+    if (dateToFilter && reqDate) {
+      if (!isNaN(reqDate.getTime())) {
+        var maxDate = new Date(dateToFilter.getTime());
+        maxDate.setHours(23, 59, 59, 999);
+        if (reqDate > maxDate) continue;
+      }
     }
 
     if (search) {
@@ -2516,13 +2777,10 @@ function adminUpdateRequestStatus_(payload, logger) {
 
   sheet.getRange(rowNumber, cols.statusCol).setValue(newStatus);
 
-  if (
-    cols.managerCommentCol &&
-    payload &&
-    payload.managerComment !== undefined
-  ) {
+  var managerCommentTargetCol = cols.managerCommentCol || cols.managerNoteCol;
+  if (managerCommentTargetCol && payload && payload.managerComment !== undefined) {
     sheet
-      .getRange(rowNumber, cols.managerCommentCol)
+      .getRange(rowNumber, managerCommentTargetCol)
       .setValue(stringValue(payload.managerComment));
   }
 
@@ -2609,10 +2867,9 @@ function adminCreateRequest_(payload, logger) {
   setCell(cols.requestIdCol || cols.shiftIdCol, generatedId);
   setCell(cols.employeeIdCol, employeeId);
   setCell(cols.employeeNameCol, stringValue(payload && payload.employeeName));
-  setCell(
-    cols.createdAtCol,
-    singleDate || dateFrom || dateTo || shiftDate || nowIso,
-  );
+  var createdAtValue = singleDate || dateFrom || dateTo || shiftDate || nowIso;
+  setCell(cols.createdAtCol, createdAtValue);
+  setCell(cols.submittedAtCol, createdAtValue);
   setCell(cols.shiftDateCol, shiftDate || singleDate || dateFrom || "");
   setCell(cols.shiftIdCol, shiftId || "");
   setCell(cols.dateFromCol, dateFrom || "");
@@ -3821,73 +4078,139 @@ function handleRequestApprove_(payload, logger) {
   return { ok: true, status: "approved", requestType: "job_not_linked" };
 }
 
-function handleEmployeeSave_(payload) {
-  const employeeId = stringValue(payload.employeeId);
-  if (!employeeId) throw new Error("Missing employeeId");
+function handleEmployeeSave_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("PROFILE_SAVE");
+  var startMs = new Date().getTime();
+  var request = payload && typeof payload === "object" ? payload : {};
+  var employeeId = stringValue(request.employeeId);
 
-  const forbiddenName =
-    payload.hasOwnProperty("fullName") ||
-    payload.hasOwnProperty("name") ||
-    payload.hasOwnProperty("employeeName");
-  if (forbiddenName) return { ok: false, error: "fullName_read_only" };
+  if (lg && typeof lg.info === "function") {
+    lg.info("employee.save.start", {
+      employeeId: employeeId || null,
+      hasPhone: request.phone !== undefined,
+      hasBirthDate: request.birthDate !== undefined,
+      hasSize: request.size !== undefined && request.size !== null,
+    });
+  }
 
-  const sheet = getEmployeesSheet_();
-  let headers = getHeaderMap_(sheet);
-  const sheetName = sheet.getName();
-  const empIdCol = getRequiredColumn_(
-    headers,
-    ["מזהה עובד", "ID עובד"],
-    sheetName,
-  );
-  const phoneCol = getOptionalColumn_(headers, ["טלפון"]);
-  const birthCol = getOptionalColumn_(headers, ["ת. לידה", "תאריך לידה"]);
+  try {
+    if (!employeeId) throw new Error("Missing employeeId");
 
-  const sizeInfo = ensureEmployeeSizeColumns_(sheet, headers);
-  headers = sizeInfo.headers;
-  const sizeCol = sizeInfo.sizeCol;
-  const sizeSourceCol = sizeInfo.sourceCol;
-
-  const values = sheet.getDataRange().getValues();
-  let targetRow = null;
-  for (let i = 1; i < values.length; i++) {
-    if (stringValue(values[i][empIdCol - 1]) === employeeId) {
-      targetRow = i + 1;
-      break;
+    var forbiddenName =
+      request.hasOwnProperty("fullName") ||
+      request.hasOwnProperty("name") ||
+      request.hasOwnProperty("employeeName");
+    if (forbiddenName) {
+      logDuration_(
+        lg,
+        "employee.save.error",
+        startMs,
+        { employeeId: employeeId, reason: "fullName_read_only" },
+        "warn",
+        ERROR_CODES.VALIDATION_FAILED,
+      );
+      return { ok: false, error: "fullName_read_only" };
     }
-  }
-  if (!targetRow) return { ok: false, error: "employee_not_found" };
 
-  if (payload.phone !== undefined && phoneCol) {
-    sheet.getRange(targetRow, phoneCol).setValue(stringValue(payload.phone));
-  }
-  if (payload.birthDate !== undefined && birthCol) {
-    sheet
-      .getRange(targetRow, birthCol)
-      .setValue(stringValue(payload.birthDate));
-  }
-  if (payload.size !== undefined && payload.size !== null) {
-    sheet.getRange(targetRow, sizeCol).setValue(stringValue(payload.size));
-    sheet.getRange(targetRow, sizeSourceCol).setValue("webapp");
-  }
+    const sheet = getEmployeesSheet_();
+    let headers = getHeaderMap_(sheet);
+    const sheetName = sheet.getName();
+    const empIdCol = getRequiredColumn_(
+      headers,
+      ["מזהה עובד", "ID עובד"],
+      sheetName,
+    );
+    const phoneCol = getOptionalColumn_(headers, ["טלפון"]);
+    const birthCol = getOptionalColumn_(headers, ["ת. לידה", "תאריך לידה"]);
 
-  const response = {
-    id: employeeId,
-    phone: payload.phone !== undefined ? stringValue(payload.phone) : undefined,
-    birthDate:
-      payload.birthDate !== undefined
-        ? stringValue(payload.birthDate)
-        : undefined,
-    size:
-      payload.size !== undefined && payload.size !== null
-        ? stringValue(payload.size)
-        : undefined,
-    sizeSource:
-      payload.size !== undefined && payload.size !== null
-        ? "webapp"
-        : undefined,
-  };
+    const sizeInfo = ensureEmployeeSizeColumns_(sheet, headers, lg, employeeId);
+    headers = sizeInfo.headers;
+    const sizeCol = sizeInfo.sizeCol;
+    const sizeSourceCol = sizeInfo.sourceCol;
 
-  return { ok: true, status: "updated", employee: response };
+    const values = sheet.getDataRange().getValues();
+    let targetRow = null;
+    for (let i = 1; i < values.length; i++) {
+      if (stringValue(values[i][empIdCol - 1]) === employeeId) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+    if (!targetRow) {
+      logDuration_(
+        lg,
+        "employee.save.error",
+        startMs,
+        { employeeId: employeeId, reason: "employee_not_found" },
+        "warn",
+        ERROR_CODES.EMPLOYEE_NOT_FOUND,
+      );
+      return { ok: false, error: "employee_not_found" };
+    }
+
+    var updatedFields = [];
+    if (request.phone !== undefined && phoneCol) {
+      sheet.getRange(targetRow, phoneCol).setValue(stringValue(request.phone));
+      updatedFields.push("phone");
+    }
+    if (request.birthDate !== undefined && birthCol) {
+      sheet
+        .getRange(targetRow, birthCol)
+        .setValue(stringValue(request.birthDate));
+      updatedFields.push("birthDate");
+    }
+    if (request.size !== undefined && request.size !== null) {
+      sheet.getRange(targetRow, sizeCol).setValue(stringValue(request.size));
+      sheet.getRange(targetRow, sizeSourceCol).setValue("webapp");
+      updatedFields.push("size");
+    }
+
+    const response = {
+      id: employeeId,
+      phone:
+        request.phone !== undefined ? stringValue(request.phone) : undefined,
+      birthDate:
+        request.birthDate !== undefined
+          ? stringValue(request.birthDate)
+          : undefined,
+      size:
+        request.size !== undefined && request.size !== null
+          ? stringValue(request.size)
+          : undefined,
+      sizeSource:
+        request.size !== undefined && request.size !== null
+          ? "webapp"
+          : undefined,
+    };
+
+    logDuration_(lg, "employee.save.success", startMs, {
+      employeeId: employeeId,
+      sheetName: sheetName,
+      row: targetRow,
+      updatedFields: updatedFields,
+      addedColumns:
+        sizeInfo && Array.isArray(sizeInfo.addedColumns)
+          ? sizeInfo.addedColumns
+          : [],
+    });
+
+    return { ok: true, status: "updated", employee: response };
+  } catch (err) {
+    logDuration_(
+      lg,
+      "employee.save.error",
+      startMs,
+      {
+        employeeId: employeeId || null,
+        message:
+          err && err.message ? String(err.message) : String(err || "error"),
+      },
+      "error",
+      ERROR_CODES.PROFILE_SAVE_FAILED,
+      err,
+    );
+    throw err;
+  }
 }
 
 // Returns employee match by email with normalized systemRole for auth.
@@ -5268,25 +5591,72 @@ function linkJobTypeToEmployee_(
     sheet.getRange(targetRow, payNameCol).setValue(payTypeName || "");
 }
 
-function ensureEmployeeSizeColumns_(sheet, headers) {
-  let sizeCol = getOptionalColumn_(headers, [
-    "מידה (WebApp)",
-    "מידת חולצה (WebApp)",
-  ]);
-  let sourceCol = getOptionalColumn_(headers, ["SOURCE_SIZE", "מקור מידה"]);
-  if (sizeCol && sourceCol) return { sizeCol, sourceCol, headers };
+function ensureEmployeeSizeColumns_(sheet, headers, logger, employeeId) {
+  var lg = logger || ensureModuleLoggerDefined_("PROFILE_SAVE");
+  var startMs = new Date().getTime();
+  var sheetName = sheet && typeof sheet.getName === "function"
+    ? sheet.getName()
+    : "";
 
-  const lastCol = sheet.getLastColumn();
-  if (!sizeCol) {
-    sizeCol = lastCol + 1;
-    sheet.getRange(1, sizeCol).setValue("מידה (WebApp)");
+  if (lg && typeof lg.info === "function") {
+    lg.info("employee.size.ensure.start", {
+      sheetName: sheetName,
+      employeeId: employeeId || null,
+    });
   }
-  if (!sourceCol) {
-    sourceCol = sheet.getLastColumn() + 1;
-    sheet.getRange(1, sourceCol).setValue("SOURCE_SIZE");
+
+  try {
+    let sizeCol = getOptionalColumn_(headers, [
+      "מידה (WebApp)",
+      "מידת חולצה (WebApp)",
+    ]);
+    let sourceCol = getOptionalColumn_(headers, ["SOURCE_SIZE", "מקור מידה"]);
+    var addedColumns = [];
+
+    if (!sizeCol) {
+      const lastCol = sheet.getLastColumn();
+      sizeCol = lastCol + 1;
+      sheet.getRange(1, sizeCol).setValue("מידה (WebApp)");
+      addedColumns.push("מידה (WebApp)");
+    }
+    if (!sourceCol) {
+      sourceCol = sheet.getLastColumn() + 1;
+      sheet.getRange(1, sourceCol).setValue("SOURCE_SIZE");
+      addedColumns.push("SOURCE_SIZE");
+    }
+
+    const resolvedHeaders =
+      addedColumns.length > 0 ? getHeaderMap_(sheet) : headers;
+
+    logDuration_(lg, "employee.size.ensure.success", startMs, {
+      sheetName: sheetName,
+      employeeId: employeeId || null,
+      addedColumns: addedColumns,
+    });
+
+    return {
+      sizeCol: sizeCol,
+      sourceCol: sourceCol,
+      headers: resolvedHeaders,
+      addedColumns: addedColumns,
+    };
+  } catch (err) {
+    logDuration_(
+      lg,
+      "employee.size.ensure.error",
+      startMs,
+      {
+        sheetName: sheetName,
+        employeeId: employeeId || null,
+        message:
+          err && err.message ? String(err.message) : String(err || "error"),
+      },
+      "error",
+      ERROR_CODES.PROFILE_SAVE_FAILED,
+      err,
+    );
+    throw err;
   }
-  const newHeaders = getHeaderMap_(sheet);
-  return { sizeCol, sourceCol, headers: newHeaders };
 }
 
 function normalizeShiftHeaderValue_(v) {

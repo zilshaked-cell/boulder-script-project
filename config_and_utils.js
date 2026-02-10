@@ -1,8 +1,9 @@
 /* exported jsonResponse */
 
+// eslint-disable-next-line no-unused-vars
 function jsonResponse(obj, statusCode) {
   var output = ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(
-    ContentService.MimeType.JSON
+    ContentService.MimeType.JSON,
   );
   return output;
 }

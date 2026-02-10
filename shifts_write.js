@@ -9,7 +9,7 @@ function handleShiftPost(e) {
   if (!hasLock) {
     return jsonResponse({
       success: false,
-      error: "Lock unavailable (concurrent write)"
+      error: "Lock unavailable (concurrent write)",
     });
   }
 
@@ -32,7 +32,7 @@ function handleShiftPost(e) {
         { success: !!(res && res.success), error: res && res.error },
         res && res.success ? "info" : "warn",
         errorCode,
-        err
+        err,
       );
     }
     return res;
@@ -50,7 +50,7 @@ function handleShiftPost(e) {
         return finish_(
           jsonResponse({ success: false, error: "Invalid JSON: " + err }),
           "INVALID_JSON",
-          err
+          err,
         );
       }
     }
@@ -64,7 +64,7 @@ function handleShiftPost(e) {
     if (!data || typeof data !== "object") {
       return finish_(
         jsonResponse({ success: false, error: "Missing body or parameter" }),
-        "MISSING_BODY"
+        "MISSING_BODY",
       );
     }
 
@@ -76,7 +76,7 @@ function handleShiftPost(e) {
           success: false,
           error: "Sheet not found: " + SHEET_NAME,
         }),
-        "SHEET_NOT_FOUND"
+        "SHEET_NOT_FOUND",
       );
 
     function norm_(v) {
@@ -138,7 +138,7 @@ function handleShiftPost(e) {
           headerRow + 1,
           1,
           lastRow - headerRow,
-          Math.max(colEmpId, colName)
+          Math.max(colEmpId, colName),
         )
         .getValues();
 
@@ -209,25 +209,25 @@ function handleShiftPost(e) {
           success: false,
           error: "Missing employeeId/employeeName",
         }),
-        "MISSING_EMPLOYEE"
+        "MISSING_EMPLOYEE",
       );
     }
     if (!direction) {
       return finish_(
         jsonResponse({ success: false, error: "Missing direction" }),
-        "MISSING_DIRECTION"
+        "MISSING_DIRECTION",
       );
     }
     if (!fixDate || !fixTime) {
       return finish_(
         jsonResponse({ success: false, error: "Missing fixDate/fixTime" }),
-        "MISSING_FIX_FIELDS"
+        "MISSING_FIX_FIELDS",
       );
     }
     if (!jobName && !jobId) {
       return finish_(
         jsonResponse({ success: false, error: "Missing jobId/jobName" }),
-        "MISSING_JOB"
+        "MISSING_JOB",
       );
     }
 

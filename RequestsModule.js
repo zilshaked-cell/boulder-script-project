@@ -46,7 +46,9 @@ var REQ = REQ || {};
       if (typeof ensureModuleLoggerDefined_ === "function") {
         return ensureModuleLoggerDefined_(operation || "REQUESTS_MODULE");
       }
-    } catch (_ignored) {}
+    } catch (_ignored) {
+      // Intentionally silent: logger not available, continue without logging
+    }
     return null;
   }
 
@@ -83,7 +85,7 @@ var REQ = REQ || {};
           removedCount: removed.length,
         },
         "warn",
-        "REQUEST_STATUS_UNKNOWN"
+        "REQUEST_STATUS_UNKNOWN",
       );
     }
 
@@ -191,7 +193,7 @@ var REQ = REQ || {};
         CONFIG.HEADER_ROW + 1,
         1,
         lastRow - CONFIG.HEADER_ROW,
-        sh.getLastColumn()
+        sh.getLastColumn(),
       )
       .getValues();
 
@@ -214,7 +216,7 @@ var REQ = REQ || {};
       DEFAULT_OPEN_STATUS,
       null,
       logger,
-      startMs
+      startMs,
     ).normalized;
     var defaultOpenSet = {};
     defaultOpenNormalized.forEach(function (s) {
@@ -250,8 +252,8 @@ var REQ = REQ || {};
           rec.timestamp instanceof Date
             ? rec.timestamp
             : rec.timestampIso
-            ? new Date(rec.timestampIso)
-            : null;
+              ? new Date(rec.timestampIso)
+              : null;
         if (ts instanceof Date && !isNaN(ts.getTime())) {
           if (!oldestOpenDate || ts.getTime() < oldestOpenDate.getTime()) {
             oldestOpenDate = ts;
@@ -266,7 +268,7 @@ var REQ = REQ || {};
       rawStatusesFilter,
       statusesFound,
       logger,
-      startMs
+      startMs,
     );
     var statusesFilter = normalizedStatuses.normalized;
     var statusSet = {};
@@ -366,6 +368,7 @@ var REQ = REQ || {};
   function ensureRequestIds_(sheet) {
     var logger = getLogger_("REQUESTS_ENSURE_IDS");
     var startMs = new Date().getTime();
+    var warning = null; // הגדרת משתנה למניעת ReferenceError
     var sh = sheet || sh_();
     var lastRow = sh.getLastRow();
     if (lastRow <= CONFIG.HEADER_ROW) return { filled: 0 };
@@ -389,7 +392,8 @@ var REQ = REQ || {};
 
     if (!idCol) {
       // אין עמודת ID בקשה - לא עושים כלום
-      return { filled: 0, warning: 'לא נמצאה עמודת "ID בקשה"' };
+      warning = 'לא נמצאה עמודת "ID בקשה"';
+      return { filled: 0, warning: warning };
     }
 
     var lastCol = sh.getLastColumn();
@@ -397,7 +401,7 @@ var REQ = REQ || {};
       CONFIG.HEADER_ROW + 1,
       1,
       lastRow - CONFIG.HEADER_ROW,
-      lastCol
+      lastCol,
     );
     var data = dataRange.getValues();
 
@@ -465,7 +469,7 @@ var REQ = REQ || {};
           },
           "warn",
           "REQ_ON_OPEN_FAIL",
-          err
+          err,
         );
       }
       return;
@@ -516,6 +520,7 @@ var REQ = REQ || {};
   REQ.REQ_onEdit = REQ_onEdit;
 })();
 
+// eslint-disable-next-line no-unused-vars
 function REQ_onOpen(e) {
   if (typeof REQ !== "undefined" && REQ.REQ_onOpen) {
     REQ.REQ_onOpen(e || {});
@@ -530,6 +535,7 @@ function REQ_listRequests(filters) {
   return { ok: false, error: "REQ module missing" };
 }
 
+// eslint-disable-next-line no-unused-vars
 function REQ_onEdit(e) {
   if (typeof REQ !== "undefined" && REQ.REQ_onEdit) {
     REQ.REQ_onEdit(e || {});

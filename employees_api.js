@@ -6,7 +6,9 @@
  */
 
 const EMPLOYEE_SHEET_NAME = "פרטי עובדים";
+const EMPLOYEE_HEADER_ROW = 1;
 
+// eslint-disable-next-line no-unused-vars
 function handleGetEmployees(params) {
   params = params || {};
 
@@ -59,7 +61,7 @@ function handleGetEmployees(params) {
     "";
 
   var activeOnlyRaw = String(
-    params.onlyActive || params.activeOnly || ""
+    params.onlyActive || params.activeOnly || "",
   ).toLowerCase();
   var activeOnly =
     activeOnlyRaw === "true" ||
@@ -70,7 +72,7 @@ function handleGetEmployees(params) {
     EMPLOYEE_HEADER_ROW + 1,
     1,
     lastRow - EMPLOYEE_HEADER_ROW,
-    lastCol
+    lastCol,
   );
   var values = dataRange.getValues();
 
@@ -161,7 +163,7 @@ function handleGetEmployees(params) {
   // מיון לפי שם
   employees.sort(function (a, b) {
     return String(a.employeeName || "").localeCompare(
-      String(b.employeeName || "")
+      String(b.employeeName || ""),
     );
   });
 
@@ -175,6 +177,7 @@ function handleGetEmployees(params) {
  * בדיקת קיום עובד לפי מייל (לשימוש הלוגין של הווב-אפ).
  * מחזיר success+found, ואם נמצא – מצרף active+employeeId+employeeName.
  */
+// eslint-disable-next-line no-unused-vars
 function employeeExistsByEmail(params) {
   params = params || {};
 
@@ -247,7 +250,7 @@ function employeeExistsByEmail(params) {
     EMPLOYEE_HEADER_ROW + 1,
     1,
     lastRow - EMPLOYEE_HEADER_ROW,
-    lastCol
+    lastCol,
   );
   var values = dataRange.getValues();
 

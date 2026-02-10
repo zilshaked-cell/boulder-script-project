@@ -26,10 +26,12 @@ function seedLogger_(operation) {
     if (typeof ensureModuleLoggerDefined_ === "function") {
       return ensureModuleLoggerDefined_(operation || "SEED_DEMO_DATA");
     }
-  } catch (_ignored) {}
+  } catch (_ignored) {
+    // Logger unavailable; continue without logging
+  }
   return null;
 }
-/* global OPT, SHEET_NAME, SHEET_NAME_REQUESTS */
+/* global SHEET_NAME_REQUESTS */
 /* exported SEED_generateDemoDataForLastTwoMonths, SEED_clearAllDemoData */
 // Deterministic demo data seeding (manual-only). Uses batch writes (setValues) to avoid execution timeouts.
 // Scenarios distribution (pattern = (dayIndex*7 + empIndex) % 10):
@@ -86,7 +88,9 @@ function SEED_generateDemoDataForLastTwoMonths() {
     props.deleteProperty(SEED_PROGRESS_KEY);
     try {
       Logger.log("SEED: last two months already fully seeded; nothing to do.");
-    } catch (_ignoredLog) {}
+    } catch (_ignoredLog) {
+      // Logger unavailable
+    }
     if (typeof logDuration_ === "function") {
       logDuration_(logger, "seed.lastTwoMonths", startMs, {
         status: "complete",
@@ -107,20 +111,20 @@ function SEED_generateDemoDataForLastTwoMonths() {
   var rangeStart = new Date(
     currentStart.getFullYear(),
     currentStart.getMonth(),
-    currentStart.getDate()
+    currentStart.getDate(),
   );
   var rangeEnd = new Date(
     chunkEnd.getFullYear(),
     chunkEnd.getMonth(),
-    chunkEnd.getDate()
+    chunkEnd.getDate(),
   );
 
-  var result = SEED_generateDemoDataForDateRange(rangeStart, rangeEnd);
+  var result = SEED_generateDemoDataForDateRange(rangeStart, rangeEnd, false);
 
   var nextStart = new Date(
     rangeEnd.getFullYear(),
     rangeEnd.getMonth(),
-    rangeEnd.getDate()
+    rangeEnd.getDate(),
   );
   nextStart.setDate(nextStart.getDate() + 1);
   nextStart.setHours(0, 0, 0, 0);
@@ -138,7 +142,7 @@ function SEED_generateDemoDataForLastTwoMonths() {
         " – " +
         rangeEnd.toDateString() +
         ". " +
-        resultSummary
+        resultSummary,
     );
     try {
       Logger.log(
@@ -147,9 +151,11 @@ function SEED_generateDemoDataForLastTwoMonths() {
           " – " +
           rangeEnd.toDateString() +
           ". " +
-          resultSummary
+          resultSummary,
       );
-    } catch (_ignoredLog2) {}
+    } catch (_ignoredLog2) {
+      // Logger unavailable
+    }
     if (typeof logDuration_ === "function") {
       logDuration_(logger, "seed.lastTwoMonths", startMs, {
         status: "complete",
@@ -168,9 +174,11 @@ function SEED_generateDemoDataForLastTwoMonths() {
           ". Next start: " +
           nextStart.toDateString() +
           ". " +
-          resultSummary
+          resultSummary,
       );
-    } catch (_ignoredLog3) {}
+    } catch (_ignoredLog3) {
+      // Logger unavailable
+    }
     if (typeof logDuration_ === "function") {
       logDuration_(logger, "seed.lastTwoMonths", startMs, {
         status: "partial",
@@ -182,9 +190,22 @@ function SEED_generateDemoDataForLastTwoMonths() {
   }
 }
 
-function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
+/**
+ * Generates demo data for a specific date range (L3 operation).
+ *
+ * @param {Date} startDateInput - Start date (inclusive)
+ * @param {Date} endDateInput - End date (inclusive)
+ * @param {boolean} dryRun - If true, returns preview without writing to sheets (default: false)
+ * @return {Object} Summary: {createdShifts, createdRequests} or {preview} if dryRun
+ */
+function SEED_generateDemoDataForDateRange(
+  startDateInput,
+  endDateInput,
+  dryRun,
+) {
   var logger = seedLogger_("SEED_RANGE");
   var startMs = new Date().getTime();
+  dryRun = dryRun || false;
   var startDate = normalizeDate_(startDateInput);
   var endDate = normalizeDate_(endDateInput);
   if (!startDate || !endDate || startDate > endDate) {
@@ -207,23 +228,15 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
     throw new Error(
       "Seed data already exists in shift sheet for this date range (" +
         SEED_TAG +
-        "); aborting."
+        "); aborting.",
     );
   }
   if (hasSeedTagInRequests_(requestsSheet, startDate, endDate)) {
     throw new Error(
       "Seed data already exists in requests sheet for this date range (" +
         SEED_TAG +
-        "); aborting."
+        "); aborting.",
     );
-
-    if (typeof logDuration_ === "function") {
-      logDuration_(logger, "seed.range", startMs, {
-        days: Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1,
-        shiftRows: ctx.shiftRows.length,
-        requestRows: ctx.requestRows.length,
-      });
-    }
   }
 
   var ctx = {
@@ -259,10 +272,82 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
         emp,
         jobPrimary,
         pattern,
-        ctx
+        ctx,
       );
     }
     dayIndex++;
+  }
+
+  // SAFETY: Enforce max 100 rows per EXECUTE (SAFETY_PROTOCOL v1.0, rule 4)
+  var totalRows = ctx.shiftRows.length + ctx.requestRows.length;
+  if (!dryRun && totalRows > 100) {
+    throw new Error(
+      "SAFETY VIOLATION: Would create " +
+        totalRows +
+        " rows (max 100 per run per SAFETY_PROTOCOL). " +
+        "Reduce date range or get explicit user approval to override limit.",
+    );
+  }
+
+  // DRY_RUN mode: return preview without writing
+  if (dryRun) {
+    var preview = {
+      dryRun: true,
+      dateRange: formatDate_(startDate) + " to " + formatDate_(endDate),
+      shiftsToCreate: ctx.shiftRows.length,
+      requestsToCreate: ctx.requestRows.length,
+      totalRows: totalRows,
+      sampleShifts: ctx.shiftRows.slice(0, 3).map(function (r) {
+        return {
+          shiftId: r[1],
+          empId: r[3],
+          empName: r[4],
+          direction: r[5],
+          timestamp: r[2],
+        };
+      }),
+      sampleRequests: ctx.requestRows.slice(0, 3).map(function (r) {
+        var layout = ctx.requestLayout;
+        return {
+          requestId: r[layout.COL_REQUEST_ID - 1],
+          status: layout.COL_STATUS ? r[layout.COL_STATUS - 1] : "?",
+          empId: layout.COL_EMP_ID ? r[layout.COL_EMP_ID - 1] : "?",
+        };
+      }),
+      safetyCheck: totalRows <= 100 ? "PASS" : "WOULD_FAIL",
+    };
+    if (typeof logDuration_ === "function") {
+      logDuration_(logger, "seed.range.dryRun", startMs, {
+        totalRows: totalRows,
+        safetyCheck: preview.safetyCheck,
+      });
+    }
+    return preview;
+  }
+
+  // EXECUTE mode: backup sheets before first write (SAFETY_PROTOCOL v1.0, rule 3)
+  var backupTimestamp = Utilities.formatDate(
+    new Date(),
+    Session.getScriptTimeZone ? Session.getScriptTimeZone() : "UTC",
+    "yyyyMMdd_HHmm",
+  );
+  try {
+    if (ctx.shiftRows.length > 0) {
+      var shiftBackupName = SHEET_NAME + "_backup_" + backupTimestamp;
+      shiftSheet
+        .copyTo(SpreadsheetApp.getActiveSpreadsheet())
+        .setName(shiftBackupName);
+    }
+    if (ctx.requestRows.length > 0) {
+      var reqBackupName = SHEET_NAME_REQUESTS + "_backup_" + backupTimestamp;
+      requestsSheet
+        .copyTo(SpreadsheetApp.getActiveSpreadsheet())
+        .setName(reqBackupName);
+    }
+  } catch (backupErr) {
+    throw new Error(
+      "SAFETY: Backup failed before EXECUTE: " + backupErr.message,
+    );
   }
 
   // Batch append shifts
@@ -282,6 +367,34 @@ function SEED_generateDemoDataForDateRange(startDateInput, endDateInput) {
       .setValues(ctx.requestRows);
   }
 
+  // L3 Logging to system_logs (SAFETY_PROTOCOL v1.0 logging requirement)
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var logsSheet = ss.getSheetByName("system_logs");
+    if (logsSheet) {
+      var logEntry = [
+        new Date(), // timestamp
+        "EXECUTE", // type
+        "SEED_generateDemoDataForDateRange", // function
+        SHEET_NAME + "," + SHEET_NAME_REQUESTS, // target
+        totalRows, // rowCount
+        "SEED_DEMO_DATA", // actor/module
+      ];
+      logsSheet.appendRow(logEntry);
+    }
+  } catch (logErr) {
+    // Log failure non-fatal; continue
+    Logger.log("L3 log write failed: " + logErr.message);
+  }
+
+  if (typeof logDuration_ === "function") {
+    logDuration_(logger, "seed.range.execute", startMs, {
+      shiftsCreated: ctx.shiftRows.length,
+      requestsCreated: ctx.requestRows.length,
+      backupCreated: true,
+    });
+  }
+
   return {
     createdShifts: ctx.shiftRows.length,
     createdRequests: ctx.requestRows.length,
@@ -299,7 +412,7 @@ function applyScenario_(
   emp,
   jobA,
   pattern,
-  ctx
+  ctx,
 ) {
   var entryMinutesBase = 8 * 60 + (empIndex % 3) * 10; // 08:00, 08:10, 08:20
   var exitMinutesBase = 16 * 60 + (empIndex % 2) * 10; // 16:00 or 16:10
@@ -639,7 +752,7 @@ function SEED_newRequest_(opts) {
   var requestId = "SEED_REQ_" + opts.ctx.requestSeq++;
   var ts = buildTimestamp_(
     opts.workDate,
-    opts.timestampTime || opts.fixTime || "12:00"
+    opts.timestampTime || opts.fixTime || "12:00",
   );
   var note = (opts.shiftNoteLabel ? opts.shiftNoteLabel + " " : "") + SEED_TAG;
   var unitsVal = "";
@@ -675,20 +788,23 @@ function SEED_newRequest_(opts) {
 function hasSeedTagInShifts_(sheet, startDate, endDate) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return false;
-  var notesRange = sheet.getRange(2, 1, lastRow - 1, 1);
-  var finder = notesRange.createTextFinder(SEED_TAG);
-  var match = finder ? finder.findNext() : null;
-  while (match) {
-    var r = match.getRow();
-    var rowVals = sheet.getRange(r, 1, 1, 8).getValues()[0];
-    var fixDate = asDate_(rowVals[6]); // G
-    var tsDate = asDate_(rowVals[2]); // C
+
+  // Performance optimization: batch read all data once instead of per-match
+  var allData = sheet.getRange(2, 1, lastRow - 1, 8).getValues(); // A-H columns
+
+  for (var i = 0; i < allData.length; i++) {
+    var notes = String(allData[i][0] || ""); // column A
+    if (notes.indexOf(SEED_TAG) === -1) continue;
+
+    var fixDate = asDate_(allData[i][6]); // G
+    var tsDate = asDate_(allData[i][2]); // C
     var dateToCheck = fixDate || tsDate;
+
     if (dateToCheck && dateToCheck >= startDate && dateToCheck <= endDate) {
       return true;
     }
-    match = finder.findNext();
   }
+
   return false;
 }
 
@@ -726,6 +842,12 @@ function hasSeedTagInRequests_(sheet, startDate, endDate) {
 }
 
 // --- Demo data undo (clears only demo-tagged rows; no deletes, no formatting changes) ---
+/**
+ * Clears all demo-tagged data from shifts and requests sheets (L3 operation).
+ * Uses clearContent() only - no row deletion, no formatting changes.
+ *
+ * @return {Object} Summary: {clearedShifts, clearedRequests}
+ */
 function SEED_clearAllDemoData() {
   var clearedShifts = SEED_clearDemoShifts_();
   var clearedRequests = SEED_clearDemoRequests_();
@@ -734,7 +856,7 @@ function SEED_clearAllDemoData() {
       clearedShifts +
       " shift rows and " +
       clearedRequests +
-      " request rows."
+      " request rows.",
   );
   return {
     clearedShifts: clearedShifts,
@@ -896,7 +1018,7 @@ function getRequestLayout_(sheet) {
 
   if (!layout.COL_REQUEST_ID || !layout.COL_TIMESTAMP) {
     throw new Error(
-      "Requests sheet is missing required headers (ID בקשה / חותמת זמן)."
+      "Requests sheet is missing required headers (ID בקשה / חותמת זמן).",
     );
   }
 
@@ -917,7 +1039,7 @@ function formatDate_(d) {
   return Utilities.formatDate(
     d,
     (Session.getScriptTimeZone && Session.getScriptTimeZone()) || "UTC",
-    "yyyy-MM-dd"
+    "yyyy-MM-dd",
   );
 }
 
@@ -956,6 +1078,6 @@ function buildTimestamp_(workDate, timeStr) {
     hours,
     minutes,
     0,
-    0
+    0,
   );
 }
