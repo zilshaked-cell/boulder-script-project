@@ -1585,6 +1585,7 @@
                 class="role-toggle role-employee"
                 type="button"
                 data-role="employee"
+                aria-label="הרשאות Web-App: employee, לחץ לשינוי"
               >
                 employee
               </button>
@@ -1768,6 +1769,7 @@
                     class="request-status-btn"
                     data-status-key="open"
                     data-status-value="פתוחה"
+                    aria-label="סטטוס בקשה: פתוחות, לחץ לבחירה"
                   >
                     פתוחות
                   </button>
@@ -1776,6 +1778,7 @@
                     class="request-status-btn"
                     data-status-key="approved"
                     data-status-value="אושרה"
+                    aria-label="סטטוס בקשה: אושרו, לחץ לבחירה"
                   >
                     אושרו
                   </button>
@@ -1784,6 +1787,7 @@
                     class="request-status-btn"
                     data-status-key="rejected"
                     data-status-value="נדחת"
+                    aria-label="סטטוס בקשה: נדחו, לחץ לבחירה"
                   >
                     נדחו
                   </button>
@@ -2967,6 +2971,10 @@
       }
 
       function scheduleLiveSave() {
+        // תמיד יעדכן את ה-save button כדי להציג שיש שינויים לא שמורים
+        markDirty();
+
+        // אבל רק אם אנחנו ב-live mode, תחזור ושמור אוטומטית
         if (editMode !== "live") return;
         if (liveSaveTimer) {
           clearTimeout(liveSaveTimer);
@@ -3043,6 +3051,10 @@
         var normalized = normalizeSystemRole(role || "employee");
         btn.setAttribute("data-role", normalized);
         btn.textContent = normalized;
+        btn.setAttribute(
+          "aria-label",
+          "הרשאות Web-App: " + normalized + ", לחץ לשינוי",
+        );
         btn.classList.toggle("role-admin", normalized === "admin");
         btn.classList.toggle("role-employee", normalized !== "admin");
       }
@@ -3117,6 +3129,18 @@
 
         if (rowsPayload.length === 0) {
           setGlobalMessage("לפחות סוג עבודה אחד חייב להיות מוגדר", true);
+          return null;
+        }
+
+        // בדיקה שיש לפחות סוג עבודה פעיל אחד
+        var hasActiveRow = rowsPayload.some(function (row) {
+          return row.rowActive === true;
+        });
+        if (!hasActiveRow) {
+          setGlobalMessage(
+            "לפחות סוג עבודה אחד חייב להיות משויך כ'פעיל'",
+            true,
+          );
           return null;
         }
 
@@ -3841,6 +3865,19 @@
           activeBtn.classList.toggle("active", isActive);
           activeBtn.classList.toggle("inactive", !isActive);
           activeBtn.textContent = isActive ? "פעיל" : "לא פעיל";
+          var jobType = rowEl.querySelector(".field-job-type");
+          var jobTypeText =
+            jobType && jobType.options && jobType.selectedIndex >= 0
+              ? jobType.options[jobType.selectedIndex].text
+              : "סוג עבודה";
+          activeBtn.setAttribute(
+            "aria-label",
+            "סטטוס " +
+              jobTypeText +
+              ": " +
+              (isActive ? "פעיל" : "לא פעיל") +
+              ", לחץ לשינוי",
+          );
         }
         if (activeBtn) {
           var initialActive = false;
@@ -4809,6 +4846,13 @@
           var key = buttons[i].getAttribute("data-status-key");
           var active = list.indexOf(key) !== -1;
           buttons[i].classList.toggle("active", active);
+          // עדכן aria-label כדי לציין סטטוס בחירה
+          var label = buttons[i].textContent || key;
+          var selectedText = active ? "נבחר" : "לא נבחר";
+          buttons[i].setAttribute(
+            "aria-label",
+            "סטטוס בקשה: " + label + ", " + selectedText + ", לחץ לשינוי",
+          );
         }
         requestsState.filters = requestsState.filters || {
           limit: 200,
