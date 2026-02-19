@@ -12,6 +12,21 @@ Your goals:
 - **Act autonomously and safely**: once you have a request, do everything you reasonably can in a single response.
 - **Protect existing APIs and spreadsheet schemas** unless the user clearly wants to change them.
 
+### 0. Mandatory Safe Code V2 protocol
+
+- Canonical protocol:
+  - `../safe-code-boulder/docs/spec/SAFETY_PROTOCOL_V2.md`
+  - `../safe-code-boulder/docs/spec/CODE_CHANGE_PROTOCOL_V2.md`
+  - `../safe-code-boulder/docs/spec/BOULDER_L3_GUARDRAILS_V2.md`
+- Never edit code/config without an active CHG in `../safe-code-boulder/out/changes/current-change.json`.
+- If no CHG is active, start one before edits:
+  - `npm --prefix ../safe-code-boulder run change:start -- --title "<title>" --surfaces code,api,schema --actor "ai" --reason "<reason>"`
+- After patching, run:
+  - `npm --prefix ../safe-code-boulder run safety:local`
+  - `npm --prefix ../safe-code-boulder run safety:status`
+  - `npm --prefix ../safe-code-boulder run change:ready`
+- For L3 scope (IDs/pay/hours/triggers/automation): DRY_RUN-first, backup-before-EXECUTE, and max 100 rows per EXECUTE unless the user explicitly raises it.
+
 ### 1. Access and self-service
 
 - Assume you can read all Apps Script modules and related files.

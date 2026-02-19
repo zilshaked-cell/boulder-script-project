@@ -8,7 +8,7 @@ const EMPLOYEES_SHEET_NAMES = [
   "Employees",
   "employees",
 ];
-const EMPLOYEE_HEADER_ROW = 1;
+const EMPLOYEE_HEADER_ROW_INDEX = 1;
 const WORK_LOGS_SHEET_NAME = "דיווח שעות עבודה";
 const REQUESTS_SHEET_NAMES = ["בקשות עובדים"];
 const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציות בחירה ו ID_S"];
@@ -144,6 +144,63 @@ var LOG_TO_SHEET_ENABLED =
   (SCRIPT_PROPERTIES.getProperty("LOG_TO_SHEET_ENABLED") || "true")
     .toLowerCase()
     .trim() === "true";
+// Controls automatic logger writes to system_logs:
+// debug | info | warn | error (recommended default: warn).
+var LOG_TO_SHEET_MIN_LEVEL = (
+  SCRIPT_PROPERTIES.getProperty("LOG_TO_SHEET_MIN_LEVEL") || "warn"
+)
+  .toLowerCase()
+  .trim();
+// API trace noise control for Logger.log:
+// request | success | error | none (recommended default: error).
+var API_TRACE_MIN_KIND = (
+  SCRIPT_PROPERTIES.getProperty("API_TRACE_MIN_KIND") || "error"
+)
+  .toLowerCase()
+  .trim();
+// Fast diagnostics buffer keeps compact request summaries in cache
+// so investigation stays fast without sheet writes on every request.
+var FAST_DIAGNOSTICS_ENABLED =
+  (SCRIPT_PROPERTIES.getProperty("FAST_DIAGNOSTICS_ENABLED") || "true")
+    .toLowerCase()
+    .trim() === "true";
+var FAST_DIAGNOSTICS_CACHE_KEY =
+  SCRIPT_PROPERTIES.getProperty("FAST_DIAGNOSTICS_CACHE_KEY") ||
+  "diag.recent.v1";
+var FAST_DIAGNOSTICS_MAX_ENTRIES = Number(
+  SCRIPT_PROPERTIES.getProperty("FAST_DIAGNOSTICS_MAX_ENTRIES") || "250",
+);
+var FAST_DIAGNOSTICS_TTL_SEC = Number(
+  SCRIPT_PROPERTIES.getProperty("FAST_DIAGNOSTICS_TTL_SEC") || "3600",
+);
+var FAST_DIAGNOSTICS_SLOW_MS = Number(
+  SCRIPT_PROPERTIES.getProperty("FAST_DIAGNOSTICS_SLOW_MS") || "7000",
+);
+var MUTATION_AUDIT_TO_SHEET_ENABLED =
+  (SCRIPT_PROPERTIES.getProperty("MUTATION_AUDIT_TO_SHEET_ENABLED") || "true")
+    .toLowerCase()
+    .trim() === "true";
+var MUTATION_AUDIT_ACTIONS = (
+  SCRIPT_PROPERTIES.getProperty("MUTATION_AUDIT_ACTIONS") ||
+  "shiftReport.submit,shiftReport.deleteByIds,shiftCorrection.submit,employee.save,admin.saveEmployee,admin.updateRequestStatus,admin.createRequest,admin.archiveRequest,admin.runBulkAction,admin.reportBulkActionIssue,requests.approve,gameLeaderboard.submit"
+)
+  .split(",")
+  .map(function (s) {
+    return stringValue(s).trim();
+  })
+  .filter(function (s) {
+    return !!s;
+  });
+// Lightweight read-cache controls (seconds). Set to 0 to disable each cache.
+var CACHE_TTL_PROFILE_SEC = Number(
+  SCRIPT_PROPERTIES.getProperty("CACHE_TTL_PROFILE_SEC") || "120",
+);
+var CACHE_TTL_LOOKUPS_SEC = Number(
+  SCRIPT_PROPERTIES.getProperty("CACHE_TTL_LOOKUPS_SEC") || "180",
+);
+var CACHE_TTL_SHIFTS_SEC = Number(
+  SCRIPT_PROPERTIES.getProperty("CACHE_TTL_SHIFTS_SEC") || "20",
+);
 var LOG_LIST_TOKEN = (SCRIPT_PROPERTIES.getProperty("LOG_LIST_TOKEN") || "")
   .toString()
   .trim();
@@ -260,6 +317,7 @@ function mapActionToOperation_(action) {
   var map = {
     health: "HEALTH",
     "logs.list": "SYSTEM_LOG_LIST",
+    "diagnostics.list": "SYSTEM_LOG_LIST",
     "jobTypes.list": "REPORT_LOAD",
     "options.listPayments": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
@@ -292,6 +350,9 @@ function getActionRegistry_() {
     },
     "logs.list": function (payload, _logger) {
       return listSystemLogs_(payload || {});
+    },
+    "diagnostics.list": function (payload, _logger) {
+      return listFastDiagnostics_(payload || {});
     },
     "jobTypes.list": function (_payload, _logger) {
       return { jobTypes: listJobTypes_() };
@@ -500,6 +561,159 @@ function sanitizeForLogs_(obj) {
   return sanitizeValue(obj, 0);
 }
 
+function clampTtlSeconds_(value, fallbackSeconds) {
+  var n = Number(value);
+  if (!isFinite(n)) n = Number(fallbackSeconds);
+  if (!isFinite(n) || n < 0) n = 0;
+  if (n > 21600) n = 21600; // Apps Script cache limit is 6h.
+  return Math.floor(n);
+}
+
+function clampInt_(value, fallback, min, max) {
+  var n = Number(value);
+  if (!isFinite(n)) n = Number(fallback);
+  if (!isFinite(n)) n = Number(min || 0);
+  if (isFinite(min) && n < min) n = min;
+  if (isFinite(max) && n > max) n = max;
+  return Math.floor(n);
+}
+
+function asBoolean_(value) {
+  if (value === true || value === false) return value;
+  var raw = stringValue(value).toLowerCase().trim();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
+function authorizeLogRead_(payload) {
+  var token = stringValue(payload && payload.token);
+  if (!LOG_LIST_TOKEN) {
+    return {
+      ok: false,
+      error: "logs_list_disabled",
+      errorCode: ERROR_CODES.UNAUTHORIZED,
+    };
+  }
+  if (!token || token !== LOG_LIST_TOKEN) {
+    return {
+      ok: false,
+      error: "unauthorized",
+      errorCode: ERROR_CODES.UNAUTHORIZED,
+    };
+  }
+  return null;
+}
+
+function getFastDiagnosticsConfig_() {
+  return {
+    enabled: FAST_DIAGNOSTICS_ENABLED,
+    cacheKey: stringValue(FAST_DIAGNOSTICS_CACHE_KEY).trim() || "diag.recent.v1",
+    maxEntries: clampInt_(FAST_DIAGNOSTICS_MAX_ENTRIES, 250, 20, 1000),
+    ttlSec: clampTtlSeconds_(FAST_DIAGNOSTICS_TTL_SEC, 3600),
+    slowMs: clampInt_(FAST_DIAGNOSTICS_SLOW_MS, 7000, 500, 120000),
+  };
+}
+
+function getScriptCache_() {
+  try {
+    return CacheService.getScriptCache();
+  } catch (_err) {
+    return null;
+  }
+}
+
+function buildCacheKey_(prefix, parts) {
+  var normalizedParts = Array.isArray(parts)
+    ? parts.map(function (p) {
+        return encodeURIComponent(stringValue(p));
+      })
+    : [];
+  return [prefix].concat(normalizedParts).join("|");
+}
+
+function readCacheJson_(key) {
+  var cache = getScriptCache_();
+  if (!cache || !key) return null;
+  try {
+    var raw = cache.get(key);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function writeCacheJson_(key, value, ttlSeconds) {
+  var cache = getScriptCache_();
+  if (!cache || !key) return;
+  var ttl = clampTtlSeconds_(ttlSeconds, 0);
+  if (ttl <= 0) return;
+  try {
+    cache.put(key, JSON.stringify(value), ttl);
+  } catch (_err) {
+    // Cache should never break the request path.
+  }
+}
+
+function readFastDiagnosticEntries_() {
+  var cfg = getFastDiagnosticsConfig_();
+  if (!cfg.enabled) return [];
+  var stored = readCacheJson_(cfg.cacheKey);
+  if (!stored || !Array.isArray(stored.entries)) return [];
+  return stored.entries;
+}
+
+function writeFastDiagnosticEntries_(entries) {
+  var cfg = getFastDiagnosticsConfig_();
+  if (!cfg.enabled) return;
+  var list = Array.isArray(entries) ? entries : [];
+  if (list.length > cfg.maxEntries) {
+    list = list.slice(0, cfg.maxEntries);
+  }
+  writeCacheJson_(cfg.cacheKey, { entries: list }, cfg.ttlSec);
+}
+
+function appendFastDiagnosticEntry_(entry) {
+  var cfg = getFastDiagnosticsConfig_();
+  if (!cfg.enabled) return;
+  var cleanEntry = sanitizeForLogs_(entry) || {};
+  cleanEntry.timestamp =
+    cleanEntry.timestamp || cleanEntry.ts || new Date().toISOString();
+  cleanEntry.ts = cleanEntry.timestamp;
+
+  var entries = readFastDiagnosticEntries_();
+  entries.unshift(cleanEntry);
+  writeFastDiagnosticEntries_(entries);
+}
+
+function matchesActionPattern_(action, pattern) {
+  var act = stringValue(action);
+  var p = stringValue(pattern);
+  if (!act || !p) return false;
+  if (p === "*") return true;
+  if (p.indexOf("*") === -1) return act === p;
+  if (p.charAt(p.length - 1) === "*") {
+    var prefix = p.slice(0, -1);
+    return act.indexOf(prefix) === 0;
+  }
+  return act === p.replace(/\*/g, "");
+}
+
+function isMutationAuditAction_(action) {
+  var act = stringValue(action);
+  if (!act || !MUTATION_AUDIT_TO_SHEET_ENABLED) return false;
+  for (var i = 0; i < MUTATION_AUDIT_ACTIONS.length; i++) {
+    if (matchesActionPattern_(act, MUTATION_AUDIT_ACTIONS[i])) return true;
+  }
+  return false;
+}
+
+function shouldPersistLoggerToSheet_(level) {
+  var rank = { debug: 10, info: 20, warn: 30, error: 40 };
+  var current = rank[stringValue(level).toLowerCase()] || 20;
+  var minLevel = rank[stringValue(LOG_TO_SHEET_MIN_LEVEL).toLowerCase()] || 30;
+  return current >= minLevel;
+}
+
 function ensureSystemLogSheet_() {
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SYSTEM_LOG_SHEET_NAME);
@@ -608,7 +822,7 @@ function createScriptLogger_(traceContext) {
       console.log("[trace]", payload);
     }
 
-    if (LOG_TO_SHEET_ENABLED) {
+    if (LOG_TO_SHEET_ENABLED && shouldPersistLoggerToSheet_(level)) {
       appendSystemLog_({
         timestamp: payload.timestamp,
         traceId: payload.traceId,
@@ -698,7 +912,23 @@ function getModuleLogger_(operation) {
  * @param {string|null} action
  * @param {Object|null} extra
  */
+function shouldLogApiEventKind_(kind) {
+  var rank = {
+    request: 10,
+    success: 20,
+    error: 30,
+    none: 100,
+  };
+  var current = rank[stringValue(kind).toLowerCase()] || 20;
+  var minKind = stringValue(API_TRACE_MIN_KIND).toLowerCase();
+  if (minKind === "all") minKind = "request";
+  var min = rank[minKind];
+  if (!isFinite(min)) min = 30;
+  return current >= min && min < 100;
+}
+
 function logApiEvent_(kind, traceId, operation, action, extra) {
+  if (!shouldLogApiEventKind_(kind)) return;
   try {
     var entry = {
       ts: new Date().toISOString(),
@@ -725,6 +955,9 @@ function doPost(e) {
   var parseStartMs = requestStartMs;
   var traceId = null;
   var operation = null;
+  var requestStatus = "ok";
+  var requestErrorCode = null;
+  var requestErrorMessage = null;
 
   try {
     const parsed = parseBody(e);
@@ -770,6 +1003,9 @@ function doPost(e) {
     }
 
     if (parsed.error) {
+      requestStatus = "validation_error";
+      requestErrorCode = "VALIDATION_FAILED";
+      requestErrorMessage = String(parsed.error);
       logger.warn(
         "validate-input",
         { reason: "Invalid JSON body", error: String(parsed.error) },
@@ -807,6 +1043,10 @@ function doPost(e) {
   } catch (err) {
     var errorCode =
       err && err.errorCode ? err.errorCode : "APPS_SCRIPT_EXCEPTION";
+    requestStatus = "error";
+    requestErrorCode = errorCode;
+    requestErrorMessage =
+      err && err.message ? String(err.message) : "Unexpected error";
     var errorDetails = {
       action: action,
       message: err && err.message ? err.message : "Unexpected error",
@@ -838,9 +1078,76 @@ function doPost(e) {
       500,
     );
   } finally {
+    var requestDurationMs = safeDurationMs_(requestStartMs);
+    var diagCfg = getFastDiagnosticsConfig_();
+    var isSlowRequest = requestDurationMs >= diagCfg.slowMs;
+
     if (logger) {
-      logDuration_(logger, "request-total", requestStartMs, {
+      if (isSlowRequest) {
+        logDuration_(
+          logger,
+          "request-total",
+          requestStartMs,
+          {
+            action: action || "legacy",
+            slowThresholdMs: diagCfg.slowMs,
+          },
+          "warn",
+          "SLOW_REQUEST",
+        );
+      } else {
+        logDuration_(logger, "request-total", requestStartMs, {
+          action: action || "legacy",
+        });
+      }
+    }
+
+    var isMutationAction = isMutationAuditAction_(action);
+    var shouldCaptureFastDiag =
+      requestStatus !== "ok" || isSlowRequest || isMutationAction;
+
+    if (shouldCaptureFastDiag) {
+      appendFastDiagnosticEntry_({
+        timestamp: new Date().toISOString(),
+        traceId:
+          traceId || (logger && logger.context && logger.context.traceId) || null,
+        operation:
+          operation ||
+          (logger && logger.context && logger.context.operation) ||
+          mapActionToOperation_(action || ""),
         action: action || "legacy",
+        status: requestStatus,
+        errorCode: requestErrorCode,
+        errorMessage: requestErrorMessage,
+        durationMs: requestDurationMs,
+        isSlow: isSlowRequest,
+        source: "apps-script-fast-diag",
+      });
+    }
+
+    if (isMutationAction) {
+      appendSystemLog_({
+        timestamp: new Date().toISOString(),
+        traceId:
+          traceId || (logger && logger.context && logger.context.traceId) || "",
+        layer: "apps-script-router",
+        operation:
+          operation ||
+          (logger && logger.context && logger.context.operation) ||
+          mapActionToOperation_(action || ""),
+        step: "audit.mutation",
+        severity: requestStatus === "error" ? "error" : "info",
+        actor: logger && logger.context ? logger.context.actor : null,
+        errorCode: requestErrorCode || null,
+        details: {
+          action: action || "legacy",
+          status: requestStatus,
+          durationMs: requestDurationMs,
+          isSlow: isSlowRequest,
+        },
+        extra: {
+          source: "mutation-audit",
+        },
       });
     }
     __activeTraceContext = null;
@@ -999,22 +1306,8 @@ function healthCheck_() {
 }
 
 function listSystemLogs_(payload) {
-  var token = stringValue(payload && payload.token);
-  if (!LOG_LIST_TOKEN) {
-    return {
-      ok: false,
-      error: "logs_list_disabled",
-      errorCode: ERROR_CODES.UNAUTHORIZED,
-    };
-  }
-
-  if (!token || token !== LOG_LIST_TOKEN) {
-    return {
-      ok: false,
-      error: "unauthorized",
-      errorCode: ERROR_CODES.UNAUTHORIZED,
-    };
-  }
+  var authError = authorizeLogRead_(payload || {});
+  if (authError) return authError;
 
   var limit = Number(payload && payload.limit);
   if (!isFinite(limit) || limit <= 0) limit = 200;
@@ -1064,6 +1357,48 @@ function listSystemLogs_(payload) {
     limit: limit,
     offset: offset,
     hasMore: offset + logs.length < total,
+  };
+}
+
+function listFastDiagnostics_(payload) {
+  var req = payload || {};
+  var authError = authorizeLogRead_(req);
+  if (authError) return authError;
+
+  var cfg = getFastDiagnosticsConfig_();
+  var limit = clampInt_(req.limit, 100, 1, 300);
+  var offset = clampInt_(req.offset, 0, 0, 100000);
+  var minDurationMs = clampInt_(req.minDurationMs, 0, 0, 600000);
+  var actionFilter = stringValue(req.action).trim();
+  var onlySlow = asBoolean_(req.onlySlow);
+
+  var entries = readFastDiagnosticEntries_();
+  if (actionFilter) {
+    entries = entries.filter(function (entry) {
+      return stringValue(entry && entry.action) === actionFilter;
+    });
+  }
+  if (minDurationMs > 0) {
+    entries = entries.filter(function (entry) {
+      return Number(entry && entry.durationMs) >= minDurationMs;
+    });
+  }
+  if (onlySlow) {
+    entries = entries.filter(function (entry) {
+      return !!(entry && entry.isSlow);
+    });
+  }
+
+  var total = entries.length;
+  var sliced = entries.slice(offset, offset + limit);
+  return {
+    ok: true,
+    diagnostics: sliced,
+    total: total,
+    limit: limit,
+    offset: offset,
+    hasMore: offset + sliced.length < total,
+    slowThresholdMs: cfg.slowMs,
   };
 }
 
@@ -1161,6 +1496,18 @@ function withOk_(data) {
 function listJobTypes_() {
   var logger = ensureModuleLoggerDefined_("REPORT_LOAD");
   logger.info("start", { sheetNames: OPTIONS_SHEET_NAMES });
+  var cacheKey = buildCacheKey_("jobTypes.v2", [
+    SPREADSHEET_ID || "active-spreadsheet",
+    OPTIONS_SHEET_NAMES.join(","),
+  ]);
+  var cached = readCacheJson_(cacheKey);
+  if (cached && Array.isArray(cached.jobTypes)) {
+    logger.info("cache-hit", {
+      key: "jobTypes.v2",
+      rows: cached.jobTypes.length,
+    });
+    return cached.jobTypes;
+  }
   const sheet = getSheetByPossibleNames_(OPTIONS_SHEET_NAMES);
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
@@ -1248,6 +1595,7 @@ function listJobTypes_() {
       payTypeStatus: payStatus,
     });
   }
+  writeCacheJson_(cacheKey, { jobTypes: results }, CACHE_TTL_LOOKUPS_SEC);
   return results;
 }
 
@@ -1305,6 +1653,24 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     );
     throw new Error("Missing employeeId");
   }
+  var cacheKey = buildCacheKey_("linkedJobs.v2", [
+    SPREADSHEET_ID || "active-spreadsheet",
+    employeeId,
+  ]);
+  var cached = readCacheJson_(cacheKey);
+  if (
+    cached &&
+    stringValue(cached.employeeId) === employeeId &&
+    Array.isArray(cached.jobTypeIds) &&
+    Array.isArray(cached.jobTypesDetailed)
+  ) {
+    logDuration_(lg, "employee.linkedJobs.cacheHit", startMs, {
+      employeeId: employeeId,
+      linkedCount: cached.jobTypeIds.length,
+      detailedCount: cached.jobTypesDetailed.length,
+    });
+    return cached;
+  }
   const sheet = getEmployeesSheet_();
   const headerMap = getHeaderMap_(sheet);
   const sheetName = sheet.getName();
@@ -1318,7 +1684,11 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     ["ID סוג עבודה", "ID סוגי עבודה"],
     sheetName,
   );
-  const statusCol = getRequiredColumn_(headerMap, ["סטטוס"], sheetName);
+  const statusCol = getRequiredColumn_(
+    headerMap,
+    ["סטטוס", "סטטוס פעיל", "active", "status"],
+    sheetName,
+  );
   const jobTypeNameCol = getOptionalColumn_(
     headerMap,
     ["סוג העבודה", "סוג עבודה"],
@@ -1348,7 +1718,13 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     const rowEmpId = stringValue(row[idCol - 1]);
     if (rowEmpId !== employeeId) continue;
     const status = stringValue(row[statusCol - 1]);
-    if (status === "לא פעיל") continue;
+    const statusLower = status.toLowerCase();
+    if (
+      statusLower.indexOf("לא פעיל") !== -1 ||
+      statusLower.indexOf("inactive") !== -1
+    ) {
+      continue;
+    }
     const jobTypeId = stringValue(row[jobTypeCol - 1]);
     if (!jobTypeId) continue;
 
@@ -1386,7 +1762,9 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     linkedCount: jobTypeIds.length,
     detailedCount: jobTypesDetailed.length,
   });
-  return { employeeId, jobTypeIds, jobTypesDetailed };
+  var result = { employeeId, jobTypeIds, jobTypesDetailed };
+  writeCacheJson_(cacheKey, result, CACHE_TTL_LOOKUPS_SEC);
+  return result;
 }
 
 function adminListEmployees_(payload, logger) {
@@ -1486,7 +1864,7 @@ function adminListEmployees_(payload, logger) {
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
 
-  if (lastRow <= EMPLOYEE_HEADER_ROW) {
+  if (lastRow <= EMPLOYEE_HEADER_ROW_INDEX) {
     lg.info("read-sheet", {
       sheetName: sheetName,
       rows: 0,
@@ -1495,9 +1873,9 @@ function adminListEmployees_(payload, logger) {
   }
 
   var dataRange = sheet.getRange(
-    EMPLOYEE_HEADER_ROW + 1,
+    EMPLOYEE_HEADER_ROW_INDEX + 1,
     1,
-    lastRow - EMPLOYEE_HEADER_ROW,
+    lastRow - EMPLOYEE_HEADER_ROW_INDEX,
     lastCol,
   );
   var values = dataRange.getValues();
@@ -1945,7 +2323,7 @@ function adminSaveEmployee_(payload, logger) {
 
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
-  if (lastRow <= EMPLOYEE_HEADER_ROW) {
+  if (lastRow <= EMPLOYEE_HEADER_ROW_INDEX) {
     return {
       ok: false,
       error: "employee_not_found",
@@ -1954,9 +2332,9 @@ function adminSaveEmployee_(payload, logger) {
   }
 
   var dataRange = sheet.getRange(
-    EMPLOYEE_HEADER_ROW + 1,
+    EMPLOYEE_HEADER_ROW_INDEX + 1,
     1,
-    lastRow - EMPLOYEE_HEADER_ROW,
+    lastRow - EMPLOYEE_HEADER_ROW_INDEX,
     lastCol,
   );
   var values = dataRange.getValues();
@@ -2050,7 +2428,7 @@ function adminSaveEmployee_(payload, logger) {
     logDuration_(lg, "admin.saveEmployee.dryRun", startMs, {
       employeeId: employeeId,
       updates: updates,
-      row: targetIndex + EMPLOYEE_HEADER_ROW,
+      row: targetIndex + EMPLOYEE_HEADER_ROW_INDEX,
     });
     return {
       ok: true,
@@ -2062,14 +2440,14 @@ function adminSaveEmployee_(payload, logger) {
 
   if (updates > 0) {
     sheet
-      .getRange(targetIndex + EMPLOYEE_HEADER_ROW + 1, 1, 1, lastCol)
+      .getRange(targetIndex + EMPLOYEE_HEADER_ROW_INDEX + 1, 1, 1, lastCol)
       .setValues([rowValues]);
   }
 
   logDuration_(lg, "admin.saveEmployee.total", startMs, {
     employeeId: employeeId,
     updates: updates,
-    row: targetIndex + EMPLOYEE_HEADER_ROW + 1,
+    row: targetIndex + EMPLOYEE_HEADER_ROW_INDEX + 1,
   });
 
   return { ok: true, employeeId: employeeId, updates: updates };
@@ -4222,6 +4600,20 @@ function employeeExistsByEmail_(payload) {
   if (!email) {
     return { ok: false, success: false, error: "missing email" };
   }
+  var cacheKey = buildCacheKey_("employeeByEmail.v2", [
+    SPREADSHEET_ID || "active-spreadsheet",
+    email,
+  ]);
+  var cached = readCacheJson_(cacheKey);
+  if (
+    cached &&
+    ((cached.found === true &&
+      stringValue(cached.employee && cached.employee.email).toLowerCase() ===
+        email) ||
+      cached.found === false)
+  ) {
+    return cached;
+  }
 
   const sheet = getEmployeesSheet_();
   const headerMap = getHeaderMap_(sheet);
@@ -4351,7 +4743,7 @@ function employeeExistsByEmail_(payload) {
     const systemRoleRaw = colSystemRole ? row[colSystemRole - 1] : "";
     employee.systemRole = normalizeSystemRole_(systemRoleRaw);
 
-    return {
+    var foundResult = {
       ok: true,
       success: true,
       found: true,
@@ -4361,9 +4753,11 @@ function employeeExistsByEmail_(payload) {
       name: empName,
       employee: employee,
     };
+    writeCacheJson_(cacheKey, foundResult, CACHE_TTL_PROFILE_SEC);
+    return foundResult;
   }
 
-  return {
+  var notFoundResult = {
     ok: true,
     success: true,
     found: false,
@@ -4373,6 +4767,8 @@ function employeeExistsByEmail_(payload) {
     name: "",
     employee: null,
   };
+  writeCacheJson_(cacheKey, notFoundResult, CACHE_TTL_PROFILE_SEC);
+  return notFoundResult;
 }
 
 function reportAccessIssue_(payload) {
@@ -5769,9 +6165,61 @@ function getShiftsSheet_() {
 
 function listShifts_(payload) {
   const filters = payload || {};
+  const dateFrom = toIsoDate_(filters.dateFrom || "");
+  const dateTo = toIsoDate_(filters.dateTo || "");
+  const employeeFilter = stringValue(filters.employeeId);
+  const statusFilters = Array.isArray(filters.statuses)
+    ? filters.statuses
+        .map(function (s) {
+          return stringValue(s);
+        })
+        .filter(function (s) {
+          return !!s;
+        })
+    : [];
+  const jobTypeFilters = Array.isArray(filters.jobTypeIds)
+    ? filters.jobTypeIds
+        .map(function (s) {
+          return stringValue(s);
+        })
+        .filter(function (s) {
+          return !!s;
+        })
+    : [];
+
+  var limit = Number(filters.limit);
+  if (!isFinite(limit) || limit <= 0) limit = 200;
+  var offset = Number(filters.offset);
+  if (!isFinite(offset) || offset < 0) offset = 0;
+
   const sheet = getSheetOrThrow_("משמרות");
+  var shiftsCacheKey = buildCacheKey_("shifts.list.v2", [
+    SPREADSHEET_ID || "active-spreadsheet",
+    String(sheet.getSheetId()),
+    String(sheet.getLastRow()),
+    dateFrom,
+    dateTo,
+    employeeFilter,
+    statusFilters.join(","),
+    jobTypeFilters.join(","),
+    String(limit),
+    String(offset),
+  ]);
+  var cached = readCacheJson_(shiftsCacheKey);
+  if (
+    cached &&
+    Array.isArray(cached.shifts) &&
+    typeof cached.total === "number"
+  ) {
+    return cached;
+  }
+
   const values = sheet.getDataRange().getValues();
-  if (!values.length) return { shifts: [], total: 0 };
+  if (!values.length) {
+    var emptyResult = { shifts: [], total: 0 };
+    writeCacheJson_(shiftsCacheKey, emptyResult, CACHE_TTL_SHIFTS_SEC);
+    return emptyResult;
+  }
 
   const headerMap = getHeaderMap_(sheet, 1);
 
@@ -5865,33 +6313,6 @@ function listShifts_(payload) {
     return { payType, payTypeName, payTypeId, payTypeLabel };
   }
 
-  const dateFrom = toIsoDate_(filters.dateFrom || "");
-  const dateTo = toIsoDate_(filters.dateTo || "");
-  const employeeFilter = stringValue(filters.employeeId);
-  const statusFilters = Array.isArray(filters.statuses)
-    ? filters.statuses
-        .map(function (s) {
-          return stringValue(s);
-        })
-        .filter(function (s) {
-          return !!s;
-        })
-    : [];
-  const jobTypeFilters = Array.isArray(filters.jobTypeIds)
-    ? filters.jobTypeIds
-        .map(function (s) {
-          return stringValue(s);
-        })
-        .filter(function (s) {
-          return !!s;
-        })
-    : [];
-
-  var limit = Number(filters.limit);
-  if (!isFinite(limit) || limit <= 0) limit = 200;
-  var offset = Number(filters.offset);
-  if (!isFinite(offset) || offset < 0) offset = 0;
-
   function parseNumberOrNull_(value) {
     if (value === null || value === undefined || value === "") return null;
     const n = Number(value);
@@ -5970,7 +6391,9 @@ function listShifts_(payload) {
 
   const total = results.length;
   const sliced = results.slice(offset, offset + limit);
-  return { shifts: sliced, total: total };
+  var response = { shifts: sliced, total: total };
+  writeCacheJson_(shiftsCacheKey, response, CACHE_TTL_SHIFTS_SEC);
+  return response;
 }
 
 function SHIFTS_getHourlyOverlaps(filter) {

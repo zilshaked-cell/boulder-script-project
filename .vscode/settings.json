@@ -6,6 +6,7 @@
       "icon": "cloud-upload",
       "command_terminal": "cd \"c:/Users/User/OneDrive/מסמכים/boulder-system/boulder-script-project\" && clasp push",
       "when": ".*"
+    },
     {
       "type": "button",
       "name": "DEV Check",
@@ -76,10 +77,11 @@
   "editor.inlineSuggest.showToolbar": "always",
   "github.copilot.chat.codeGeneration.useInstructionFiles": true,
   "github.copilot.chat.codeGeneration.instructionsFiles": [
-    ".github/copilot-instructions.md"
+    ".github/copilot-instructions.md",
+    "../.github/copilot-instructions.md"
   ],
-  "github.copilot.chat.promptFiles": [".github/prompts"],
-  "github.copilot.chat.agents.customAgents": [".github/agents"],
+  "github.copilot.chat.promptFiles": [".github/prompts", "../.github/prompts"],
+  "github.copilot.chat.agents.customAgents": [".github/agents", "../.github/agents"],
   "github.copilot.chat.checkpoints.enabled": true,
   "github.copilot.chat.checkpoints.showFileChanges": true,
   "github.copilot.chat.tools.execution.allowCommands": false,
