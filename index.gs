@@ -319,6 +319,7 @@ function mapActionToOperation_(action) {
     "logs.list": "SYSTEM_LOG_LIST",
     "diagnostics.list": "SYSTEM_LOG_LIST",
     "jobTypes.list": "REPORT_LOAD",
+    "employee.bootstrap": "REPORT_LOAD",
     "options.listPayments": "REPORT_LOAD",
     "employee.linkedJobs": "REPORT_LOAD",
     "admin.runBulkAction": "ADMIN_BULK_ACTION_RUN",
@@ -389,6 +390,9 @@ function getActionRegistry_() {
     },
     "employee.linkedJobs": function (payload, _logger) {
       return listEmployeeLinkedJobIds_(payload);
+    },
+    "employee.bootstrap": function (payload, logger) {
+      return employeeBootstrap_(payload || {}, logger);
     },
     "workLogs.listByEmployee": function (payload, _logger) {
       return listWorkLogsByEmployee_(payload);
@@ -1195,7 +1199,10 @@ function getCurrentEmployeeData_(payload) {
     return { ok: false, error: "Missing email" };
   }
 
-  const result = employeeExistsByEmail_({ email: email });
+  const result = employeeExistsByEmail_({
+    email: email,
+    noCache: asBoolean_(payload && payload.noCache),
+  });
   const found =
     result && result.ok === true && (result.found === true || result.exists);
 
@@ -1216,6 +1223,542 @@ function getCurrentEmployeeData_(payload) {
   }
 
   return { employee: null };
+}
+
+function employeeBootstrap_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("REPORT_LOAD");
+  var totalStartMs = new Date().getTime();
+  var req = payload && typeof payload === "object" ? payload : {};
+  var includeReq =
+    req.include && typeof req.include === "object" ? req.include : {};
+  var include = {
+    profile: asBoolean_(includeReq.profile),
+    jobs: asBoolean_(includeReq.jobs),
+    linkedJobs: asBoolean_(includeReq.linkedJobs),
+    requests: asBoolean_(includeReq.requests),
+    shifts: asBoolean_(includeReq.shifts),
+  };
+
+  if (
+    !include.profile &&
+    !include.jobs &&
+    !include.linkedJobs &&
+    !include.requests &&
+    !include.shifts
+  ) {
+    include.profile = true;
+  }
+
+  var data = {};
+  var blockStatus = {
+    profile: { ok: true, skipped: !include.profile },
+    jobs: { ok: true, skipped: !include.jobs },
+    linkedJobs: { ok: true, skipped: !include.linkedJobs },
+    requests: { ok: true, skipped: !include.requests },
+    shifts: { ok: true, skipped: !include.shifts },
+  };
+  var partial = false;
+  var critical = null;
+
+  function setBlockOk_(name, extra) {
+    var base = { ok: true };
+    if (extra && typeof extra === "object") {
+      base = Object.assign(base, extra);
+    }
+    blockStatus[name] = base;
+  }
+
+  function setBlockFail_(name, errorCode, message, retryable, extra) {
+    var base = {
+      ok: false,
+      errorCode: stringValue(errorCode) || "INTERNAL_ERROR",
+      message: stringValue(message) || "Block failed",
+      retryable: retryable === true,
+    };
+    if (extra && typeof extra === "object") {
+      base = Object.assign(base, extra);
+    }
+    blockStatus[name] = base;
+    partial = true;
+  }
+
+  function toIsoDateStrict_(val) {
+    var iso = toIsoDate_(val);
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "";
+    return iso;
+  }
+
+  function parseIsoDateStrict_(iso) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+    var m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    var y = Number(m[1]);
+    var mo = Number(m[2]);
+    var d = Number(m[3]);
+    if (!isFinite(y) || !isFinite(mo) || !isFinite(d)) return null;
+    return new Date(y, mo - 1, d, 0, 0, 0, 0);
+  }
+
+  function fmtIsoDate_(date) {
+    return Utilities.formatDate(date, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  }
+
+  function normalizeRangeWithClamp_(dateFromRaw, dateToRaw, maxDays) {
+    var dateFrom = toIsoDateStrict_(dateFromRaw);
+    var dateTo = toIsoDateStrict_(dateToRaw);
+    var clamped = false;
+    var reason = "";
+
+    var fromDate = parseIsoDateStrict_(dateFrom);
+    var toDate = parseIsoDateStrict_(dateTo);
+
+    if (!fromDate && !toDate) {
+      toDate = new Date();
+      fromDate = new Date(toDate.getTime());
+      fromDate.setDate(fromDate.getDate() - (maxDays - 1));
+      dateFrom = fmtIsoDate_(fromDate);
+      dateTo = fmtIsoDate_(toDate);
+      clamped = true;
+      reason = "defaultWindow";
+    }
+
+    if (fromDate && !toDate) {
+      toDate = new Date(fromDate.getTime());
+      toDate.setDate(toDate.getDate() + (maxDays - 1));
+      dateTo = fmtIsoDate_(toDate);
+      clamped = true;
+      reason = "missingDateTo";
+    } else if (!fromDate && toDate) {
+      fromDate = new Date(toDate.getTime());
+      fromDate.setDate(fromDate.getDate() - (maxDays - 1));
+      dateFrom = fmtIsoDate_(fromDate);
+      clamped = true;
+      reason = "missingDateFrom";
+    }
+
+    fromDate = parseIsoDateStrict_(dateFrom);
+    toDate = parseIsoDateStrict_(dateTo);
+
+    if (fromDate && toDate && toDate.getTime() < fromDate.getTime()) {
+      var swap = fromDate;
+      fromDate = toDate;
+      toDate = swap;
+      dateFrom = fmtIsoDate_(fromDate);
+      dateTo = fmtIsoDate_(toDate);
+      reason = reason || "swapped";
+    }
+
+    if (fromDate && toDate) {
+      var diffMs = toDate.getTime() - fromDate.getTime();
+      var daysInclusive = Math.floor(diffMs / 86400000) + 1;
+      if (daysInclusive > maxDays) {
+        var maxTo = new Date(fromDate.getTime());
+        maxTo.setDate(maxTo.getDate() + (maxDays - 1));
+        dateTo = fmtIsoDate_(maxTo);
+        clamped = true;
+        reason = "maxDays";
+      }
+    }
+
+    return {
+      dateFrom: dateFrom || "",
+      dateTo: dateTo || "",
+      clamped: clamped,
+      clampReason: reason,
+    };
+  }
+
+  function findEmployeeById_(employeeId) {
+    var targetId = stringValue(employeeId);
+    if (!targetId) return null;
+    var sheet = getEmployeesSheet_();
+    var headerMap = getHeaderMap_(sheet);
+    var sheetName = sheet.getName();
+    var colId = getRequiredColumn_(
+      headerMap,
+      ["מזהה עובד", "ID עובד", "Employee ID", "ID"],
+      sheetName,
+    );
+    var colName = getOptionalColumn_(headerMap, [
+      "שם מלא",
+      "name",
+      "שם",
+      "שמות עובדים",
+    ]);
+    var colEmail = getOptionalColumn_(headerMap, EMAIL_HEADER_CANDIDATES);
+    var colStatus = getOptionalColumn_(headerMap, [
+      "סטטוס",
+      "סטטוס פעיל",
+      "active",
+      "status",
+    ]);
+    var colSystemRole = getOptionalColumn_(headerMap, [
+      "System Role",
+      "system role",
+      "Role",
+      "Admin Role",
+    ]);
+    var values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      if (stringValue(row[colId - 1]) !== targetId) continue;
+      var statusVal = colStatus ? stringValue(row[colStatus - 1]) : "";
+      var statusLower = statusVal.toLowerCase();
+      var inactive =
+        statusLower.indexOf("לא פעיל") !== -1 ||
+        statusLower.indexOf("inactive") !== -1;
+      return {
+        id: targetId,
+        employeeId: targetId,
+        name: colName ? stringValue(row[colName - 1]) : "",
+        fullName: colName ? stringValue(row[colName - 1]) : "",
+        email: colEmail ? stringValue(row[colEmail - 1]).toLowerCase() : "",
+        status: statusVal,
+        active: !inactive,
+        systemRole: colSystemRole ? stringValue(row[colSystemRole - 1]) : "",
+      };
+    }
+    return null;
+  }
+
+  var rawEmployeeId = stringValue(req.employeeId);
+  var email = stringValue(req.email || (req.user && req.user.email)).toLowerCase();
+  var employeeId = rawEmployeeId;
+  var employeeName = "";
+  var employee = null;
+
+  if (include.profile) {
+    var profileStartMs = new Date().getTime();
+    try {
+      if (!email && !employeeId) {
+        critical = {
+          errorCode: ERROR_CODES.VALIDATION_FAILED,
+          message: "Missing email/employeeId for profile",
+          retryable: false,
+        };
+        setBlockFail_(
+          "profile",
+          critical.errorCode,
+          critical.message,
+          critical.retryable,
+        );
+      } else {
+        if (email) {
+          var profileResult = getCurrentEmployeeData_({
+            email: email,
+            noCache: true,
+          });
+          employee =
+            profileResult && profileResult.employee ? profileResult.employee : null;
+        } else {
+          employee = findEmployeeById_(employeeId);
+        }
+
+        if (!employee) {
+          critical = {
+            errorCode: ERROR_CODES.EMPLOYEE_NOT_FOUND,
+            message: "Employee not found",
+            retryable: false,
+          };
+          setBlockFail_(
+            "profile",
+            critical.errorCode,
+            critical.message,
+            critical.retryable,
+          );
+        } else {
+          employeeId = stringValue(employee.employeeId || employee.id || employeeId);
+          employeeName = stringValue(
+            employee.name || employee.fullName || employee.employeeName,
+          );
+          if (!employeeId) {
+            critical = {
+              errorCode: ERROR_CODES.EMPLOYEE_NOT_FOUND,
+              message: "Employee ID missing",
+              retryable: false,
+            };
+            setBlockFail_(
+              "profile",
+              critical.errorCode,
+              critical.message,
+              critical.retryable,
+            );
+          } else {
+            data.employee = employee;
+            data.employeeId = employeeId;
+            data.employeeName = employeeName;
+            setBlockOk_("profile");
+          }
+        }
+      }
+    } catch (err) {
+      critical = {
+        errorCode: ERROR_CODES.PROFILE_LOAD_FAILED,
+        message: err && err.message ? String(err.message) : "Profile load failed",
+        retryable: true,
+      };
+      setBlockFail_(
+        "profile",
+        critical.errorCode,
+        critical.message,
+        critical.retryable,
+      );
+    } finally {
+      logDuration_(lg, "employee.bootstrap.profile", profileStartMs, {
+        include: true,
+        ok: blockStatus.profile.ok === true,
+      });
+    }
+  }
+
+  if (!employeeId) {
+    employeeId = rawEmployeeId;
+  }
+  if (!employeeName) {
+    employeeName = stringValue(req.employeeName);
+  }
+  if (employeeId) {
+    data.employeeId = employeeId;
+  }
+  if (employeeName) {
+    data.employeeName = employeeName;
+  }
+
+  if (!critical && (include.linkedJobs || include.requests || include.shifts)) {
+    if (!employeeId) {
+      critical = {
+        errorCode: ERROR_CODES.VALIDATION_FAILED,
+        message: "Missing employeeId for dependent blocks",
+        retryable: false,
+      };
+      if (include.linkedJobs && blockStatus.linkedJobs.ok !== false) {
+        setBlockFail_(
+          "linkedJobs",
+          critical.errorCode,
+          critical.message,
+          critical.retryable,
+        );
+      }
+      if (include.requests && blockStatus.requests.ok !== false) {
+        setBlockFail_(
+          "requests",
+          critical.errorCode,
+          critical.message,
+          critical.retryable,
+        );
+      }
+      if (include.shifts && blockStatus.shifts.ok !== false) {
+        setBlockFail_(
+          "shifts",
+          critical.errorCode,
+          critical.message,
+          critical.retryable,
+        );
+      }
+    }
+  }
+
+  if (critical) {
+    logDuration_(
+      lg,
+      "employee.bootstrap.total",
+      totalStartMs,
+      {
+        ok: false,
+        partial: false,
+        critical: true,
+        errorCode: critical.errorCode,
+      },
+      "error",
+      critical.errorCode,
+    );
+    return {
+      ok: false,
+      partial: false,
+      errorCode: critical.errorCode,
+      error: critical.message,
+      retryable: critical.retryable === true,
+      data: data,
+      blockStatus: blockStatus,
+    };
+  }
+
+  if (include.jobs) {
+    var jobsStartMs = new Date().getTime();
+    try {
+      data.jobTypes = listJobTypes_();
+      setBlockOk_("jobs");
+    } catch (err) {
+      setBlockFail_(
+        "jobs",
+        "JOB_TYPES_LIST_FAILED",
+        err && err.message ? String(err.message) : "Failed to load job types",
+        true,
+      );
+    } finally {
+      logDuration_(lg, "employee.bootstrap.jobs", jobsStartMs, {
+        include: true,
+        ok: blockStatus.jobs.ok === true,
+      });
+    }
+  }
+
+  if (include.linkedJobs) {
+    var linkedStartMs = new Date().getTime();
+    try {
+      var linked = listEmployeeLinkedJobIds_(
+        {
+          employeeId: employeeId,
+          noCache: true,
+        },
+        lg,
+      );
+      data.linkedJobTypeIds = Array.isArray(linked && linked.jobTypeIds)
+        ? linked.jobTypeIds
+        : [];
+      data.jobTypesDetailed = Array.isArray(linked && linked.jobTypesDetailed)
+        ? linked.jobTypesDetailed
+        : [];
+      setBlockOk_("linkedJobs");
+    } catch (err) {
+      setBlockFail_(
+        "linkedJobs",
+        "LINKED_JOBS_LOAD_FAILED",
+        err && err.message
+          ? String(err.message)
+          : "Failed to load linked job types",
+        true,
+      );
+    } finally {
+      logDuration_(lg, "employee.bootstrap.linkedJobs", linkedStartMs, {
+        include: true,
+        ok: blockStatus.linkedJobs.ok === true,
+      });
+    }
+  }
+
+  if (include.requests) {
+    var requestsStartMs = new Date().getTime();
+    var requestsPayload =
+      req.requests && typeof req.requests === "object" ? req.requests : {};
+    var requestsLimit = clampInt_(requestsPayload.limit, 20, 1, 100);
+    var requestsOffset = clampInt_(requestsPayload.offset, 0, 0, 100000);
+    try {
+      var requestsResp = listRequestsByEmployee_({ employeeId: employeeId }, lg);
+      var allRequests =
+        requestsResp && Array.isArray(requestsResp.requests)
+          ? requestsResp.requests
+          : [];
+      var requestsTotal = allRequests.length;
+      var requestsSlice = allRequests.slice(
+        requestsOffset,
+        requestsOffset + requestsLimit,
+      );
+      data.requests = requestsSlice;
+      data.requestsMeta = {
+        total: requestsTotal,
+        limit: requestsLimit,
+        offset: requestsOffset,
+        hasMore: requestsOffset + requestsSlice.length < requestsTotal,
+      };
+      setBlockOk_("requests");
+    } catch (err) {
+      setBlockFail_(
+        "requests",
+        ERROR_CODES.REQUEST_LIST_FAILED,
+        err && err.message ? String(err.message) : "Failed to load requests",
+        true,
+      );
+    } finally {
+      logDuration_(lg, "employee.bootstrap.requests", requestsStartMs, {
+        include: true,
+        ok: blockStatus.requests.ok === true,
+        limit: requestsLimit,
+        offset: requestsOffset,
+      });
+    }
+  }
+
+  if (include.shifts) {
+    var shiftsStartMs = new Date().getTime();
+    var shiftsPayload =
+      req.shifts && typeof req.shifts === "object" ? req.shifts : {};
+    var shiftsLimit = clampInt_(shiftsPayload.limit, 20, 1, 100);
+    var shiftsOffset = clampInt_(shiftsPayload.offset, 0, 0, 100000);
+    var normalizedRange = normalizeRangeWithClamp_(
+      shiftsPayload.dateFrom || req.dateFrom || "",
+      shiftsPayload.dateTo || req.dateTo || "",
+      62,
+    );
+    var shiftsStatusExtra = normalizedRange.clamped
+      ? {
+          clamped: true,
+          clampReason: normalizedRange.clampReason || "maxDays",
+          dateFrom: normalizedRange.dateFrom || "",
+          dateTo: normalizedRange.dateTo || "",
+        }
+      : {};
+
+    try {
+      var shiftsResp = listShifts_({
+        dateFrom: normalizedRange.dateFrom || "",
+        dateTo: normalizedRange.dateTo || "",
+        employeeId: employeeId,
+        statuses: Array.isArray(shiftsPayload.statuses)
+          ? shiftsPayload.statuses
+          : req.statuses,
+        jobTypeIds: Array.isArray(shiftsPayload.jobTypeIds)
+          ? shiftsPayload.jobTypeIds
+          : req.jobTypeIds,
+        limit: shiftsLimit,
+        offset: shiftsOffset,
+        noCache: true,
+      });
+      var shiftsRows =
+        shiftsResp && Array.isArray(shiftsResp.shifts) ? shiftsResp.shifts : [];
+      var shiftsTotal = Number(shiftsResp && shiftsResp.total);
+      if (!isFinite(shiftsTotal) || shiftsTotal < 0) shiftsTotal = shiftsRows.length;
+      data.shifts = shiftsRows;
+      data.shiftsMeta = {
+        total: shiftsTotal,
+        limit: shiftsLimit,
+        offset: shiftsOffset,
+        hasMore: shiftsOffset + shiftsRows.length < shiftsTotal,
+      };
+      setBlockOk_("shifts", shiftsStatusExtra);
+    } catch (err) {
+      setBlockFail_(
+        "shifts",
+        ERROR_CODES.SHIFT_LIST_FAILED,
+        err && err.message ? String(err.message) : "Failed to load shifts",
+        true,
+        shiftsStatusExtra,
+      );
+    } finally {
+      logDuration_(lg, "employee.bootstrap.shifts", shiftsStartMs, {
+        include: true,
+        ok: blockStatus.shifts.ok === true,
+        limit: shiftsLimit,
+        offset: shiftsOffset,
+        dateFrom: normalizedRange.dateFrom || "",
+        dateTo: normalizedRange.dateTo || "",
+        clamped: normalizedRange.clamped === true,
+      });
+    }
+  }
+
+  logDuration_(lg, "employee.bootstrap.total", totalStartMs, {
+    ok: true,
+    partial: partial,
+    include: include,
+  });
+
+  return {
+    ok: true,
+    partial: partial,
+    data: data,
+    blockStatus: blockStatus,
+  };
 }
 
 // SPEC-OPS-001
@@ -1645,6 +2188,7 @@ function listEmployeeLinkedJobIds_(payload, logger) {
   var startMs = new Date().getTime();
   const employeeId =
     payload && payload.employeeId ? String(payload.employeeId).trim() : "";
+  const noCache = asBoolean_(payload && payload.noCache);
   if (!employeeId) {
     lg.warn(
       "validation",
@@ -1657,7 +2201,7 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     SPREADSHEET_ID || "active-spreadsheet",
     employeeId,
   ]);
-  var cached = readCacheJson_(cacheKey);
+  var cached = noCache ? null : readCacheJson_(cacheKey);
   if (
     cached &&
     stringValue(cached.employeeId) === employeeId &&
@@ -1761,9 +2305,12 @@ function listEmployeeLinkedJobIds_(payload, logger) {
     employeeId: employeeId,
     linkedCount: jobTypeIds.length,
     detailedCount: jobTypesDetailed.length,
+    noCache: noCache,
   });
   var result = { employeeId, jobTypeIds, jobTypesDetailed };
-  writeCacheJson_(cacheKey, result, CACHE_TTL_LOOKUPS_SEC);
+  if (!noCache) {
+    writeCacheJson_(cacheKey, result, CACHE_TTL_LOOKUPS_SEC);
+  }
   return result;
 }
 
@@ -4596,6 +5143,7 @@ function employeeExistsByEmail_(payload) {
   const email = stringValue(
     payload && (payload.email || payload.mail),
   ).toLowerCase();
+  const noCache = asBoolean_(payload && payload.noCache);
 
   if (!email) {
     return { ok: false, success: false, error: "missing email" };
@@ -4604,7 +5152,7 @@ function employeeExistsByEmail_(payload) {
     SPREADSHEET_ID || "active-spreadsheet",
     email,
   ]);
-  var cached = readCacheJson_(cacheKey);
+  var cached = noCache ? null : readCacheJson_(cacheKey);
   if (
     cached &&
     ((cached.found === true &&
@@ -4753,7 +5301,9 @@ function employeeExistsByEmail_(payload) {
       name: empName,
       employee: employee,
     };
-    writeCacheJson_(cacheKey, foundResult, CACHE_TTL_PROFILE_SEC);
+    if (!noCache) {
+      writeCacheJson_(cacheKey, foundResult, CACHE_TTL_PROFILE_SEC);
+    }
     return foundResult;
   }
 
@@ -4767,7 +5317,9 @@ function employeeExistsByEmail_(payload) {
     name: "",
     employee: null,
   };
-  writeCacheJson_(cacheKey, notFoundResult, CACHE_TTL_PROFILE_SEC);
+  if (!noCache) {
+    writeCacheJson_(cacheKey, notFoundResult, CACHE_TTL_PROFILE_SEC);
+  }
   return notFoundResult;
 }
 
@@ -6167,6 +6719,7 @@ function listShifts_(payload) {
   const filters = payload || {};
   const dateFrom = toIsoDate_(filters.dateFrom || "");
   const dateTo = toIsoDate_(filters.dateTo || "");
+  const noCache = asBoolean_(filters.noCache);
   const employeeFilter = stringValue(filters.employeeId);
   const statusFilters = Array.isArray(filters.statuses)
     ? filters.statuses
@@ -6205,7 +6758,7 @@ function listShifts_(payload) {
     String(limit),
     String(offset),
   ]);
-  var cached = readCacheJson_(shiftsCacheKey);
+  var cached = noCache ? null : readCacheJson_(shiftsCacheKey);
   if (
     cached &&
     Array.isArray(cached.shifts) &&
@@ -6217,7 +6770,9 @@ function listShifts_(payload) {
   const values = sheet.getDataRange().getValues();
   if (!values.length) {
     var emptyResult = { shifts: [], total: 0 };
-    writeCacheJson_(shiftsCacheKey, emptyResult, CACHE_TTL_SHIFTS_SEC);
+    if (!noCache) {
+      writeCacheJson_(shiftsCacheKey, emptyResult, CACHE_TTL_SHIFTS_SEC);
+    }
     return emptyResult;
   }
 
@@ -6392,7 +6947,9 @@ function listShifts_(payload) {
   const total = results.length;
   const sliced = results.slice(offset, offset + limit);
   var response = { shifts: sliced, total: total };
-  writeCacheJson_(shiftsCacheKey, response, CACHE_TTL_SHIFTS_SEC);
+  if (!noCache) {
+    writeCacheJson_(shiftsCacheKey, response, CACHE_TTL_SHIFTS_SEC);
+  }
   return response;
 }
 
