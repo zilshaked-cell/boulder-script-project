@@ -1,9 +1,0 @@
-{
-  "files.autoSave": "afterDelay",
-  "files.autoSaveDelay": 800,
-  "files.trimTrailingWhitespace": true,
-  "files.insertFinalNewline": true,
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.wordWrap": "on"
-}
