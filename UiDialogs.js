@@ -577,7 +577,7 @@ function resolveActorContext_() {
     actorEmail = "";
   }
   var actorRole = actorEmail ? "MANAGER" : "UNKNOWN";
-  return { actorEmail: actorEmail, actorRole: actorRole };
+  return { actorEmail: actorEmail, actorRole: actorRole, actorId: "" };
 }
 
 function deriveActorRole_(actorEmail, employeesLookup) {
@@ -1221,7 +1221,10 @@ function UI_getRequestsDialogData(params) {
       requestedAt: requestedAt,
       actorEmail: actorEmail,
       actorRole: actorRole,
-      canEdit: errors.length === 0 && actorRole !== "UNKNOWN",
+      canEdit:
+        errors.length === 0 &&
+        actorRole !== "UNKNOWN" &&
+        actorRole !== "EMPLOYEE",
     },
     data: errors.length ? null : data,
     errors: errors,
@@ -1251,6 +1254,15 @@ function UI_saveRequestChanges(envelope) {
   var actorCtx = resolveActorContext_();
   var actorEmail = actorCtx.actorEmail;
   var actorRole = actorCtx.actorRole;
+  try {
+    var employeesLookupForActor = [];
+    if (typeof EMP_listBasicDirectory_ === "function") {
+      employeesLookupForActor = EMP_listBasicDirectory_() || [];
+    }
+    actorRole = deriveActorRole_(actorEmail, employeesLookupForActor);
+  } catch (_actorRoleErr) {
+    actorRole = deriveActorRole_(actorEmail, []);
+  }
 
   var errors = [];
   var safeEnvelope = envelope && typeof envelope === "object" ? envelope : {};
@@ -1357,6 +1369,11 @@ function UI_saveRequestChanges(envelope) {
         : req.shiftNote;
     if (noteVal !== undefined) {
       maybeSet_("shiftNote", noteVal);
+    }
+    maybeSet_("decidedByName", norm_(req.decidedByName || actorEmail));
+    maybeSet_("decidedByRole", norm_(req.decidedByRole || actorRole));
+    if (safeEnvelope.meta && safeEnvelope.meta.actorId) {
+      maybeSet_("decidedById", norm_(safeEnvelope.meta.actorId));
     }
 
     return { ok: true, payload: payload, requestId: requestId, status: status };
@@ -1493,7 +1510,10 @@ function UI_saveRequestChanges(envelope) {
       requestedAt: requestedAt,
       actorEmail: actorEmail,
       actorRole: actorRole,
-      canEdit: errors.length === 0,
+      canEdit:
+        errors.length === 0 &&
+        actorRole !== "UNKNOWN" &&
+        actorRole !== "EMPLOYEE",
     },
     data: saveResults.length ? { saveResults: saveResults } : null,
     errors: errors,

@@ -125,8 +125,22 @@ function handleRequestPost(e) {
       return String(v).replace(/\s+/g, " ").trim();
     }
 
+    function normalizeStatusKey_(v) {
+      var key = normalize_(v).toUpperCase();
+      if (!key) return "";
+      if (key.indexOf("APPROVED") !== -1 || key.indexOf("מאושר") !== -1)
+        return "APPROVED";
+      if (key.indexOf("REJECT") !== -1 || key.indexOf("נדח") !== -1)
+        return "REJECTED";
+      if (key.indexOf("CANCEL") !== -1 || key.indexOf("בוטל") !== -1)
+        return "CANCELLED";
+      if (key.indexOf("PENDING") !== -1 || key.indexOf("ממתין") !== -1)
+        return "PENDING";
+      return key;
+    }
+
     // עמודות לפי ה-Contract שלך
-    var COL_STATUS = colByAny_(["סטטוס בקשה"]);
+    var COL_STATUS = colByAny_(["סטטוס בקשה", "סטטוס", "Status"]);
     var COL_REQUEST_ID = colByAny_(["ID בקשה"]);
     var COL_SHIFT_NOTE = colByAny_(["הערות למשמרת"]);
     var COL_SHIFT_ID = colByAny_(["ID משמרת"]);
@@ -140,6 +154,19 @@ function handleRequestPost(e) {
     var COL_JOB_NAME = colByAny_(["סוג עבודה", "סוגי עבודה", "סוג העבודה"]);
     var COL_DEPT = colByAny_(["מחלקה"]);
     var COL_UNITS = colByAny_(["כמות היחידות"]);
+    var COL_DECISION_AT = colByAny_(["תאריך החלטה", "decisionAt"]);
+    var COL_UPDATED_AT = colByAny_(["עודכן", "תאריך עדכון", "updatedAt"]);
+    var COL_DECIDED_BY_NAME = colByAny_([
+      "מקבל החלטה",
+      "הוחלט על ידי",
+      "decidedByName",
+    ]);
+    var COL_DECIDED_BY_ROLE = colByAny_(["תפקיד מחליט", "decidedByRole"]);
+    var COL_DECIDED_BY_ID = colByAny_([
+      "מזהה מחליט",
+      "decidedById",
+      "decidedByEmployeeId",
+    ]);
 
     // מינימום חובה כדי לא לכתוב "שורות זבל"
     if (!COL_REQUEST_ID || !COL_TIMESTAMP) {
@@ -205,6 +232,23 @@ function handleRequestPost(e) {
     var existingRow = findRowByRequestId_(sheet, COL_REQUEST_ID, requestId);
     if (existingRow) {
       var updates = [];
+      var hasStatusUpdate = data.hasOwnProperty("status");
+      var normalizedNewStatus = normalizeStatusKey_(status);
+
+      if (hasStatusUpdate && COL_STATUS) {
+        var currentStatus = normalizeStatusKey_(
+          sheet.getRange(existingRow, COL_STATUS).getValue()
+        );
+        if (currentStatus && currentStatus !== "PENDING") {
+          return finish_(
+            jsonResponse({
+              success: false,
+              error: "REQUEST_NOT_PENDING",
+            }),
+            "VALIDATION_ERROR"
+          );
+        }
+      }
 
       // מעדכנים רק אם השדה קיים ב-payload (hasOwnProperty), כדי לא למחוק בטעות
       function maybeUpdate_(col, key, value) {
@@ -234,6 +278,39 @@ function handleRequestPost(e) {
       maybeUpdate_(COL_JOB_NAME, "jobName", jobName);
       maybeUpdate_(COL_DEPT, "department", department);
       maybeUpdate_(COL_UNITS, "units", units);
+
+      if (hasStatusUpdate && COL_UPDATED_AT) {
+        updates.push({
+          col: COL_UPDATED_AT,
+          val: normalize_(data.timestamp) || now,
+        });
+      }
+      if (hasStatusUpdate && normalizedNewStatus && normalizedNewStatus !== "PENDING") {
+        if (COL_DECISION_AT) {
+          updates.push({
+            col: COL_DECISION_AT,
+            val: normalize_(data.timestamp) || now,
+          });
+        }
+        if (COL_DECIDED_BY_NAME && data.hasOwnProperty("decidedByName")) {
+          updates.push({
+            col: COL_DECIDED_BY_NAME,
+            val: normalize_(data.decidedByName),
+          });
+        }
+        if (COL_DECIDED_BY_ROLE && data.hasOwnProperty("decidedByRole")) {
+          updates.push({
+            col: COL_DECIDED_BY_ROLE,
+            val: normalize_(data.decidedByRole),
+          });
+        }
+        if (COL_DECIDED_BY_ID && data.hasOwnProperty("decidedById")) {
+          updates.push({
+            col: COL_DECIDED_BY_ID,
+            val: normalize_(data.decidedById),
+          });
+        }
+      }
 
       for (var u = 0; u < updates.length; u++) {
         sheet.getRange(existingRow, updates[u].col).setValue(updates[u].val);
@@ -271,6 +348,18 @@ function handleRequestPost(e) {
     if (COL_JOB_NAME) rowArr[COL_JOB_NAME - 1] = jobName;
     if (COL_DEPT) rowArr[COL_DEPT - 1] = department;
     if (COL_UNITS) rowArr[COL_UNITS - 1] = units;
+    if (COL_UPDATED_AT) rowArr[COL_UPDATED_AT - 1] = now;
+
+    var normalizedInsertStatus = normalizeStatusKey_(status);
+    if (normalizedInsertStatus && normalizedInsertStatus !== "PENDING") {
+      if (COL_DECISION_AT) rowArr[COL_DECISION_AT - 1] = now;
+      if (COL_DECIDED_BY_NAME)
+        rowArr[COL_DECIDED_BY_NAME - 1] = normalize_(data.decidedByName);
+      if (COL_DECIDED_BY_ROLE)
+        rowArr[COL_DECIDED_BY_ROLE - 1] = normalize_(data.decidedByRole);
+      if (COL_DECIDED_BY_ID)
+        rowArr[COL_DECIDED_BY_ID - 1] = normalize_(data.decidedById);
+    }
 
     sheet.getRange(newRowIndex, 1, 1, lastCol).setValues([rowArr]);
 

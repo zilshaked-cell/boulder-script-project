@@ -3101,6 +3101,44 @@ function parseDateOnly_(val) {
   return null;
 }
 
+function buildEmployeeEmailIndex_() {
+  var emailIndex = {};
+
+  try {
+    var sheet = getEmployeesSheet_();
+    var headers = getHeaderMap_(sheet);
+    var emailCol = getOptionalColumn_(headers, EMAIL_HEADER_CANDIDATES);
+    var employeeIdCol = getOptionalColumn_(headers, [
+      "מזהה עובד",
+      "ID עובד",
+      "Employee ID",
+      "ID",
+    ]);
+    var nationalIdCol = getOptionalColumn_(headers, ["ת.ז", "תז", "National ID"]);
+
+    if (!emailCol || (!employeeIdCol && !nationalIdCol)) {
+      return emailIndex;
+    }
+
+    var values = sheet.getDataRange().getValues();
+    for (var i = 1; i < values.length; i++) {
+      var row = values[i];
+      var email = stringValue(row[emailCol - 1]).toLowerCase();
+      if (!email) continue;
+
+      var employeeId = employeeIdCol ? stringValue(row[employeeIdCol - 1]) : "";
+      var nationalId = nationalIdCol ? stringValue(row[nationalIdCol - 1]) : "";
+
+      if (employeeId && !emailIndex[employeeId]) emailIndex[employeeId] = email;
+      if (nationalId && !emailIndex[nationalId]) emailIndex[nationalId] = email;
+    }
+  } catch (_err) {
+    // Best-effort enrichment only.
+  }
+
+  return emailIndex;
+}
+
 function toBooleanCell_(val) {
   if (val === true) return true;
   if (val === false) return false;
@@ -3353,7 +3391,7 @@ function resolveRequestColumns_(options) {
   };
 }
 
-function mapRequestRow_(row, cols) {
+function mapRequestRow_(row, cols, context) {
   function cell(col) {
     if (!col) return "";
     return row[col - 1];
@@ -3435,17 +3473,50 @@ function mapRequestRow_(row, cols) {
     requestTypeIdRaw ||
     jobTypeNameRaw ||
     null;
+  var correctionMeta = null;
+  if (managerNote) {
+    try {
+      var parsedCorrection = JSON.parse(managerNote);
+      if (parsedCorrection && typeof parsedCorrection === "object") {
+        correctionMeta = parsedCorrection;
+      }
+    } catch (_parseErr) {
+      correctionMeta = null;
+    }
+  }
 
-  var managerNotes = managerNote || managerCommentRaw || null;
-  var managerComment = managerCommentRaw || managerNote || null;
-  var employeeComment = employeeCommentRaw || managerNote || null;
+  var parsedUserNote =
+    correctionMeta && typeof correctionMeta === "object"
+      ? stringValue(correctionMeta.userNote)
+      : "";
+
+  var managerNotes = managerCommentRaw || null;
+  var managerComment = managerCommentRaw || null;
+  var employeeComment = employeeCommentRaw || parsedUserNote || null;
+
+  if (!correctionMeta) {
+    managerNotes = managerNotes || managerNote || null;
+    managerComment = managerComment || managerNote || null;
+    employeeComment = employeeComment || managerNote || null;
+  }
+
+  var employeeIdValue = stringValue(cell(cols.employeeIdCol));
+  var employeeEmailById =
+    context && context.employeeEmailById ? context.employeeEmailById : null;
+  if (!employeeEmailById) {
+    employeeEmailById = buildEmployeeEmailIndex_();
+  }
+  var employeeEmail =
+    employeeIdValue && employeeEmailById
+      ? stringValue(employeeEmailById[employeeIdValue]).toLowerCase() || null
+      : null;
 
   return {
     id: id,
     requestId: idFromRequest || idFromShift || null,
-    employeeId: stringValue(cell(cols.employeeIdCol)),
+    employeeId: employeeIdValue,
     employeeName: stringValue(cell(cols.employeeNameCol)),
-    employeeEmail: null,
+    employeeEmail: employeeEmail,
     status: status,
     rawStatus: statusRaw,
     statusLabel: statusRaw || status,
@@ -3519,6 +3590,9 @@ function adminListRequests_(payload, logger) {
     sheetName: sheet.getName(),
     rows: values.length - 1,
   });
+  var requestContext = {
+    employeeEmailById: buildEmployeeEmailIndex_(),
+  };
 
   var dateFromFilter = parseDateOnly_(filters.dateFrom);
   var dateToFilter = parseDateOnly_(filters.dateTo);
@@ -3530,7 +3604,7 @@ function adminListRequests_(payload, logger) {
   var results = [];
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    var req = mapRequestRow_(row, cols);
+    var req = mapRequestRow_(row, cols, requestContext);
     if (!req.id) continue;
 
     if (
@@ -3632,6 +3706,32 @@ function adminListRequests_(payload, logger) {
     results.push(req);
   }
 
+  function requestSortMs_(req) {
+    var dateCandidates = [
+      req.createdAt,
+      req.submittedAt,
+      req.shiftRefDate,
+      req.singleDate,
+      req.dateFrom,
+      req.dateTo,
+    ];
+    for (var i = 0; i < dateCandidates.length; i++) {
+      var raw = stringValue(dateCandidates[i]);
+      if (!raw) continue;
+      var parsed = new Date(raw);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.getTime();
+      }
+    }
+    return 0;
+  }
+
+  results.sort(function (a, b) {
+    var diff = requestSortMs_(b) - requestSortMs_(a);
+    if (diff !== 0) return diff;
+    return String(b.id || "").localeCompare(String(a.id || ""));
+  });
+
   logDuration_(lg, "admin.listRequests.total", startMs, {
     sheet: sheet.getName(),
     scannedRows: values.length - 1,
@@ -3695,9 +3795,17 @@ function adminUpdateRequestStatus_(payload, logger) {
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
   var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  var requestContext = {
+    employeeEmailById: buildEmployeeEmailIndex_(),
+  };
 
   var rowIdx = findRequestRowIndex_(values, cols, id);
   if (rowIdx < 1) throw requestValidationError_("REQUEST_NOT_FOUND");
+  var currentRow = values[rowIdx];
+  var currentRequest = mapRequestRow_(currentRow, cols, requestContext);
+  if (currentRequest.status !== "PENDING") {
+    throw requestValidationError_("REQUEST_NOT_PENDING");
+  }
   var rowNumber = rowIdx + 1; // 1-based row index
 
   sheet.getRange(rowNumber, cols.statusCol).setValue(newStatus);
@@ -3739,7 +3847,7 @@ function adminUpdateRequestStatus_(payload, logger) {
     .getRange(rowNumber, 1, 1, sheet.getLastColumn())
     .getValues()[0];
 
-  var mapped = mapRequestRow_(updatedRow, cols);
+  var mapped = mapRequestRow_(updatedRow, cols, requestContext);
 
   logDuration_(lg, "admin.updateRequestStatus.total", startMs, {
     id: id,
@@ -4110,7 +4218,7 @@ function listRequestsByEmployee_(payload, logger) {
       const requestedSummary =
         stringValue(row[directionCol - 1]) ||
         (unitsCol ? stringValue(row[unitsCol - 1]) : "");
-      const noteToManager = noteCol ? stringValue(row[noteCol - 1]) : "";
+      var noteToManager = noteCol ? stringValue(row[noteCol - 1]) : "";
       const rawPayType = payTypeCol ? stringValue(row[payTypeCol - 1]) : "";
       const payType = normalizePayType_(rawPayType);
       let correction = null;
@@ -4119,6 +4227,9 @@ function listRequestsByEmployee_(payload, logger) {
           const parsed = JSON.parse(noteToManager);
           if (parsed && typeof parsed === "object") {
             correction = parsed;
+            if (parsed.userNote) {
+              noteToManager = stringValue(parsed.userNote);
+            }
           }
         } catch (err) {
           correction = null;
@@ -4164,6 +4275,25 @@ function listRequestsByEmployee_(payload, logger) {
         correction: correction,
       });
     }
+    function requestSortMs_(req) {
+      var dateCandidates = [req.submittedAt, req.createdAt, req.workDate, req.fixDate];
+      for (var i = 0; i < dateCandidates.length; i++) {
+        var raw = stringValue(dateCandidates[i]);
+        if (!raw) continue;
+        var parsed = new Date(raw);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.getTime();
+        }
+      }
+      return 0;
+    }
+    requests.sort(function (a, b) {
+      var diff = requestSortMs_(b) - requestSortMs_(a);
+      if (diff !== 0) return diff;
+      return String(b.requestId || b.id || "").localeCompare(
+        String(a.requestId || a.id || ""),
+      );
+    });
     logDuration_(lg, "requests.list", startMs, {
       employeeId: employeeId,
       rowsScanned: Math.max(values.length - 1, 0),
@@ -4814,6 +4944,13 @@ function handleShiftCorrectionSubmit_(payload, logger) {
         ? payload.newUnits
         : "",
   };
+  const userNote = stringValue(
+    payload.userNote ||
+      payload.userNoteText ||
+      payload.noteToManager ||
+      payload.note ||
+      payload.shiftNote,
+  );
 
   const comparisonKeys = [
     "workDate",
@@ -4826,7 +4963,8 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   const hasChange = comparisonKeys.some(function (key) {
     return stringValue(original[key]) !== stringValue(updated[key]);
   });
-  if (!hasChange) {
+  const hasNoteChange = !!userNote;
+  if (!hasChange && !hasNoteChange) {
     return { ok: false, error: "no_changes" };
   }
 
@@ -4860,6 +4998,7 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   const noteToManager = JSON.stringify({
     original: original,
     updated: updated,
+    userNote: userNote,
   });
 
   const row = buildRowFromHeaders_(headers, {
