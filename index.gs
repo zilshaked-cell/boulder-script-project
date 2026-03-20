@@ -176,13 +176,16 @@ var FAST_DIAGNOSTICS_TTL_SEC = Number(
 var FAST_DIAGNOSTICS_SLOW_MS = Number(
   SCRIPT_PROPERTIES.getProperty("FAST_DIAGNOSTICS_SLOW_MS") || "7000",
 );
+var JOB_TYPE_COLOR_MAP_PROP_KEY =
+  SCRIPT_PROPERTIES.getProperty("JOB_TYPE_COLOR_MAP_PROP_KEY") ||
+  "admin.jobTypeColors.v1";
 var MUTATION_AUDIT_TO_SHEET_ENABLED =
   (SCRIPT_PROPERTIES.getProperty("MUTATION_AUDIT_TO_SHEET_ENABLED") || "true")
     .toLowerCase()
     .trim() === "true";
 var MUTATION_AUDIT_ACTIONS = (
   SCRIPT_PROPERTIES.getProperty("MUTATION_AUDIT_ACTIONS") ||
-  "shiftReport.submit,shiftReport.deleteByIds,shiftCorrection.submit,employee.save,admin.saveEmployee,admin.updateRequestStatus,admin.createRequest,admin.archiveRequest,admin.runBulkAction,admin.reportBulkActionIssue,requests.approve,gameLeaderboard.submit"
+  "shiftReport.submit,shiftReport.deleteByIds,shiftCorrection.submit,employee.save,admin.saveEmployee,admin.saveJobType,admin.updateRequestStatus,admin.createRequest,admin.archiveRequest,admin.runBulkAction,admin.reportBulkActionIssue,requests.approve,gameLeaderboard.submit"
 )
   .split(",")
   .map(function (s) {
@@ -325,6 +328,7 @@ function mapActionToOperation_(action) {
     "admin.runBulkAction": "ADMIN_BULK_ACTION_RUN",
     "admin.listEmployees": "ADMIN_EMPLOYEES_LIST",
     "admin.saveEmployee": "ADMIN_EMPLOYEE_SAVE",
+    "admin.saveJobType": "ADMIN_JOB_TYPE_SAVE",
     "workLogs.listByEmployee": "WORK_LOG_LOAD",
     "requests.listByEmployee": "REQUEST_LIST",
     reportAccessIssue: "REPORT_SAVE",
@@ -372,6 +376,9 @@ function getActionRegistry_() {
     },
     "admin.saveEmployee": function (payload, logger) {
       return adminSaveEmployee_(payload || {}, logger);
+    },
+    "admin.saveJobType": function (payload, logger) {
+      return adminSaveJobType_(payload || {}, logger);
     },
     "admin.listRequests": function (payload, logger) {
       return adminListRequests_(payload || {}, logger);
@@ -653,6 +660,16 @@ function writeCacheJson_(key, value, ttlSeconds) {
   if (ttl <= 0) return;
   try {
     cache.put(key, JSON.stringify(value), ttl);
+  } catch (_err) {
+    // Cache should never break the request path.
+  }
+}
+
+function removeCacheKey_(key) {
+  var cache = getScriptCache_();
+  if (!cache || !key) return;
+  try {
+    cache.remove(key);
   } catch (_err) {
     // Cache should never break the request path.
   }
@@ -2036,20 +2053,127 @@ function withOk_(data) {
   return { ok: true, data: data }; // fallback envelope
 }
 
-function listJobTypes_() {
-  var logger = ensureModuleLoggerDefined_("REPORT_LOAD");
-  logger.info("start", { sheetNames: OPTIONS_SHEET_NAMES });
-  var cacheKey = buildCacheKey_("jobTypes.v2", [
+function normalizeHexColor6_(value) {
+  var raw = stringValue(value).trim();
+  if (!raw) return "";
+  if (raw.charAt(0) !== "#") raw = "#" + raw;
+  if (!/^#[0-9A-Fa-f]{6}$/.test(raw)) return "";
+  return raw.toUpperCase();
+}
+
+function getJobTypeColorMap_() {
+  try {
+    var raw = SCRIPT_PROPERTIES.getProperty(JOB_TYPE_COLOR_MAP_PROP_KEY);
+    if (!raw) return {};
+    var parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    var clean = {};
+    Object.keys(parsed).forEach(function (jobTypeId) {
+      var normalized = normalizeHexColor6_(parsed[jobTypeId]);
+      if (normalized) clean[String(jobTypeId)] = normalized;
+    });
+    return clean;
+  } catch (_err) {
+    return {};
+  }
+}
+
+function saveJobTypeColorMap_(nextMap) {
+  var payload = nextMap && typeof nextMap === "object" ? nextMap : {};
+  SCRIPT_PROPERTIES.setProperty(JOB_TYPE_COLOR_MAP_PROP_KEY, JSON.stringify(payload));
+}
+
+function defaultJobTypeColorHexByIndex_(index) {
+  var i = Number(index);
+  if (!isFinite(i) || i < 0) i = 0;
+  var hue = (i * 137.508) % 360;
+  return hslToHex_(hue, 68, 52);
+}
+
+function hslToHex_(h, s, l) {
+  var hue = ((Number(h) % 360) + 360) % 360;
+  var sat = Math.max(0, Math.min(100, Number(s))) / 100;
+  var light = Math.max(0, Math.min(100, Number(l))) / 100;
+
+  var c = (1 - Math.abs(2 * light - 1)) * sat;
+  var x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+  var m = light - c / 2;
+
+  var r1 = 0;
+  var g1 = 0;
+  var b1 = 0;
+
+  if (hue < 60) {
+    r1 = c;
+    g1 = x;
+  } else if (hue < 120) {
+    r1 = x;
+    g1 = c;
+  } else if (hue < 180) {
+    g1 = c;
+    b1 = x;
+  } else if (hue < 240) {
+    g1 = x;
+    b1 = c;
+  } else if (hue < 300) {
+    r1 = x;
+    b1 = c;
+  } else {
+    r1 = c;
+    b1 = x;
+  }
+
+  function channelToHex_(channel) {
+    var channelInt = Math.round((channel + m) * 255);
+    var clamped = Math.max(0, Math.min(255, channelInt));
+    var hex = clamped.toString(16).toUpperCase();
+    return hex.length === 1 ? "0" + hex : hex;
+  }
+
+  return (
+    "#" +
+    channelToHex_(r1) +
+    channelToHex_(g1) +
+    channelToHex_(b1)
+  );
+}
+
+function withResolvedJobTypeColors_(jobTypes, colorMap) {
+  var list = Array.isArray(jobTypes) ? jobTypes : [];
+  var map = colorMap && typeof colorMap === "object" ? colorMap : {};
+  return list.map(function (jt, index) {
+    var row = jt && typeof jt === "object" ? jt : {};
+    var id = stringValue(row.id || row.jobTypeId);
+    var persisted = id ? normalizeHexColor6_(map[id]) : "";
+    var existing = normalizeHexColor6_(row.colorHex);
+    var fallback = defaultJobTypeColorHexByIndex_(index);
+    var resolved = persisted || existing || fallback;
+    return Object.assign({}, row, { colorHex: resolved });
+  });
+}
+
+function getJobTypesCacheKey_() {
+  return buildCacheKey_("jobTypes.v2", [
     SPREADSHEET_ID || "active-spreadsheet",
     OPTIONS_SHEET_NAMES.join(","),
   ]);
+}
+
+function listJobTypes_() {
+  var logger = ensureModuleLoggerDefined_("REPORT_LOAD");
+  logger.info("start", { sheetNames: OPTIONS_SHEET_NAMES });
+  var cacheKey = getJobTypesCacheKey_();
   var cached = readCacheJson_(cacheKey);
+  var colorMap = getJobTypeColorMap_();
   if (cached && Array.isArray(cached.jobTypes)) {
+    var resolvedFromCache = withResolvedJobTypeColors_(cached.jobTypes, colorMap);
     logger.info("cache-hit", {
       key: "jobTypes.v2",
-      rows: cached.jobTypes.length,
+      rows: resolvedFromCache.length,
     });
-    return cached.jobTypes;
+    return resolvedFromCache;
   }
   const sheet = getSheetByPossibleNames_(OPTIONS_SHEET_NAMES);
   const headerMap = getHeaderMap_(sheet);
@@ -2138,8 +2262,56 @@ function listJobTypes_() {
       payTypeStatus: payStatus,
     });
   }
-  writeCacheJson_(cacheKey, { jobTypes: results }, CACHE_TTL_LOOKUPS_SEC);
-  return results;
+  var resolved = withResolvedJobTypeColors_(results, colorMap);
+  writeCacheJson_(cacheKey, { jobTypes: resolved }, CACHE_TTL_LOOKUPS_SEC);
+  return resolved;
+}
+
+function adminSaveJobType_(payload, logger) {
+  var lg = logger || ensureModuleLoggerDefined_("ADMIN_JOB_TYPE_SAVE");
+  var startMs = new Date().getTime();
+
+  var jobTypeId = stringValue(payload && payload.jobTypeId).trim();
+  var colorHex = normalizeHexColor6_(payload && payload.colorHex);
+
+  if (!jobTypeId || !colorHex) {
+    return {
+      ok: false,
+      error: "jobTypeId and colorHex are required",
+      errorCode: ERROR_CODES.VALIDATION_FAILED,
+    };
+  }
+
+  var lock = null;
+  try {
+    lock = LockService.getScriptLock();
+    lock.waitLock(5000);
+  } catch (_ignored) {
+    lock = null;
+  }
+
+  try {
+    var map = getJobTypeColorMap_();
+    map[jobTypeId] = colorHex;
+    saveJobTypeColorMap_(map);
+    removeCacheKey_(getJobTypesCacheKey_());
+
+    logDuration_(lg, "admin.saveJobType.total", startMs, {
+      jobTypeId: jobTypeId,
+    });
+
+    return {
+      ok: true,
+      jobTypeId: jobTypeId,
+      colorHex: colorHex,
+    };
+  } finally {
+    if (lock) {
+      try {
+        lock.releaseLock();
+      } catch (_ignoredRelease) {}
+    }
+  }
 }
 
 function listPaymentOptions_(logger) {
