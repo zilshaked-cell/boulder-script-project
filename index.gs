@@ -11,9 +11,72 @@ const EMPLOYEES_SHEET_NAMES = [
 const EMPLOYEE_HEADER_ROW_INDEX = 1;
 const WORK_LOGS_SHEET_NAME = "דיווח שעות עבודה";
 const REQUESTS_SHEET_NAMES = ["בקשות עובדים"];
+const SHIFTS_SHEET_AUDIT_NAME = "משמרות";
 const OPTIONS_SHEET_NAMES = ["אופציות בחירה ו ID'S", "אופציות בחירה ו ID_S"];
 const LEADERBOARD_SHEET_NAME = "leaderboard";
 const LEADERBOARD_MAX_ROWS = 500;
+const CRITICAL_STORE_WRITE_REGISTRY_ = {
+  "דיווח שעות עבודה": {
+    canonical: ["action:shiftReport.submit", "action:requests.approve"],
+    secondary: ["fn:writeWorkLogFromNormalizedShift_"],
+    maintenance: [
+      "action:shiftReport.deleteByIds",
+      "fn:cleanupExactDuplicateWorkLogs_",
+    ],
+  },
+  "בקשות עובדים": {
+    canonical: [
+      "action:shiftReport.submit",
+      "action:shiftCorrection.submit",
+      "action:admin.createRequest",
+      "action:admin.updateRequestStatus",
+      "action:admin.archiveRequest",
+      "action:requests.approve",
+    ],
+  },
+  "משמרות": {
+    canonical: [
+      "fn:SHIFTS_upsertAroundWorkLog_",
+      "editor:SHIFTS_rebuildYesterday",
+      "fn:upsertShiftsForEmployeeJobAndRange",
+    ],
+    maintenance: ["action:shifts.rebuildRange"],
+  },
+};
+
+function getCriticalStoreWriteTier_(storeName, writerId) {
+  var registry = CRITICAL_STORE_WRITE_REGISTRY_[stringValue(storeName)] || null;
+  if (!registry || !writerId) return "unknown";
+
+  var tiers = ["canonical", "secondary", "maintenance", "legacy", "shadow"];
+  for (var i = 0; i < tiers.length; i++) {
+    var tier = tiers[i];
+    var writers = Array.isArray(registry[tier]) ? registry[tier] : [];
+    if (writers.indexOf(writerId) !== -1) return tier;
+  }
+  return "unknown";
+}
+
+function auditCriticalStoreWrite_(storeName, writerId, details) {
+  var normalizedStore = stringValue(storeName);
+  var normalizedWriter = stringValue(writerId);
+  if (!normalizedStore || !normalizedWriter) return;
+
+  var writerTier = getCriticalStoreWriteTier_(normalizedStore, normalizedWriter);
+  appendSystemLog_({
+    layer: "apps-script-store-audit",
+    operation: "CRITICAL_STORE_WRITE",
+    step: "write",
+    severity: writerTier === "unknown" ? "warn" : "info",
+    actor: normalizedWriter,
+    details: {
+      storeName: normalizedStore,
+      writerId: normalizedWriter,
+      writerTier: writerTier,
+      meta: details || {},
+    },
+  });
+}
 
 // Canonical schema for the "משמרות" sheet.
 // Source: _bundles/google SS boulder 5-1-26/משמרות.schema.json (exportedAt 2026-01-06T17:46:34.040Z)
@@ -3980,6 +4043,12 @@ function adminUpdateRequestStatus_(payload, logger) {
   }
   var rowNumber = rowIdx + 1; // 1-based row index
 
+  auditCriticalStoreWrite_("בקשות עובדים", "action:admin.updateRequestStatus", {
+    requestId: id,
+    fromStatus: currentRequest.status,
+    toStatus: newStatus,
+    rowNumber: rowNumber,
+  });
   sheet.getRange(rowNumber, cols.statusCol).setValue(newStatus);
 
   var managerCommentTargetCol = cols.managerCommentCol || cols.managerNoteCol;
@@ -4093,6 +4162,12 @@ function adminCreateRequest_(payload, logger) {
   setCell(cols.isArchivedCol, false);
   setCell(cols.updatedAtCol, nowIso);
 
+  auditCriticalStoreWrite_("בקשות עובדים", "action:admin.createRequest", {
+    requestId: generatedId,
+    employeeId: employeeId,
+    requestTypeId: requestTypeId,
+    rowNumber: rowNumber,
+  });
   sheet.getRange(rowNumber, 1, 1, values.length).setValues([values]);
 
   var newRow = sheet
@@ -4129,6 +4204,11 @@ function adminArchiveRequest_(payload, logger) {
   if (rowIdx < 1) throw requestValidationError_("REQUEST_NOT_FOUND");
   var rowNumber = rowIdx + 1;
 
+  auditCriticalStoreWrite_("בקשות עובדים", "action:admin.archiveRequest", {
+    requestId: id,
+    archived: archivedFlag,
+    rowNumber: rowNumber,
+  });
   sheet.getRange(rowNumber, cols.isArchivedCol).setValue(archivedFlag);
   if (cols.updatedAtCol) {
     sheet
@@ -4835,6 +4915,12 @@ function handleShiftReportSubmit_(payload, logger) {
         payTypeId: payTypeId,
         payType: payTypeForRequestRow,
       });
+      auditCriticalStoreWrite_("בקשות עובדים", "action:shiftReport.submit", {
+        requestId: shiftId,
+        employeeId: employeeId,
+        requestType: requestType,
+        sheet: reqSheetName,
+      });
       reqSheet.appendRow(row);
       logDuration_(lg, "shift.submit.request-append", requestAppendStartMs, {
         sheet: reqSheetName,
@@ -5202,6 +5288,12 @@ function handleShiftCorrectionSubmit_(payload, logger) {
   });
 
   var requestAppendStartMs = new Date().getTime();
+  auditCriticalStoreWrite_("בקשות עובדים", "action:shiftCorrection.submit", {
+    requestId: newShiftId,
+    employeeId: employeeId,
+    requestType: "shift_correction",
+    sheet: reqSheetName,
+  });
   reqSheet.appendRow(row);
 
   logDuration_(
@@ -5298,6 +5390,12 @@ function handleRequestApprove_(payload, logger) {
   );
 
   if (rec.statusCol) {
+    auditCriticalStoreWrite_("בקשות עובדים", "action:requests.approve", {
+      requestId: requestId,
+      requestType: rec.requestType,
+      targetStatus: "approved",
+      rowNumber: found.rowIndex,
+    });
     found.sheet.getRange(found.rowIndex, rec.statusCol).setValue("approved");
   }
   if (rec.decidedAtCol) {
@@ -5966,6 +6064,13 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
   }
 
   var appendStartMs = new Date().getTime();
+  auditCriticalStoreWrite_("דיווח שעות עבודה", "fn:writeWorkLogFromNormalizedShift_", {
+    reportId: normalized.shiftId,
+    employeeId: meta.employeeId,
+    workDate: normalized.workDate,
+    direction: normalized.direction,
+    sheet: logsSheetName,
+  });
   logsSheet.appendRow(row);
   logDuration_(logger, "shift.worklog.append", appendStartMs, {
     sheet: logsSheetName,
@@ -6219,6 +6324,11 @@ function cleanupExactDuplicateWorkLogs_(duplicates) {
     return b - a;
   });
   const limited = rowsToDelete.slice(0, MAX_DELETE);
+  auditCriticalStoreWrite_("דיווח שעות עבודה", "fn:cleanupExactDuplicateWorkLogs_", {
+    foundCount: foundCount,
+    deletedCount: limited.length,
+    capped: rowsToDelete.length > MAX_DELETE,
+  });
   limited.forEach(function (rowIdx) {
     sheet.deleteRow(rowIdx);
   });
@@ -6488,6 +6598,10 @@ function handleShiftReportDeleteByIds_(payload, logger) {
     return b - a;
   });
 
+  auditCriticalStoreWrite_("דיווח שעות עבודה", "action:shiftReport.deleteByIds", {
+    deletedCount: rowsToDelete.length,
+    shiftIds: shiftIds,
+  });
   rowsToDelete.forEach(function (rowIndex) {
     sheet.deleteRow(rowIndex);
   });

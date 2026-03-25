@@ -1,3 +1,8 @@
+/* LEGACY SHADOW FILE
+ * This file is kept for visibility and comparison only.
+ * Canonical active counterpart: boulder-script-project/employees_api.js
+ * Do not treat this file as the primary API implementation path.
+ */
 // employees_api.gs
 
 /**

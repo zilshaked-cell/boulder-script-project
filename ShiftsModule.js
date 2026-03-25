@@ -953,6 +953,15 @@ var BONUSES = BONUSES || {};
     var headerRow = CONFIG.HEADER_ROW || 1;
     var lastRow = sheet.getLastRow();
     var lastCol = headerMap.length;
+    if (typeof auditCriticalStoreWrite_ === "function") {
+      auditCriticalStoreWrite_(SHIFTS_SHEET_AUDIT_NAME, "fn:upsertShiftsForEmployeeJobAndRange", {
+        employeeId: empIdNorm,
+        jobTypeId: jobIdNorm,
+        fromDate: fromDate,
+        toDate: toDate,
+        phase: "rebuild_window",
+      });
+    }
 
     var empCol = headerMap["מזהה עובד"];
     var jobCol = headerMap["ID סוג עבודה"];
@@ -1070,6 +1079,15 @@ var BONUSES = BONUSES || {};
     }
 
     if (values.length) {
+      if (typeof auditCriticalStoreWrite_ === "function") {
+        auditCriticalStoreWrite_(SHIFTS_SHEET_AUDIT_NAME, "fn:upsertShiftsForEmployeeJobAndRange", {
+          employeeId: empIdNorm,
+          jobTypeId: jobIdNorm,
+          written: values.length,
+          startRow: startRow,
+          phase: "write_values",
+        });
+      }
       sheet.getRange(startRow, 1, values.length, lastCol).setValues(values);
       ensureSpanAndPayFormats_(sheet, headerMap);
       if (typeof logDuration_ === "function") {
@@ -1092,6 +1110,15 @@ var BONUSES = BONUSES || {};
 
     var fromDate = addDays_(wd, -1);
     var toDate = addDays_(wd, 1);
+    if (typeof auditCriticalStoreWrite_ === "function") {
+      auditCriticalStoreWrite_(SHIFTS_SHEET_AUDIT_NAME, "fn:SHIFTS_upsertAroundWorkLog_", {
+        employeeId: empId,
+        jobTypeId: jobId,
+        workDate: workDate,
+        fromDate: fromDate,
+        toDate: toDate,
+      });
+    }
 
     upsertShiftsForEmployeeJobAndRange(empId, jobId, fromDate, toDate);
   }
@@ -1138,6 +1165,14 @@ var BONUSES = BONUSES || {};
 
     var keys = Object.keys(pairs);
     var totalPairs = keys.length;
+    if (typeof auditCriticalStoreWrite_ === "function") {
+      auditCriticalStoreWrite_(SHIFTS_SHEET_AUDIT_NAME, "editor:SHIFTS_rebuildYesterday", {
+        yesterday: toIsoDate_(yesterday),
+        totalPairs: totalPairs,
+        fromDate: fromDate,
+        toDate: toDate,
+      });
+    }
     if (totalPairs > MAX_YESTERDAY_REBUILD_PAIRS) {
       Logger.log(
         "[SHIFTS_rebuildYesterday][GUARD] yesterday=" +

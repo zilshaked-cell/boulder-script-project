@@ -1,3 +1,8 @@
+/* LEGACY SHADOW FILE
+ * This file is kept for visibility and comparison only.
+ * Canonical active counterpart: boulder-script-project/entrypoints.js
+ * Do not treat this file as the primary entrypoint path.
+ */
 // entrypoints.gs
 
 /**
