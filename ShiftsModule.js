@@ -1121,6 +1121,15 @@ var BONUSES = BONUSES || {};
     }
 
     upsertShiftsForEmployeeJobAndRange(empId, jobId, fromDate, toDate);
+    if (typeof bumpShiftsCacheRevision_ === "function") {
+      bumpShiftsCacheRevision_("shifts.module.upsert-window", {
+        employeeId: empId,
+        jobTypeId: jobId,
+        workDate: toIsoDate_(wd) || "",
+        dateFrom: toIsoDate_(fromDate) || "",
+        dateTo: toIsoDate_(toDate) || "",
+      });
+    }
   }
 
   function SHIFTS_rebuildYesterday() {
@@ -1207,6 +1216,16 @@ var BONUSES = BONUSES || {};
         );
         errorCount += 1;
       }
+    }
+
+    if (totalPairs > 0 && typeof bumpShiftsCacheRevision_ === "function") {
+      bumpShiftsCacheRevision_("shifts.module.rebuild-yesterday", {
+        pairs: totalPairs,
+        errors: errorCount,
+        yesterday: toIsoDate_(yesterday),
+        dateFrom: toIsoDate_(fromDate) || "",
+        dateTo: toIsoDate_(toDate) || "",
+      });
     }
 
     Logger.log(

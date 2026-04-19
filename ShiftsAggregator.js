@@ -843,6 +843,16 @@ function rebuildShiftsForRange_(opts, loggerOpt) {
         skippedLocked: result.skippedLocked,
         debugExplain: debugExplain,
       });
+      if (typeof bumpShiftsCacheRevision_ === "function") {
+        bumpShiftsCacheRevision_("shifts.agg.rebuild-range", {
+          dateFrom: dateFrom,
+          dateTo: dateTo,
+          employeeId: employeeFilter,
+          shiftsWritten: result.shiftsWritten,
+          skippedLocked: result.skippedLocked,
+          deleted: deleted,
+        });
+      }
       return result;
     }
 
@@ -910,6 +920,17 @@ function rebuildShiftsForRange_(opts, loggerOpt) {
       skippedLocked: result.skippedLocked,
       debugExplain: debugExplain,
     });
+
+    if (typeof bumpShiftsCacheRevision_ === "function") {
+      bumpShiftsCacheRevision_("shifts.agg.rebuild-range", {
+        dateFrom: dateFrom,
+        dateTo: dateTo,
+        employeeId: employeeFilter,
+        shiftsWritten: result.shiftsWritten,
+        skippedLocked: result.skippedLocked,
+        deleted: deleted,
+      });
+    }
 
     return result;
   } catch (err) {

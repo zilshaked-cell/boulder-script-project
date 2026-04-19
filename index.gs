@@ -267,6 +267,12 @@ var CACHE_TTL_LOOKUPS_SEC = Number(
 var CACHE_TTL_SHIFTS_SEC = Number(
   SCRIPT_PROPERTIES.getProperty("CACHE_TTL_SHIFTS_SEC") || "20",
 );
+var SHIFTS_CACHE_REVISION_PROPERTY_KEY =
+  SCRIPT_PROPERTIES.getProperty("SHIFTS_CACHE_REVISION_PROPERTY_KEY") ||
+  "shifts.cache.revision.v1";
+var SHIFT_ASSEMBLY_REFRESH_MODE_PROPERTY_KEY =
+  SCRIPT_PROPERTIES.getProperty("SHIFT_ASSEMBLY_REFRESH_MODE_PROPERTY_KEY") ||
+  "shift.assembly.refresh.mode.v1";
 var LOG_LIST_TOKEN = (SCRIPT_PROPERTIES.getProperty("LOG_LIST_TOKEN") || "")
   .toString()
   .trim();
@@ -736,6 +742,99 @@ function removeCacheKey_(key) {
   } catch (_err) {
     // Cache should never break the request path.
   }
+}
+
+function getShiftsCacheRevision_() {
+  try {
+    return (
+      stringValue(
+        SCRIPT_PROPERTIES.getProperty(SHIFTS_CACHE_REVISION_PROPERTY_KEY),
+      ) || "0"
+    );
+  } catch (_err) {
+    return "0";
+  }
+}
+
+function bumpShiftsCacheRevision_(reason, meta) {
+  var revision =
+    String(new Date().getTime()) +
+    "." +
+    String(Math.floor(Math.random() * 1000000));
+  try {
+    SCRIPT_PROPERTIES.setProperty(SHIFTS_CACHE_REVISION_PROPERTY_KEY, revision);
+  } catch (_err) {
+    return revision;
+  }
+
+  appendFastDiagnosticEntry_({
+    layer: "shifts-cache",
+    operation: "SHIFT_CACHE_REVISION_BUMP",
+    step: stringValue(reason) || "unknown",
+    details: {
+      reason: stringValue(reason) || "",
+      revision: revision,
+      meta: sanitizeForLogs_(meta) || {},
+    },
+  });
+  return revision;
+}
+
+function getShiftAssemblyRefreshMode_() {
+  return (
+    stringValue(
+      SCRIPT_PROPERTIES.getProperty(SHIFT_ASSEMBLY_REFRESH_MODE_PROPERTY_KEY),
+    ) || "module_upsert"
+  );
+}
+
+function buildShiftAssemblyWindow_(workDate) {
+  var workDateIso = toIsoDate_(workDate);
+  if (!workDateIso) return null;
+  var baseDate = new Date(workDateIso + "T00:00:00");
+  if (isNaN(baseDate.getTime())) return null;
+
+  var fromDate = new Date(baseDate.getTime());
+  fromDate.setDate(fromDate.getDate() - 1);
+  var toDate = new Date(baseDate.getTime());
+  toDate.setDate(toDate.getDate() + 1);
+
+  return {
+    workDate: workDateIso,
+    dateFrom: toIsoDate_(fromDate) || workDateIso,
+    dateTo: toIsoDate_(toDate) || workDateIso,
+  };
+}
+
+function refreshShiftProjectionForWorkLog_(
+  employeeId,
+  jobTypeId,
+  workDate,
+  options,
+) {
+  var empId = stringValue(employeeId);
+  var jobId = stringValue(jobTypeId);
+  var window = buildShiftAssemblyWindow_(workDate);
+  if (!empId || !jobId || !window) {
+    return {
+      ok: false,
+      skipped: true,
+      reason: "missing_projection_refresh_keys",
+    };
+  }
+
+  var mode = getShiftAssemblyRefreshMode_();
+  if (mode === "aggregator_window") {
+    return rebuildShiftsForRange_({
+      dateFrom: window.dateFrom,
+      dateTo: window.dateTo,
+      employeeId: empId,
+      jobTypeId: jobId,
+      debugExplain: !!(options && options.debugExplain),
+    });
+  }
+
+  return SHIFTS_upsertAroundWorkLog_(empId, jobId, window.workDate);
 }
 
 function readFastDiagnosticEntries_() {
@@ -2336,6 +2435,8 @@ function adminSaveJobType_(payload, logger) {
 
   var jobTypeId = stringValue(payload && payload.jobTypeId).trim();
   var colorHex = normalizeHexColor6_(payload && payload.colorHex);
+  var payTypeId = stringValue(payload && payload.payTypeId).trim();
+  var payTypeName = stringValue(payload && payload.payTypeName).trim();
 
   if (!jobTypeId || !colorHex) {
     return {
@@ -2354,6 +2455,98 @@ function adminSaveJobType_(payload, logger) {
   }
 
   try {
+    if (payTypeId) {
+      var paymentOptions = listPaymentOptions_(lg);
+      var matchedPayType = null;
+      for (var optionIndex = 0; optionIndex < paymentOptions.length; optionIndex++) {
+        var currentOption = paymentOptions[optionIndex];
+        if (stringValue(currentOption && currentOption.id) === payTypeId) {
+          matchedPayType = currentOption;
+          break;
+        }
+      }
+
+      if (!matchedPayType) {
+        return {
+          ok: false,
+          error: "payTypeId is invalid",
+          errorCode: ERROR_CODES.VALIDATION_FAILED,
+        };
+      }
+
+      payTypeId = stringValue(matchedPayType.id).trim();
+      payTypeName = stringValue(matchedPayType.name).trim() || payTypeId;
+
+      const sheet = getSheetByPossibleNames_(OPTIONS_SHEET_NAMES);
+      const headerMap = getHeaderMap_(sheet);
+      const sheetName = sheet.getName();
+      const idCol = getRequiredColumn_(
+        headerMap,
+        ["ID סוגי עבודה", "ID סוג עבודה"],
+        sheetName,
+      );
+      const payIdCol = getOptionalColumn_(headerMap, [
+        "ID אופני תשלום",
+        "ID אופן תשלום",
+      ]);
+      const payNameCol = getOptionalColumn_(headerMap, [
+        "אופני תשלום",
+        "אופן תשלום",
+      ]);
+      const payDefaultIdCol = getOptionalColumn_(headerMap, [
+        "ID אופן תשלום דיפולט",
+        "ID אופני תשלום דיפולט",
+        "ID דיפולט אופן תשלום",
+        "Default Pay Type ID",
+        "Default Payment ID",
+      ]);
+      const payDefaultNameCol = getOptionalColumn_(headerMap, [
+        "דיפולט אופן תשלום",
+        "אופן תשלום דיפולט",
+        "ברירת מחדל אופן תשלום",
+        "דיפולט",
+        "ברירת מחדל",
+        "Default Pay Type",
+        "Default Payment",
+      ]);
+
+      if (!payIdCol && !payNameCol && !payDefaultIdCol && !payDefaultNameCol) {
+        return {
+          ok: false,
+          error: "Pay type columns are missing on options sheet",
+          errorCode: ERROR_CODES.VALIDATION_FAILED,
+        };
+      }
+
+      const rows = sheet.getDataRange().getValues();
+      let targetRowIndex = -1;
+      for (let i = 1; i < rows.length; i++) {
+        if (stringValue(rows[i][idCol - 1]) === jobTypeId) {
+          targetRowIndex = i + 1;
+          break;
+        }
+      }
+
+      if (targetRowIndex < 0) {
+        return {
+          ok: false,
+          error: "Job type not found",
+          errorCode: ERROR_CODES.VALIDATION_FAILED,
+        };
+      }
+
+      if (payIdCol) sheet.getRange(targetRowIndex, payIdCol).setValue(payTypeId);
+      if (payNameCol) {
+        sheet.getRange(targetRowIndex, payNameCol).setValue(payTypeName);
+      }
+      if (payDefaultIdCol) {
+        sheet.getRange(targetRowIndex, payDefaultIdCol).setValue(payTypeId);
+      }
+      if (payDefaultNameCol) {
+        sheet.getRange(targetRowIndex, payDefaultNameCol).setValue(payTypeName);
+      }
+    }
+
     var map = getJobTypeColorMap_();
     map[jobTypeId] = colorHex;
     saveJobTypeColorMap_(map);
@@ -2367,6 +2560,8 @@ function adminSaveJobType_(payload, logger) {
       ok: true,
       jobTypeId: jobTypeId,
       colorHex: colorHex,
+      payTypeId: payTypeId,
+      payTypeName: payTypeName,
     };
   } finally {
     if (lock) {
@@ -4282,7 +4477,7 @@ function listWorkLogsByEmployee_(payload, logger) {
     if (stringValue(row[empIdCol - 1]) !== employeeId) continue;
     logs.push({
       shiftId: stringValue(row[reportIdCol - 1]),
-      timestamp: stringValue(row[tsCol - 1]),
+      timestamp: serializeTimestampValue_(row[tsCol - 1]),
       employeeId: stringValue(row[empIdCol - 1]),
       employeeName: stringValue(row[empNameCol - 1]),
       direction: stringValue(row[dirCol - 1]),
@@ -4741,7 +4936,7 @@ function handleShiftReportSubmit_(payload, logger) {
         ? payload.units
         : "";
     const timestamp = stringValue(payload.timestamp) || nowIso;
-    const workDate = stringValue(payload.workDate) || timestamp.split("T")[0];
+    const workDate = stringValue(payload.workDate) || toIsoDate_(timestamp);
 
     const employeePay = jobTypeId
       ? resolveEmployeeJobPayType_(
@@ -4791,7 +4986,7 @@ function handleShiftReportSubmit_(payload, logger) {
       };
     }
 
-    const timestampDate = timestamp.split("T")[0];
+    const timestampDate = toIsoDate_(timestamp) || workDate || "";
     const reportMode = stringValue(payload.mode || payload.reportMode);
     const manualDate = stringValue(payload.manualDate || payload.fixDate);
     const manualTime = stringValue(payload.manualTime || payload.fixTime);
@@ -5822,7 +6017,7 @@ function normalizeShiftForWrite_({
   manualDate,
   manualTime,
 }) {
-  const tsDate = (timestamp || "").split("T")[0] || workDate || "";
+  const tsDate = toIsoDate_(timestamp) || workDate || "";
   const mode = stringValue(reportMode);
 
   const normalized = {
@@ -6042,7 +6237,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
     note: stringValue(meta.note),
     reportId: normalized.shiftId,
     shiftId: normalized.shiftId,
-    timestamp: normalized.timestamp,
+    timestamp: toSheetTimestampValue_(normalized.timestamp),
     employeeId: meta.employeeId,
     employeeName: meta.employeeName,
     direction: normalized.direction,
@@ -6095,7 +6290,7 @@ function writeWorkLogFromNormalizedShift_(normalized, meta, logger) {
         });
       }
 
-      SHIFTS_upsertAroundWorkLog_(
+      refreshShiftProjectionForWorkLog_(
         String(meta.employeeId || normalized.employeeId || ""),
         String(normalized.jobTypeId || ""),
         workDateForUpsert,
@@ -6206,7 +6401,7 @@ function findDuplicateWorkLogs_(criteria, includeShiftId) {
           ? stringValue(row[unitsCol - 1])
           : "",
       note: noteCol ? stringValue(row[noteCol - 1]) : "",
-      timestamp: tsCol ? stringValue(timestampRaw) : "",
+      timestamp: tsCol ? serializeTimestampValue_(timestampRaw) : "",
       eventMs: extractEventMs_(
         baseWorkDateRaw,
         timestampRaw,
@@ -6877,16 +7072,43 @@ function stringValue(value) {
   return String(value).trim();
 }
 
+function parseTimestampValue_(value) {
+  if (!value && value !== 0) return null;
+  if (
+    Object.prototype.toString.call(value) === "[object Date]" &&
+    !isNaN(value.getTime())
+  ) {
+    return value;
+  }
+
+  const parsed = parseDateTimeFlexible_(value, null);
+  return parsed && !isNaN(parsed.getTime()) ? parsed : null;
+}
+
+function toSheetTimestampValue_(value) {
+  const parsed = parseTimestampValue_(value);
+  return parsed || stringValue(value);
+}
+
+function serializeTimestampValue_(value) {
+  const parsed = parseTimestampValue_(value);
+  return parsed && parsed.toISOString ? parsed.toISOString() : stringValue(value);
+}
+
 function toIsoDate_(val) {
   if (!val) return "";
   if (
     Object.prototype.toString.call(val) === "[object Date]" &&
     !isNaN(val.getTime())
   ) {
-    const y = val.getFullYear();
-    const m = ("0" + (val.getMonth() + 1)).slice(-2);
-    const d = ("0" + val.getDate()).slice(-2);
-    return y + "-" + m + "-" + d;
+    try {
+      return Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    } catch (_err) {
+      const y = val.getFullYear();
+      const m = ("0" + (val.getMonth() + 1)).slice(-2);
+      const d = ("0" + val.getDate()).slice(-2);
+      return y + "-" + m + "-" + d;
+    }
   }
 
   const s = stringValue(val);
@@ -7171,10 +7393,12 @@ function listShifts_(payload) {
   if (!isFinite(offset) || offset < 0) offset = 0;
 
   const sheet = getSheetOrThrow_("משמרות");
+  var shiftsCacheRevision = getShiftsCacheRevision_();
   var shiftsCacheKey = buildCacheKey_("shifts.list.v2", [
     SPREADSHEET_ID || "active-spreadsheet",
     String(sheet.getSheetId()),
     String(sheet.getLastRow()),
+    shiftsCacheRevision,
     dateFrom,
     dateTo,
     employeeFilter,
@@ -7230,6 +7454,7 @@ function listShifts_(payload) {
     "משמרות",
   );
   const sourceCol = getOptionalColumn_(headerMap, ["מקור דיווחים"]);
+  const timestampCol = getOptionalColumn_(headerMap, ["חותמת זמן"]);
 
   const jobMap = {};
   try {
@@ -7315,6 +7540,82 @@ function listShifts_(payload) {
     return s;
   }
 
+  function splitSourceReportIds_(raw) {
+    return stringValue(raw)
+      .split(/[\s,|;\n\r]+/)
+      .map(function (part) {
+        return stringValue(part);
+      })
+      .filter(function (part) {
+        return !!part;
+      });
+  }
+
+  const neededSourceIdsMap = {};
+  const neededSourceIds = [];
+  if (sourceCol) {
+    for (let i = 1; i < values.length; i++) {
+      const row = values[i];
+
+      const workDate = toIsoDate_(row[workDateCol - 1]);
+      if (dateFrom && workDate && workDate < dateFrom) continue;
+      if (dateTo && workDate && workDate > dateTo) continue;
+
+      const employeeId = stringValue(row[employeeCol - 1]);
+      if (employeeFilter && employeeId !== employeeFilter) continue;
+
+      const statusRaw = stringValue(row[statusCol - 1]);
+      if (statusFilters.length && statusFilters.indexOf(statusRaw) === -1)
+        continue;
+
+      const jobTypeId = jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "";
+      if (jobTypeFilters.length && jobTypeFilters.indexOf(jobTypeId) === -1)
+        continue;
+
+      splitSourceReportIds_(row[sourceCol - 1]).forEach(function (reportId) {
+        if (neededSourceIdsMap[reportId]) return;
+        neededSourceIdsMap[reportId] = true;
+        neededSourceIds.push(reportId);
+      });
+    }
+  }
+
+  const sourceLogMetaById = {};
+  if (neededSourceIds.length) {
+    try {
+      const logsSheet = getSheetOrThrow_(WORK_LOGS_SHEET_NAME);
+      const logsHeaderMap = getHeaderMap_(logsSheet);
+      const reportIdCol = getRequiredColumn_(
+        logsHeaderMap,
+        ["ID דיווח", "Shift ID"],
+        logsSheet.getName(),
+      );
+      const directionCol = getOptionalColumn_(logsHeaderMap, [
+        "כניסה / יציאה",
+        "דיווח שעות",
+      ]);
+      const logsTimestampCol = getRequiredColumn_(
+        logsHeaderMap,
+        ["חותמת זמן"],
+        logsSheet.getName(),
+      );
+      const logsValues = logsSheet.getDataRange().getValues();
+
+      for (let i = 1; i < logsValues.length; i++) {
+        const row = logsValues[i];
+        const reportId = stringValue(row[reportIdCol - 1]);
+        if (!reportId || !neededSourceIdsMap[reportId]) continue;
+
+        sourceLogMetaById[reportId] = {
+          direction: directionCol ? stringValue(row[directionCol - 1]) : "",
+          timestamp: serializeTimestampValue_(row[logsTimestampCol - 1]) || "",
+        };
+      }
+    } catch (_err) {
+      /* ignore – exact entry timestamp is optional for listing */
+    }
+  }
+
   const results = [];
 
   for (let i = 1; i < values.length; i++) {
@@ -7343,6 +7644,22 @@ function listShifts_(payload) {
       : null;
     const unitsVal = unitsCol ? parseNumberOrNull_(row[unitsCol - 1]) : null;
     const payMeta = resolvePayMeta_(jobTypeId);
+    const sourceReportIds = sourceCol ? stringValue(row[sourceCol - 1]) : "";
+    const sourceIds = splitSourceReportIds_(sourceReportIds);
+    let firstReportTimestamp = "";
+    let entryReportedAt = "";
+
+    sourceIds.forEach(function (sourceId) {
+      const sourceMeta = sourceLogMetaById[sourceId];
+      if (!sourceMeta || !sourceMeta.timestamp) return;
+      if (!firstReportTimestamp) firstReportTimestamp = sourceMeta.timestamp;
+      if (
+        !entryReportedAt &&
+        stringValue(sourceMeta.direction).indexOf("כניסה") !== -1
+      ) {
+        entryReportedAt = sourceMeta.timestamp;
+      }
+    });
 
     results.push({
       shiftId: stringValue(row[shiftIdCol - 1]),
@@ -7353,6 +7670,10 @@ function listShifts_(payload) {
       workDate: workDate,
       startTime: startCol ? formatTime_(row[startCol - 1]) : "",
       endTime: endCol ? formatTime_(row[endCol - 1]) : "",
+      timestamp: timestampCol
+        ? serializeTimestampValue_(row[timestampCol - 1]) || firstReportTimestamp
+        : firstReportTimestamp,
+      entryReportedAt: entryReportedAt || firstReportTimestamp || "",
       jobTypeId: jobTypeId,
       jobName: jobNameCol ? stringValue(row[jobNameCol - 1]) : "",
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
@@ -7365,7 +7686,7 @@ function listShifts_(payload) {
       units: unitsVal,
       status: statusRaw,
       note: noteCol ? stringValue(row[noteCol - 1]) : "",
-      sourceReportIds: sourceCol ? stringValue(row[sourceCol - 1]) : "",
+      sourceReportIds: sourceReportIds,
     });
   }
 
@@ -7378,210 +7699,514 @@ function listShifts_(payload) {
   return response;
 }
 
-function SHIFTS_getHourlyOverlaps(filter) {
+function normalizeHourlyOverlapFilters_(filter) {
   const src = filter && typeof filter === "object" ? filter : {};
-
-  const dateFrom = toIsoDate_(src.dateFrom || "");
-  const dateTo = toIsoDate_(src.dateTo || "");
-  const employeeId = stringValue(src.employeeId || "");
-  const statuses = Array.isArray(src.statuses)
-    ? src.statuses
-        .map(function (s) {
-          return stringValue(s).toUpperCase();
-        })
-        .filter(function (s) {
-          return !!s;
-        })
-    : [];
-  const jobTypeIds = Array.isArray(src.jobTypeIds)
+  const rawJobTypeIds = Array.isArray(src.jobTypeIds)
     ? src.jobTypeIds
-        .map(function (s) {
-          return stringValue(s);
-        })
-        .filter(function (s) {
-          return !!s;
-        })
-    : [];
-
+    : stringValue(src.jobTypeIds)
+      ? String(src.jobTypeIds).split(",")
+      : [];
+  const jobTypeIds = rawJobTypeIds
+    .concat(src.jobTypeId ? [src.jobTypeId] : [])
+    .map(function (value) {
+      return stringValue(value);
+    })
+    .filter(function (value) {
+      return !!value;
+    });
+  const statuses = (Array.isArray(src.statuses)
+    ? src.statuses
+    : stringValue(src.statuses)
+      ? String(src.statuses).split(",")
+      : []
+  )
+    .map(function (value) {
+      return stringValue(value).toUpperCase();
+    })
+    .filter(function (value) {
+      return !!value;
+    });
   let bucketSizeMinutes = Number(src.bucketSizeMinutes);
   if (!isFinite(bucketSizeMinutes) || bucketSizeMinutes <= 0)
     bucketSizeMinutes = 60;
+  return {
+    dateFrom: toIsoDate_(src.dateFrom || "") || null,
+    dateTo: toIsoDate_(src.dateTo || "") || null,
+    employeeId: stringValue(src.employeeId || "") || null,
+    statuses: Array.from(new Set(statuses)),
+    jobTypeIds: Array.from(new Set(jobTypeIds)),
+    bucketSizeMinutes: bucketSizeMinutes,
+    payType: "hourly",
+  };
+}
 
-  function parseIsoDateLocal_(iso) {
-    const s = stringValue(iso);
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m) return null;
-    const y = Number(m[1]);
-    const mo = Number(m[2]);
-    const d = Number(m[3]);
-    if (!isFinite(y) || !isFinite(mo) || !isFinite(d)) return null;
-    return new Date(y, mo - 1, d, 0, 0, 0, 0);
-  }
+function overlapTimeToMinutes_(value) {
+  const s = stringValue(value);
+  const m = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hh = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!isFinite(hh) || !isFinite(mm)) return null;
+  if (hh < 0 || hh > 23) return null;
+  if (mm < 0 || mm > 59) return null;
+  return hh * 60 + mm;
+}
 
-  function parseHm_(value) {
-    const s = stringValue(value);
-    const m = s.match(/^(\d{1,2}):(\d{2})$/);
-    if (!m) return null;
-    const hh = Number(m[1]);
-    const mm = Number(m[2]);
-    if (!isFinite(hh) || !isFinite(mm)) return null;
-    if (hh < 0 || hh > 23) return null;
-    if (mm < 0 || mm > 59) return null;
-    return { hh: hh, mm: mm };
-  }
+function overlapMinutesToTimeString_(totalMinutes) {
+  const normalized = Math.max(0, Number(totalMinutes) || 0);
+  const hh = Math.floor(normalized / 60);
+  const mm = normalized % 60;
+  return ("0" + hh).slice(-2) + ":" + ("0" + mm).slice(-2);
+}
 
-  function makeDateTime_(isoDate, hm) {
-    const base = parseIsoDateLocal_(isoDate);
-    if (!base || !hm) return null;
-    base.setHours(hm.hh, hm.mm, 0, 0);
-    return base;
-  }
+function overlapBuildLocalDateTimeString_(isoDate, totalMinutes) {
+  return isoDate + "T" + overlapMinutesToTimeString_(totalMinutes) + ":00";
+}
 
-  function fmtDateTime_(dt) {
-    try {
-      return Utilities.formatDate(
-        dt,
-        Session.getScriptTimeZone(),
-        "yyyy-MM-dd'T'HH:mm:ss",
-      );
-    } catch (_err) {
-      return String(dt);
+function overlapRoundHoursFromMinutes_(totalMinutes) {
+  return Number(((Number(totalMinutes) || 0) / 60).toFixed(2));
+}
+
+function overlapWindowId_(workDate, jobTypeId, startTime, endTime) {
+  return ("window-" + workDate + "-" + jobTypeId + "-" + startTime + "-" + endTime).replace(/:/g, "");
+}
+
+function overlapBuildWindowEmployees_(activeIntervals, workDate) {
+  const byEmployee = {};
+  Object.keys(activeIntervals).forEach(function (key) {
+    const interval = activeIntervals[key];
+    const employeeId = interval.employeeId || "shift:" + interval.shiftId;
+    if (!byEmployee[employeeId]) {
+      byEmployee[employeeId] = {
+        employeeId: employeeId,
+        employeeName: interval.employeeName || employeeId,
+        startMinutes: interval.startMinutes,
+        endMinutes: interval.endMinutes,
+        shiftIds: {},
+      };
     }
-  }
+    const current = byEmployee[employeeId];
+    current.startMinutes = Math.min(current.startMinutes, interval.startMinutes);
+    current.endMinutes = Math.max(current.endMinutes, interval.endMinutes);
+    current.shiftIds[interval.shiftId] = true;
+  });
 
+  return Object.keys(byEmployee)
+    .map(function (employeeId) {
+      const employee = byEmployee[employeeId];
+      const shiftIds = Object.keys(employee.shiftIds).sort();
+      return {
+        employeeId: employee.employeeId,
+        employeeName: employee.employeeName,
+        shiftId: shiftIds[0] || "",
+        shiftIds: shiftIds,
+        startDateTime: overlapBuildLocalDateTimeString_(workDate, employee.startMinutes),
+        endDateTime: overlapBuildLocalDateTimeString_(workDate, employee.endMinutes),
+      };
+    })
+    .sort(function (a, b) {
+      return stringValue(a.employeeName || a.employeeId).localeCompare(
+        stringValue(b.employeeName || b.employeeId),
+      );
+    });
+}
+
+function overlapMergeEmployeeLists_(existingEmployees, incomingEmployees) {
+  const byEmployee = {};
+  existingEmployees.concat(incomingEmployees).forEach(function (employee) {
+    const employeeId = stringValue(employee.employeeId || employee.shiftId || "");
+    if (!employeeId) return;
+    if (!byEmployee[employeeId]) {
+      byEmployee[employeeId] = {
+        employeeId: employeeId,
+        employeeName: employee.employeeName || employeeId,
+        shiftIds: {},
+        startDateTime: employee.startDateTime || "",
+        endDateTime: employee.endDateTime || "",
+      };
+    }
+    const current = byEmployee[employeeId];
+    (employee.shiftIds || [employee.shiftId]).forEach(function (shiftId) {
+      if (shiftId) current.shiftIds[shiftId] = true;
+    });
+    if (
+      employee.startDateTime &&
+      (!current.startDateTime || employee.startDateTime < current.startDateTime)
+    ) {
+      current.startDateTime = employee.startDateTime;
+    }
+    if (
+      employee.endDateTime &&
+      (!current.endDateTime || employee.endDateTime > current.endDateTime)
+    ) {
+      current.endDateTime = employee.endDateTime;
+    }
+  });
+
+  return Object.keys(byEmployee)
+    .map(function (employeeId) {
+      const employee = byEmployee[employeeId];
+      const shiftIds = Object.keys(employee.shiftIds).sort();
+      return {
+        employeeId: employee.employeeId,
+        employeeName: employee.employeeName,
+        shiftId: shiftIds[0] || "",
+        shiftIds: shiftIds,
+        startDateTime: employee.startDateTime,
+        endDateTime: employee.endDateTime,
+      };
+    })
+    .sort(function (a, b) {
+      return stringValue(a.employeeName || a.employeeId).localeCompare(
+        stringValue(b.employeeName || b.employeeId),
+      );
+    });
+}
+
+function overlapAttachBridgeFields_(window) {
+  return Object.assign({}, window, {
+    overlapStartDateTime: window.windowStartDateTime,
+    overlapEndDateTime: window.windowEndDateTime,
+    overlapStartTime: window.windowStartTime,
+    overlapEndTime: window.windowEndTime,
+    windowMinutes: window.durationMinutes,
+  });
+}
+
+function overlapBuildWindows_(intervals) {
+  const groups = {};
+  intervals.forEach(function (interval) {
+    const key = interval.workDate + "|" + interval.jobTypeId;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(interval);
+  });
+
+  const rawWindows = [];
+  Object.keys(groups).forEach(function (groupKey) {
+    const groupIntervals = groups[groupKey] || [];
+    if (!groupIntervals.length) return;
+    const parts = groupKey.split("|");
+    const workDate = parts[0];
+    const jobTypeId = parts[1];
+    const jobTypeName = stringValue(groupIntervals[0].jobTypeName || jobTypeId);
+    const events = {};
+
+    groupIntervals.forEach(function (interval) {
+      if (!events[interval.startMinutes]) {
+        events[interval.startMinutes] = { starts: [], ends: [] };
+      }
+      if (!events[interval.endMinutes]) {
+        events[interval.endMinutes] = { starts: [], ends: [] };
+      }
+      events[interval.startMinutes].starts.push(interval);
+      events[interval.endMinutes].ends.push(interval);
+    });
+
+    const timepoints = Object.keys(events)
+      .map(function (value) {
+        return Number(value);
+      })
+      .sort(function (a, b) {
+        return a - b;
+      });
+
+    const activeIntervals = {};
+    for (let index = 0; index < timepoints.length - 1; index++) {
+      const currentTime = timepoints[index];
+      const nextTime = timepoints[index + 1];
+      const event = events[currentTime] || { starts: [], ends: [] };
+
+      event.ends.forEach(function (interval) {
+        delete activeIntervals[interval.intervalId];
+      });
+      event.starts.forEach(function (interval) {
+        activeIntervals[interval.intervalId] = interval;
+      });
+
+      if (nextTime <= currentTime) continue;
+      if (!Object.keys(activeIntervals).length) continue;
+
+      const employees = overlapBuildWindowEmployees_(activeIntervals, workDate);
+      if (employees.length < 2) continue;
+
+      const startTime = overlapMinutesToTimeString_(currentTime);
+      const endTime = overlapMinutesToTimeString_(nextTime);
+      const durationMinutes = nextTime - currentTime;
+      const employeeKey = employees
+        .map(function (employee) {
+          return employee.employeeId;
+        })
+        .sort()
+        .join("|");
+
+      rawWindows.push({
+        id: overlapWindowId_(workDate, jobTypeId, startTime, endTime),
+        date: workDate,
+        jobTypeId: jobTypeId,
+        jobTypeName: jobTypeName,
+        windowStartDateTime: overlapBuildLocalDateTimeString_(workDate, currentTime),
+        windowEndDateTime: overlapBuildLocalDateTimeString_(workDate, nextTime),
+        windowStartTime: startTime,
+        windowEndTime: endTime,
+        durationMinutes: durationMinutes,
+        concurrentEmployees: employees.length,
+        extraStaffMinutes: durationMinutes * Math.max(0, employees.length - 1),
+        employees: employees,
+        employeeKey: employeeKey,
+      });
+    }
+  });
+
+  rawWindows.sort(function (a, b) {
+    return (a.date + "|" + a.jobTypeId + "|" + a.windowStartTime).localeCompare(
+      b.date + "|" + b.jobTypeId + "|" + b.windowStartTime,
+    );
+  });
+
+  const mergedWindows = [];
+  rawWindows.forEach(function (window) {
+    const previous = mergedWindows.length
+      ? mergedWindows[mergedWindows.length - 1]
+      : null;
+    if (
+      previous &&
+      previous.date === window.date &&
+      previous.jobTypeId === window.jobTypeId &&
+      previous.employeeKey === window.employeeKey &&
+      previous.windowEndDateTime === window.windowStartDateTime
+    ) {
+      previous.windowEndDateTime = window.windowEndDateTime;
+      previous.windowEndTime = window.windowEndTime;
+      previous.durationMinutes += window.durationMinutes;
+      previous.extraStaffMinutes += window.extraStaffMinutes;
+      previous.employees = overlapMergeEmployeeLists_(
+        previous.employees,
+        window.employees,
+      );
+      previous.id = overlapWindowId_(
+        previous.date,
+        previous.jobTypeId,
+        previous.windowStartTime,
+        previous.windowEndTime,
+      );
+      return;
+    }
+    mergedWindows.push(
+      Object.assign({}, window, {
+        employees: overlapMergeEmployeeLists_([], window.employees),
+      }),
+    );
+  });
+
+  return mergedWindows.map(function (window) {
+    const copy = Object.assign({}, window);
+    delete copy.employeeKey;
+    return overlapAttachBridgeFields_(copy);
+  });
+}
+
+function overlapSummarizeWindows_(windows, totalShifts, skipped) {
+  const summaryByJobMap = {};
+  windows.forEach(function (window) {
+    const jobTypeId = stringValue(window.jobTypeId);
+    if (!summaryByJobMap[jobTypeId]) {
+      summaryByJobMap[jobTypeId] = {
+        jobTypeId: jobTypeId,
+        jobTypeName: window.jobTypeName || jobTypeId,
+        overlapWindows: 0,
+        extraStaffMinutes: 0,
+        peakConcurrentEmployees: 0,
+        distinctEmployees: {},
+        overlappingDays: {},
+      };
+    }
+    const current = summaryByJobMap[jobTypeId];
+    current.overlapWindows += 1;
+    current.extraStaffMinutes += Number(window.extraStaffMinutes || 0);
+    current.peakConcurrentEmployees = Math.max(
+      current.peakConcurrentEmployees,
+      Number(window.concurrentEmployees || 0),
+    );
+    current.overlappingDays[window.date] = true;
+    (window.employees || []).forEach(function (employee) {
+      current.distinctEmployees[employee.employeeId] = true;
+    });
+  });
+
+  const summaryByJob = Object.keys(summaryByJobMap)
+    .map(function (jobTypeId) {
+      const row = summaryByJobMap[jobTypeId];
+      const overlappingDays = Object.keys(row.overlappingDays).length;
+      const distinctEmployeesCount = Object.keys(row.distinctEmployees).length;
+      return {
+        jobTypeId: row.jobTypeId,
+        jobTypeName: row.jobTypeName,
+        overlapWindows: row.overlapWindows,
+        extraStaffMinutes: row.extraStaffMinutes,
+        extraStaffHours: overlapRoundHoursFromMinutes_(row.extraStaffMinutes),
+        peakConcurrentEmployees: row.peakConcurrentEmployees,
+        distinctEmployeesCount: distinctEmployeesCount,
+        overlappingDays: overlappingDays,
+        daysWithOverlapsCount: overlappingDays,
+        totalOverlapMinutes: row.extraStaffMinutes,
+        totalMinutes: row.extraStaffMinutes,
+        employeesInvolvedCount: distinctEmployeesCount,
+      };
+    })
+    .sort(function (a, b) {
+      return (
+        Number(b.extraStaffMinutes || 0) - Number(a.extraStaffMinutes || 0) ||
+        stringValue(a.jobTypeName || a.jobTypeId).localeCompare(
+          stringValue(b.jobTypeName || b.jobTypeId),
+        )
+      );
+    });
+
+  const extraStaffMinutes = summaryByJob.reduce(function (total, row) {
+    return total + Number(row.extraStaffMinutes || 0);
+  }, 0);
+  const skippedRows =
+    Number(skipped.missingTimes || 0) +
+    Number(skipped.invalidTimes || 0) +
+    Number(skipped.crossMidnight || 0);
+  const summary = {
+    jobTypesWithOverlap: summaryByJob.length,
+    overlapWindows: windows.length,
+    extraStaffMinutes: extraStaffMinutes,
+    extraStaffHours: overlapRoundHoursFromMinutes_(extraStaffMinutes),
+    peakConcurrentEmployees: windows.reduce(function (peak, window) {
+      return Math.max(peak, Number(window.concurrentEmployees || 0));
+    }, 0),
+    skippedRows: skippedRows,
+    totalShifts: totalShifts,
+    eligibleShifts: totalShifts,
+  };
+  const topWindows = windows
+    .slice()
+    .sort(function (a, b) {
+      return (
+        Number(b.concurrentEmployees || 0) -
+          Number(a.concurrentEmployees || 0) ||
+        Number(b.extraStaffMinutes || 0) -
+          Number(a.extraStaffMinutes || 0) ||
+        (a.date + "|" + a.windowStartTime).localeCompare(
+          b.date + "|" + b.windowStartTime,
+        )
+      );
+    })
+    .slice(0, 5);
+  const buckets = windows.map(function (window) {
+    return {
+      bucketStart: window.windowStartDateTime,
+      bucketEnd: window.windowEndDateTime,
+      count: window.concurrentEmployees,
+      byJob: [
+        {
+          jobTypeId: window.jobTypeId,
+          jobTypeName: window.jobTypeName,
+          count: window.concurrentEmployees,
+        },
+      ],
+      extraStaffMinutes: window.extraStaffMinutes,
+    };
+  });
+
+  return {
+    summary: summary,
+    summaryByJob: summaryByJob,
+    windows: windows,
+    topWindows: topWindows,
+    buckets: buckets,
+    totalBuckets: buckets.length,
+  };
+}
+
+function SHIFTS_getHourlyOverlaps(filter) {
+  const normalizedFilters = normalizeHourlyOverlapFilters_(filter);
   const shiftsResponse = listShifts_({
-    dateFrom: dateFrom,
-    dateTo: dateTo,
-    employeeId: employeeId || undefined,
-    statuses: statuses.length ? statuses : undefined,
-    jobTypeIds: jobTypeIds.length ? jobTypeIds : undefined,
+    dateFrom: normalizedFilters.dateFrom || undefined,
+    dateTo: normalizedFilters.dateTo || undefined,
+    employeeId: normalizedFilters.employeeId || undefined,
+    statuses: normalizedFilters.statuses.length
+      ? normalizedFilters.statuses
+      : undefined,
+    jobTypeIds: normalizedFilters.jobTypeIds.length
+      ? normalizedFilters.jobTypeIds
+      : undefined,
     limit: 100000,
     offset: 0,
   });
-
   const shifts =
     shiftsResponse && Array.isArray(shiftsResponse.shifts)
       ? shiftsResponse.shifts
       : [];
 
-  const bucketMs = bucketSizeMinutes * 60 * 1000;
-  const bucketMap = Object.create(null);
-
   let missingTimes = 0;
   let invalidTimes = 0;
   let crossMidnight = 0;
+  const intervals = [];
 
-  function getOrCreateBucket_(bucketStartMs) {
-    const key = String(bucketStartMs);
-    if (bucketMap[key]) return bucketMap[key];
-
-    const start = new Date(bucketStartMs);
-    const end = new Date(bucketStartMs + bucketMs);
-    const bucket = {
-      bucketStart: fmtDateTime_(start),
-      bucketEnd: fmtDateTime_(end),
-      count: 0,
-      byJob: [],
-      __byJobMap: Object.create(null),
-    };
-    bucketMap[key] = bucket;
-    return bucket;
-  }
-
-  function bumpJob_(bucket, jobTypeId) {
-    const jobId = stringValue(jobTypeId);
-    if (!jobId) return;
-    const cur = bucket.__byJobMap[jobId] || 0;
-    bucket.__byJobMap[jobId] = cur + 1;
-  }
-
-  for (let i = 0; i < shifts.length; i++) {
-    const sh = shifts[i] || {};
-    const isoDate = stringValue(sh.workDate);
-    const startHm = parseHm_(sh.startTime);
-    const endHm = parseHm_(sh.endTime);
-    if (!isoDate || !startHm || !endHm) {
+  shifts.forEach(function (shift) {
+    if (stringValue(shift.payType).toLowerCase() !== "hourly") return;
+    const workDate = stringValue(shift.workDate);
+    const startMinutes = overlapTimeToMinutes_(shift.startTime);
+    const endMinutes = overlapTimeToMinutes_(shift.endTime);
+    if (!workDate || startMinutes === null || endMinutes === null) {
       missingTimes++;
-      continue;
+      return;
     }
-
-    const startDt = makeDateTime_(isoDate, startHm);
-    const endDt = makeDateTime_(isoDate, endHm);
-    if (!startDt || !endDt) {
+    if (!isFinite(startMinutes) || !isFinite(endMinutes)) {
       invalidTimes++;
-      continue;
+      return;
     }
-
-    const startMs = startDt.getTime();
-    const endMs = endDt.getTime();
-    if (!isFinite(startMs) || !isFinite(endMs)) {
-      invalidTimes++;
-      continue;
-    }
-
-    if (endMs <= startMs) {
-      // Cross-midnight or invalid; the normalized shifts sheet should ideally avoid this.
+    if (endMinutes <= startMinutes) {
       crossMidnight++;
-      continue;
+      return;
     }
-
-    const jobTypeId = stringValue(sh.jobTypeId);
-
-    // Walk buckets that overlap the shift interval.
-    let cursor = Math.floor(startMs / bucketMs) * bucketMs;
-    const lastBucketStart = Math.floor((endMs - 1) / bucketMs) * bucketMs;
-    while (cursor <= lastBucketStart) {
-      const bucketStart = cursor;
-      const bucketEnd = cursor + bucketMs;
-      const overlapMs =
-        Math.min(endMs, bucketEnd) - Math.max(startMs, bucketStart);
-      if (overlapMs > 0) {
-        const bucket = getOrCreateBucket_(bucketStart);
-        bucket.count += 1;
-        bumpJob_(bucket, jobTypeId);
-      }
-      cursor += bucketMs;
-    }
-  }
-
-  const buckets = Object.keys(bucketMap)
-    .map(function (k) {
-      return bucketMap[k];
-    })
-    .sort(function (a, b) {
-      // bucketStart is formatted consistently; lexical compare works.
-      return String(a.bucketStart).localeCompare(String(b.bucketStart));
-    })
-    .map(function (b) {
-      const jobIds = Object.keys(b.__byJobMap);
-      b.byJob = jobIds
-        .map(function (jobId) {
-          return { jobTypeId: jobId, count: b.__byJobMap[jobId] || 0 };
-        })
-        .sort(function (x, y) {
-          return String(x.jobTypeId).localeCompare(String(y.jobTypeId));
-        });
-      delete b.__byJobMap;
-      return b;
+    intervals.push({
+      intervalId:
+        stringValue(shift.shiftId) +
+        ":" +
+        workDate +
+        ":" +
+        stringValue(shift.startTime) +
+        ":" +
+        stringValue(shift.endTime),
+      shiftId: stringValue(shift.shiftId),
+      employeeId: stringValue(shift.employeeId),
+      employeeName: stringValue(shift.employeeName || shift.employeeId),
+      workDate: workDate,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      jobTypeId: stringValue(shift.jobTypeId),
+      jobTypeName: stringValue(shift.jobName || shift.jobTypeId),
     });
+  });
+
+  const skipped = {
+    missingTimes: missingTimes,
+    invalidTimes: invalidTimes,
+    crossMidnight: crossMidnight,
+  };
+  const summarized = overlapSummarizeWindows_(
+    overlapBuildWindows_(intervals),
+    intervals.length,
+    skipped,
+  );
 
   return {
-    buckets: buckets,
-    totalBuckets: buckets.length,
-    totalShifts: shifts.length,
-    skipped: {
-      missingTimes: missingTimes,
-      invalidTimes: invalidTimes,
-      crossMidnight: crossMidnight,
-    },
-    filter: {
-      dateFrom: dateFrom || null,
-      dateTo: dateTo || null,
-      employeeId: employeeId || null,
-      statuses: statuses,
-      jobTypeIds: jobTypeIds,
-      bucketSizeMinutes: bucketSizeMinutes,
-    },
+    ok: true,
+    filter: normalizedFilters,
+    summary: summarized.summary,
+    summaryByJob: summarized.summaryByJob,
+    windows: summarized.windows,
+    topWindows: summarized.topWindows,
+    skipped: skipped,
+    overlaps: summarized.windows,
+    buckets: summarized.buckets,
+    totalBuckets: summarized.totalBuckets,
+    totalShifts: intervals.length,
+    crossMidnightSkippedCount: crossMidnight,
   };
 }
 
@@ -8039,7 +8664,7 @@ function shiftReport_handleFaultAction(fault, action) {
       jobTypeId: jobTypeIdCol ? stringValue(row[jobTypeIdCol - 1]) : "",
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
       workDate: toIsoDate_(baseWorkDateRaw) || "",
-      timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
+      timestamp: tsCol ? serializeTimestampValue_(row[tsCol - 1]) : "",
     };
     const hash = buildFaultHash_(rec);
     return hash === fault.hash;
@@ -8251,7 +8876,7 @@ function listDuplicateWorkLogGroupsForMenu_(maxGroups) {
       workDate: workDateIso,
       fixDate: fixDateCol ? toIsoDate_(fixDateRaw) : "",
       fixTime: fixTimeCol ? stringValue(fixTimeRaw) : "",
-      timestamp: tsCol ? stringValue(timestampRaw) : "",
+      timestamp: tsCol ? serializeTimestampValue_(timestampRaw) : "",
       eventMs: extractEventMs_(
         baseWorkDateRaw,
         timestampRaw,
@@ -8435,7 +9060,7 @@ function listFaultyWorkLogsForMenu_(maxRows) {
       department: deptCol ? stringValue(row[deptCol - 1]) : "",
       direction: directionCol ? stringValue(row[directionCol - 1]) : "",
       workDate: toIsoDate_(workDateRaw) || "",
-      timestamp: tsCol ? stringValue(row[tsCol - 1]) : "",
+      timestamp: tsCol ? serializeTimestampValue_(row[tsCol - 1]) : "",
       units: unitsCol ? stringValue(row[unitsCol - 1]) : "",
       payType: "",
       paymentModeId: "",
@@ -9577,7 +10202,7 @@ function readLeaderboardRows_(sheet, headers) {
   return values
     .map(function (row) {
       return {
-        timestamp: stringValue(row[0]) || new Date().toISOString(),
+        timestamp: serializeTimestampValue_(row[0]) || new Date().toISOString(),
         employeeId: stringValue(row[1]),
         employeeName: stringValue(row[2]),
         email: stringValue(row[3]),
@@ -9821,5 +10446,8 @@ function showHourlyOverlapsDialog() {
   var html = HtmlService.createHtmlOutputFromFile("OverlapsDialog")
     .setWidth(1000)
     .setHeight(700);
-  SpreadsheetApp.getUi().showModalDialog(html, "חפיפות בשכר שעתי");
+  SpreadsheetApp.getUi().showModalDialog(
+    html,
+    "כפילות איוש לפי סוג עבודה",
+  );
 }

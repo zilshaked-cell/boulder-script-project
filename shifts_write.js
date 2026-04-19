@@ -1,6 +1,6 @@
 // shifts_write.gs
 // Global modules available in Apps Script runtime
-/* global EMP, SHIFTS_upsertAroundWorkLog_ */
+/* global EMP, SHIFTS_upsertAroundWorkLog_, refreshShiftProjectionForWorkLog_ */
 
 // eslint-disable-next-line no-unused-vars
 function handleShiftPost(e) {
@@ -274,7 +274,11 @@ function handleShiftPost(e) {
     try {
       var wd = buildWorkDateFromRowForUpsert_(row);
       if (wd) {
-        SHIFTS_upsertAroundWorkLog_(employeeId, jobId, wd);
+        if (typeof refreshShiftProjectionForWorkLog_ === "function") {
+          refreshShiftProjectionForWorkLog_(employeeId, jobId, wd);
+        } else {
+          SHIFTS_upsertAroundWorkLog_(employeeId, jobId, wd);
+        }
       }
     } catch (errUpsert) {
       Logger.log("SHIFTS_upsertAroundWorkLog_ error: " + errUpsert);

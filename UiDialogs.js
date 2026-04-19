@@ -1,5 +1,5 @@
 /* global EMP_getEmployeeById, EMP_saveEmployeePayload */
-/* global SHIFTS_updateShift, SHIFTS_upsertAroundWorkLog_, handleShiftReportSubmit_ */
+/* global SHIFTS_updateShift, SHIFTS_upsertAroundWorkLog_, handleShiftReportSubmit_, refreshShiftProjectionForWorkLog_ */
 /* global REQ_listRequests, AUDIT_logEvent, getAllJobs */
 /* global SHIFTS_list, EMP_getSidebarBootstrap, handleRequestPost */
 /* exported UI_saveEmployeeDialogChanges, UI_saveShiftChanges */
@@ -900,7 +900,9 @@ function UI_saveShiftChanges(envelope) {
 
     if (!errors.length) {
       try {
-        if (typeof SHIFTS_upsertAroundWorkLog_ === "function") {
+        if (typeof refreshShiftProjectionForWorkLog_ === "function") {
+          refreshShiftProjectionForWorkLog_(employeeId, jobId, shiftDate);
+        } else if (typeof SHIFTS_upsertAroundWorkLog_ === "function") {
           SHIFTS_upsertAroundWorkLog_(employeeId, jobId, shiftDate);
         }
       } catch (_upsertErr) {
